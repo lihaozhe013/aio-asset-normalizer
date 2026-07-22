@@ -1,3 +1,4 @@
+pub mod bone_tree;
 pub mod config_panel;
 pub mod file_list;
 pub mod fonts;

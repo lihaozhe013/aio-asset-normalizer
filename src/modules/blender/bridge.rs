@@ -3,7 +3,14 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
 
-const SCRIPT_RELATIVE_PATH: &str = "blender_scripts/normalize_v1.py";
+const SCRIPT_V1_PATH: &str = "blender_scripts/normalize_v1.py";
+const SCRIPT_V2_PATH: &str = "blender_scripts/normalize_v2.py";
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum ScriptVersion {
+    V1,
+    V2,
+}
 
 pub fn find_blender() -> Option<PathBuf> {
     if let Ok(path) = std::env::var("BLENDER_PATH") {
@@ -58,18 +65,18 @@ fn find_in_path(name: &str) -> Option<PathBuf> {
     None
 }
 
-pub fn resolve_script_path() -> Option<PathBuf> {
+fn resolve_script(relative_path: &str) -> Option<PathBuf> {
     let exe_dir = std::env::current_exe()
         .ok()?
         .parent()
         .map(Path::to_path_buf)?;
 
-    let candidate = exe_dir.join(SCRIPT_RELATIVE_PATH);
+    let candidate = exe_dir.join(relative_path);
     if candidate.exists() {
         return Some(candidate);
     }
 
-    let dev_candidate = PathBuf::from(SCRIPT_RELATIVE_PATH);
+    let dev_candidate = PathBuf::from(relative_path);
     if dev_candidate.exists() {
         return Some(dev_candidate);
     }
@@ -88,15 +95,22 @@ pub fn run_task(
         )
     })?;
 
-    let script = resolve_script_path().ok_or_else(|| {
+    let script_path = match task.script_version {
+        ScriptVersion::V2 => SCRIPT_V2_PATH,
+        _ => SCRIPT_V1_PATH,
+    };
+
+    let script = resolve_script(script_path).ok_or_else(|| {
         std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            format!("Script not found: {}", SCRIPT_RELATIVE_PATH),
+            format!("Script not found: {}", script_path),
         )
     })?;
 
+    let _ = tx.send(format!("[Bridge] Script v{:.0}: {}", 
+        if matches!(task.script_version, ScriptVersion::V2) { "2" } else { "1" },
+        script.display()));
     let _ = tx.send(format!("[Bridge] Blender: {}", blender.display()));
-    let _ = tx.send(format!("[Bridge] Script: {}", script.display()));
     let _ = tx.send(format!("[Bridge] Input:  {}", task.input.display()));
     let _ = tx.send(format!("[Bridge] Output: {}", task.output.display()));
 

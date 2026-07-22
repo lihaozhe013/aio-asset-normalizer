@@ -9,6 +9,7 @@ pub enum MenuAction {
     ToggleGrid,
     ToggleAxes,
     ToggleOrigin,
+    ToggleBones,
     About,
     Quit,
 }
@@ -18,6 +19,7 @@ pub fn render(
     show_grid: bool,
     show_axes: bool,
     show_origin: bool,
+    show_bones: bool,
 ) -> Vec<MenuAction> {
     let mut actions = Vec::new();
 
@@ -71,6 +73,13 @@ pub fn render(
                 .clicked()
             {
                 actions.push(MenuAction::ToggleOrigin);
+                ui.close();
+            }
+            if ui
+                .button(format!("{} Show Bones        Ctrl+B", check(show_bones)))
+                .clicked()
+            {
+                actions.push(MenuAction::ToggleBones);
                 ui.close();
             }
             ui.separator();

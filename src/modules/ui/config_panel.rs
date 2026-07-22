@@ -15,6 +15,21 @@ impl UpAxis {
     }
 }
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum ScriptVersion {
+    V1,
+    V2,
+}
+
+impl ScriptVersion {
+    fn label(&self) -> &str {
+        match self {
+            ScriptVersion::V1 => "V1 (Static Mesh)",
+            ScriptVersion::V2 => "V2 (Skinned Mesh + Animation)",
+        }
+    }
+}
+
 pub struct NormalizationConfig {
     pub target_scale: f32,
     pub up_axis: UpAxis,
@@ -22,6 +37,10 @@ pub struct NormalizationConfig {
     pub remove_cameras: bool,
     pub remove_lights: bool,
     pub remove_loose_vertices: bool,
+    pub script_version: ScriptVersion,
+    pub correct_bone_axes: bool,
+    pub preserve_leaf_bones: bool,
+    pub bake_animations: bool,
 }
 
 impl Default for NormalizationConfig {
@@ -33,6 +52,10 @@ impl Default for NormalizationConfig {
             remove_cameras: true,
             remove_lights: true,
             remove_loose_vertices: false,
+            script_version: ScriptVersion::V1,
+            correct_bone_axes: true,
+            preserve_leaf_bones: true,
+            bake_animations: true,
         }
     }
 }
@@ -55,10 +78,33 @@ impl NormalizationConfig {
                 ui.selectable_value(&mut self.up_axis, UpAxis::ZUp, UpAxis::ZUp.label());
             });
 
+        egui::ComboBox::from_label("脚本版本")
+            .selected_text(self.script_version.label())
+            .show_ui(ui, |ui| {
+                ui.selectable_value(
+                    &mut self.script_version,
+                    ScriptVersion::V1,
+                    ScriptVersion::V1.label(),
+                );
+                ui.selectable_value(
+                    &mut self.script_version,
+                    ScriptVersion::V2,
+                    ScriptVersion::V2.label(),
+                );
+            });
+
         ui.label("清理策略:");
         ui.checkbox(&mut self.remove_unused_materials, "清除无用材质");
         ui.checkbox(&mut self.remove_cameras, "清除相机");
         ui.checkbox(&mut self.remove_lights, "清除灯光");
         ui.checkbox(&mut self.remove_loose_vertices, "清除游离顶点");
+
+        if self.script_version == ScriptVersion::V2 {
+            ui.separator();
+            ui.label("骨骼与动画 (V2):");
+            ui.checkbox(&mut self.correct_bone_axes, "骨骼轴向校正");
+            ui.checkbox(&mut self.preserve_leaf_bones, "保留末端骨骼");
+            ui.checkbox(&mut self.bake_animations, "烘焙动画关键帧");
+        }
     }
 }

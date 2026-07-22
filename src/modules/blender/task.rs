@@ -19,4 +19,5 @@ pub struct ConversionTask {
     pub input: PathBuf,
     pub output: PathBuf,
     pub config_json: String,
+    pub script_version: super::bridge::ScriptVersion,
 }

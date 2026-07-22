@@ -72,13 +72,29 @@ fn main() {
 
         if let Some(ref model) = app.canvas.model {
             let lights = app.canvas.model_lights();
-            clear_rt
-                .render_partially(viewport.into(), &app.camera.camera, model, &lights)
-                .write(|| gui.render())
-                .unwrap();
-        } else {
-            clear_rt.write(|| gui.render()).unwrap();
+            clear_rt = clear_rt.render_partially(viewport.into(), &app.camera.camera, model, &lights);
         }
+
+        if app.canvas.show_bones {
+            if let Some(ref sticks) = app.canvas.bone_sticks {
+                clear_rt = clear_rt.render_partially(
+                    viewport.into(),
+                    &app.camera.camera,
+                    sticks,
+                    &[],
+                );
+            }
+            if let Some(ref joints) = app.canvas.bone_joints {
+                clear_rt = clear_rt.render_partially(
+                    viewport.into(),
+                    &app.camera.camera,
+                    joints,
+                    &[],
+                );
+            }
+        }
+
+        clear_rt.write(|| gui.render()).unwrap();
 
         FrameOutput {
             exit: app.quit_requested(),
