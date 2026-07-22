@@ -15,7 +15,8 @@ pub fn render_bone_tree(ui: &mut egui::Ui, skeleton: &mut Skeleton) {
     ui.label(format!("{} bones", skeleton.bones.len()));
 
     egui::ScrollArea::vertical()
-        .max_height(250.0)
+        .max_height(180.0)
+        .auto_shrink([false; 2])
         .id_salt("bone_tree_scroll")
         .show(ui, |ui| {
             for &root_idx in &root_bones {

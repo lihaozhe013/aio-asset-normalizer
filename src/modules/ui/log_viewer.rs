@@ -36,11 +36,11 @@ impl LogViewer {
         };
 
         egui::ScrollArea::vertical()
-            .max_height(150.0)
-            .auto_shrink([false; 2])
+            .auto_shrink([false, true])
             .stick_to_bottom(self.auto_scroll)
             .show(ui, |ui| {
-                ui.label(egui::RichText::new(&text).monospace().weak());
+                let label_text = egui::RichText::new(&text).monospace().weak();
+                ui.label(label_text);
             });
     }
 }

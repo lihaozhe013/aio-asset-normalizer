@@ -9,7 +9,7 @@ use crate::modules::{
     ui::{
         bone_tree,
         config_panel::NormalizationConfig,
-        file_list::FileList,
+        file_tree::FileTree,
         fonts,
         log_viewer::LogViewer,
         menu_bar::{self, MenuAction},
@@ -18,11 +18,27 @@ use crate::modules::{
 };
 use three_d::*;
 
+pub struct PanelLayout {
+    pub left_width: f32,
+    pub right_width: f32,
+    pub bottom_height: f32,
+}
+
+impl Default for PanelLayout {
+    fn default() -> Self {
+        Self {
+            left_width: 0.0,
+            right_width: 0.0,
+            bottom_height: 0.0,
+        }
+    }
+}
+
 pub struct App {
     pub camera: OrbitCamera,
     pub canvas: ViewportCanvas,
     fonts_configured: bool,
-    pub file_list: FileList,
+    pub file_tree: FileTree,
     pub config: NormalizationConfig,
     pub log: LogViewer,
     conversion_rx: Option<mpsc::Receiver<String>>,
@@ -45,7 +61,7 @@ impl App {
             camera: OrbitCamera::new(viewport),
             canvas,
             fonts_configured: false,
-            file_list: FileList::new(),
+            file_tree: FileTree::new(),
             config: NormalizationConfig::default(),
             log: LogViewer::new(),
             conversion_rx: None,
@@ -160,7 +176,7 @@ impl App {
     }
 
     fn start_conversion(&mut self) {
-        let files: Vec<PathBuf> = self.file_list.files().to_vec();
+        let files: Vec<PathBuf> = self.file_tree.selected_files();
         if files.is_empty() || self.converting {
             return;
         }
@@ -251,16 +267,19 @@ impl App {
                     .add_filter("3D 模型", &["fbx", "blend", "obj", "glb"])
                     .pick_file()
                 {
-                    self.file_list.add_path(path);
+                    if let Some(parent) = path.parent().map(|p| p.to_path_buf()) {
+                        self.file_tree.open_folder(parent);
+                        self.file_tree.select_file(&path);
+                    }
                 }
             }
             MenuAction::ImportFolder => {
                 if let Some(folder) = rfd::FileDialog::new().pick_folder() {
-                    self.file_list.scan_folder(&folder);
+                    self.file_tree.open_folder(folder);
                 }
             }
             MenuAction::ClearFileList => {
-                self.file_list.clear();
+                self.file_tree.clear();
             }
             MenuAction::ResetConfig => {
                 self.config = NormalizationConfig::default();
@@ -318,13 +337,13 @@ impl App {
         actions
     }
 
-    pub fn render_ui(&mut self, ui: &mut three_d::egui::Ui, window_width: u32) -> f32 {
+    pub fn render_ui(&mut self, ui: &mut three_d::egui::Ui, _window_width: u32) -> PanelLayout {
         if !self.fonts_configured {
             fonts::configure(ui.ctx());
             self.fonts_configured = true;
         }
 
-        self.file_list.handle_dropped_files(ui.ctx());
+        self.file_tree.handle_dropped_files(ui.ctx());
         self.poll_tasks();
 
         let shortcut_actions = Self::collect_shortcut_actions(ui.ctx());
@@ -343,56 +362,80 @@ impl App {
         self.render_about_dialog(ui.ctx());
 
         use three_d::egui::*;
-        Panel::left("control_panel")
+        let mut layout = PanelLayout::default();
+
+        let w1 = ui.available_width();
+        Panel::left("file_tree")
             .resizable(true)
-            .default_size(300.0)
+            .default_size(250.0)
+            .min_size(160.0)
+            .show_inside(ui, |ui| {
+                self.file_tree.render(ui);
+            });
+        layout.left_width = w1 - ui.available_width();
+
+        let w2 = ui.available_width();
+        Panel::right("inspector")
+            .resizable(true)
+            .default_size(280.0)
             .min_size(200.0)
             .show_inside(ui, |ui| {
                 ScrollArea::vertical().show(ui, |ui| {
-                    ui.heading("控制面板");
+                    ui.heading("格式转换");
                     ui.separator();
-
-                    ui.collapsing("资产导入", |ui| {
-                        self.file_list.render(ui);
-                        ui.add_space(4.0);
-                        let btn_text = if self.converting {
-                            "正在转换..."
-                        } else {
-                            "开始转换"
-                        };
-                        let enabled = !self.file_list.files().is_empty() && !self.converting;
-                        ui.add_enabled_ui(enabled, |ui| {
-                            if ui.button(btn_text).clicked() {
-                                self.start_conversion();
-                            }
-                        });
-                    });
-
-                    ui.collapsing("转换配置", |ui| {
-                        self.config.render(ui);
-                    });
+                    self.config.render_inspector(ui);
 
                     if self.skeleton.is_some() {
-                        ui.collapsing("骨骼层级", |ui| {
-                            ui.checkbox(&mut self.canvas.show_bones, "显示骨骼");
-                            if let Some(ref mut skel) = self.skeleton {
-                                bone_tree::render_bone_tree(ui, skel);
-                            }
-                        });
+                        ui.separator();
+                        CollapsingHeader::new("骨骼层级")
+                            .default_open(true)
+                            .show(ui, |ui| {
+                                ui.checkbox(&mut self.canvas.show_bones, "显示骨骼");
+                                if let Some(ref mut skel) = self.skeleton {
+                                    bone_tree::render_bone_tree(ui, skel);
+                                }
+                            });
                     }
 
                     if self.animation_player.is_some() {
-                        ui.collapsing("动画播放", |ui| {
-                            self.render_animation_controls(ui);
-                        });
+                        ui.separator();
+                        CollapsingHeader::new("动画播放")
+                            .default_open(true)
+                            .show(ui, |ui| {
+                                self.render_animation_controls(ui);
+                            });
                     }
 
-                    ui.collapsing("日志输出", |ui| {
-                        self.log.render(ui);
+                    ui.separator();
+
+                    let btn_text = if self.converting {
+                        "正在转换..."
+                    } else {
+                        "开始转换"
+                    };
+                    let enabled =
+                        !self.file_tree.selected_files().is_empty() && !self.converting;
+                    ui.add_enabled_ui(enabled, |ui| {
+                        let btn = ui.button(RichText::new(btn_text).strong());
+                        if btn.clicked() {
+                            self.start_conversion();
+                        }
                     });
                 });
             });
-        window_width as f32 - ui.available_width()
+        layout.right_width = w2 - ui.available_width();
+
+        let h1 = ui.available_height();
+        Panel::bottom("log")
+            .resizable(true)
+            .default_size(150.0)
+            .min_size(80.0)
+            .show_inside(ui, |ui| {
+                self.log.render(ui);
+            });
+        layout.bottom_height = h1 - ui.available_height();
+
+        layout
     }
 
     fn render_animation_controls(&mut self, ui: &mut three_d::egui::Ui) {
@@ -491,13 +534,15 @@ impl App {
 
     pub fn compute_viewport(
         &self,
-        panel_width: f32,
+        layout: &PanelLayout,
         device_pixel_ratio: f32,
         full_viewport: &Viewport,
     ) -> Viewport {
-        let panel_px = (panel_width * device_pixel_ratio) as i32;
-        let mut width = full_viewport.width.saturating_sub(panel_px as u32);
-        let mut height = full_viewport.height;
+        let left_px = (layout.left_width * device_pixel_ratio) as i32;
+        let right_px = (layout.right_width * device_pixel_ratio) as i32;
+        let bottom_px = (layout.bottom_height * device_pixel_ratio) as i32;
+        let mut width = full_viewport.width.saturating_sub((left_px + right_px) as u32);
+        let mut height = full_viewport.height.saturating_sub(bottom_px as u32);
         if width < 1 {
             width = 1;
         }
@@ -505,7 +550,7 @@ impl App {
             height = 1;
         }
         Viewport {
-            x: panel_px,
+            x: left_px,
             y: 0,
             width,
             height,

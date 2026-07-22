@@ -61,7 +61,7 @@ impl Default for NormalizationConfig {
 }
 
 impl NormalizationConfig {
-    pub fn render(&mut self, ui: &mut egui::Ui) {
+    pub fn render_inspector(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label("目标单位比例:");
             ui.add(
@@ -71,12 +71,16 @@ impl NormalizationConfig {
             );
         });
 
+        ui.add_space(4.0);
+
         egui::ComboBox::from_label("目标朝向")
             .selected_text(self.up_axis.label())
             .show_ui(ui, |ui| {
                 ui.selectable_value(&mut self.up_axis, UpAxis::YUp, UpAxis::YUp.label());
                 ui.selectable_value(&mut self.up_axis, UpAxis::ZUp, UpAxis::ZUp.label());
             });
+
+        ui.add_space(4.0);
 
         egui::ComboBox::from_label("脚本版本")
             .selected_text(self.script_version.label())
@@ -93,15 +97,17 @@ impl NormalizationConfig {
                 );
             });
 
-        ui.label("清理策略:");
-        ui.checkbox(&mut self.remove_unused_materials, "清除无用材质");
-        ui.checkbox(&mut self.remove_cameras, "清除相机");
-        ui.checkbox(&mut self.remove_lights, "清除灯光");
-        ui.checkbox(&mut self.remove_loose_vertices, "清除游离顶点");
+        ui.add_space(4.0);
+
+        ui.label(egui::RichText::new("清理策略").strong());
+        ui.checkbox(&mut self.remove_unused_materials, "移除未使用材质");
+        ui.checkbox(&mut self.remove_cameras, "移除摄像机");
+        ui.checkbox(&mut self.remove_lights, "移除灯光");
+        ui.checkbox(&mut self.remove_loose_vertices, "移除孤立顶点");
 
         if self.script_version == ScriptVersion::V2 {
-            ui.separator();
-            ui.label("骨骼与动画 (V2):");
+            ui.add_space(4.0);
+            ui.label(egui::RichText::new("骨骼与动画 (V2)").strong());
             ui.checkbox(&mut self.correct_bone_axes, "骨骼轴向校正");
             ui.checkbox(&mut self.preserve_leaf_bones, "保留末端骨骼");
             ui.checkbox(&mut self.bake_animations, "烘焙动画关键帧");

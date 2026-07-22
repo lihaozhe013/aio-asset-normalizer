@@ -1,7 +1,7 @@
 mod app;
 mod modules;
 
-use app::App;
+use app::{App, PanelLayout};
 use three_d::*;
 
 fn main() {
@@ -20,7 +20,7 @@ fn main() {
     window.render_loop(move |mut frame_input| {
         app.camera.handle_events(&frame_input.events);
 
-        let mut panel_width = 0.0;
+        let mut layout = PanelLayout::default();
 
         gui.update(
             &mut frame_input.events,
@@ -28,14 +28,14 @@ fn main() {
             frame_input.viewport,
             frame_input.device_pixel_ratio,
             |gui_ctx| {
-                panel_width = app.render_ui(gui_ctx, frame_input.window_width);
+                layout = app.render_ui(gui_ctx, frame_input.window_width);
             },
         );
 
         app.reload_model_if_needed(&context);
 
         let viewport = app.compute_viewport(
-            panel_width,
+            &layout,
             frame_input.device_pixel_ratio,
             &frame_input.viewport,
         );
