@@ -1,9 +1,13 @@
-use crate::modules::viewport::{camera::OrbitCamera, canvas::ViewportCanvas};
+use crate::modules::{
+    ui::fonts,
+    viewport::{camera::OrbitCamera, canvas::ViewportCanvas},
+};
 use three_d::*;
 
 pub struct App {
     pub camera: OrbitCamera,
     pub canvas: ViewportCanvas,
+    fonts_configured: bool,
 }
 
 impl App {
@@ -11,10 +15,16 @@ impl App {
         Self {
             camera: OrbitCamera::new(viewport),
             canvas: ViewportCanvas::new(context),
+            fonts_configured: false,
         }
     }
 
     pub fn render_ui(&mut self, ui: &mut three_d::egui::Ui, window_width: u32) -> f32 {
+        if !self.fonts_configured {
+            fonts::configure(ui.ctx());
+            self.fonts_configured = true;
+        }
+
         use three_d::egui::*;
         Panel::left("control_panel")
             .resizable(true)
