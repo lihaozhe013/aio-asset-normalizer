@@ -6,18 +6,6 @@
 
 ## Milestone 1.0 -- MVP Core Pipeline & 3D Preview
 
-### Phase 1: Project Structure Modularization
-
-- [ ] Extract `build_axes`, `build_grid`, `build_origin_sphere` from `main.rs` into `src/modules/viewport/helpers.rs`
-- [ ] Extract camera setup into `src/modules/viewport/camera.rs` (OrbitCamera controller with mouse rotate/pan/zoom)
-- [ ] Create `src/modules/viewport/canvas.rs` -- three-d render loop wrapper
-- [ ] Create `src/modules/viewport/mod.rs` -- expose viewport public API
-- [ ] Create `src/app.rs` -- top-level egui state machine, owned window + camera state
-- [ ] Create `src/modules/ui/mod.rs`, `file_list.rs`, `config_panel.rs`, `log_viewer.rs` as empty scaffolds
-- [ ] Create `src/modules/blender/mod.rs`, `bridge.rs`, `task.rs` as empty scaffolds
-- [ ] Create `src/modules/mod.rs` wiring all sub-modules
-- [ ] Slim down `src/main.rs` to minimal entry point: init window, delegate to `app.rs`
-
 ### Phase 2: UI Panels (2D Control Panel)
 
 - [ ] **File List Panel** (`file_list.rs`): system file dialog for picking FBX/Blend/OBJ files, display selected files in a scrollable list, remove/clear items
