@@ -71,3 +71,8 @@ When adding new functionality, place it in the appropriate module above rather t
 - After any code change, run `cargo check` (and `cargo test` once tests exist).
 - If `cargo check` emits warnings, fix them unless they are deliberately suppressed with a clear reason.
 - Before declaring a task done, confirm the project still compiles cleanly.
+
+## Task Tracking
+
+- The project to-do list lives in `docs/TODO.md`.
+- When a task is completed, remove its checkbox line from `docs/TODO.md`. Do not mark it as done; delete it.
