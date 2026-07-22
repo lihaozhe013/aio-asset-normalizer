@@ -18,22 +18,6 @@ use crate::modules::{
 };
 use three_d::*;
 
-pub struct PanelLayout {
-    pub left_width: f32,
-    pub right_width: f32,
-    pub bottom_height: f32,
-}
-
-impl Default for PanelLayout {
-    fn default() -> Self {
-        Self {
-            left_width: 0.0,
-            right_width: 0.0,
-            bottom_height: 0.0,
-        }
-    }
-}
-
 pub struct App {
     pub camera: OrbitCamera,
     pub canvas: ViewportCanvas,
@@ -337,7 +321,7 @@ impl App {
         actions
     }
 
-    pub fn render_ui(&mut self, ui: &mut three_d::egui::Ui, _window_width: u32) -> PanelLayout {
+    pub fn render_ui(&mut self, ui: &mut three_d::egui::Ui, _window_width: u32) -> three_d::egui::Rect {
         if !self.fonts_configured {
             fonts::configure(ui.ctx());
             self.fonts_configured = true;
@@ -362,9 +346,7 @@ impl App {
         self.render_about_dialog(ui.ctx());
 
         use three_d::egui::*;
-        let mut layout = PanelLayout::default();
 
-        let w1 = ui.available_width();
         Panel::left("file_tree")
             .resizable(true)
             .default_size(250.0)
@@ -372,9 +354,7 @@ impl App {
             .show_inside(ui, |ui| {
                 self.file_tree.render(ui);
             });
-        layout.left_width = w1 - ui.available_width();
 
-        let w2 = ui.available_width();
         Panel::right("inspector")
             .resizable(true)
             .default_size(280.0)
@@ -423,9 +403,9 @@ impl App {
                     });
                 });
             });
-        layout.right_width = w2 - ui.available_width();
 
-        let h1 = ui.available_height();
+        let content_rect = ui.available_rect_before_wrap();
+
         Panel::bottom("log")
             .resizable(true)
             .default_size(150.0)
@@ -433,9 +413,8 @@ impl App {
             .show_inside(ui, |ui| {
                 self.log.render(ui);
             });
-        layout.bottom_height = h1 - ui.available_height();
 
-        layout
+        content_rect
     }
 
     fn render_animation_controls(&mut self, ui: &mut three_d::egui::Ui) {
@@ -532,28 +511,4 @@ impl App {
             });
     }
 
-    pub fn compute_viewport(
-        &self,
-        layout: &PanelLayout,
-        device_pixel_ratio: f32,
-        full_viewport: &Viewport,
-    ) -> Viewport {
-        let left_px = (layout.left_width * device_pixel_ratio) as i32;
-        let right_px = (layout.right_width * device_pixel_ratio) as i32;
-        let bottom_px = (layout.bottom_height * device_pixel_ratio) as i32;
-        let mut width = full_viewport.width.saturating_sub((left_px + right_px) as u32);
-        let mut height = full_viewport.height.saturating_sub(bottom_px as u32);
-        if width < 1 {
-            width = 1;
-        }
-        if height < 1 {
-            height = 1;
-        }
-        Viewport {
-            x: left_px,
-            y: 0,
-            width,
-            height,
-        }
-    }
 }

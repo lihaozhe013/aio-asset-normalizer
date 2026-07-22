@@ -36,7 +36,7 @@ impl LogViewer {
         };
 
         egui::ScrollArea::vertical()
-            .auto_shrink([false, true])
+            .auto_shrink([false, false])
             .stick_to_bottom(self.auto_scroll)
             .show(ui, |ui| {
                 let label_text = egui::RichText::new(&text).monospace().weak();

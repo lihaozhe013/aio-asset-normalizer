@@ -1,14 +1,15 @@
 mod app;
 mod modules;
 
-use app::{App, PanelLayout};
+use app::App;
 use three_d::*;
 
 fn main() {
     let window = Window::new(WindowSettings {
         title: "AIO Asset Normalizer".to_string(),
         min_size: (1024, 600),
-        max_size: Some((2560, 1440)),
+        max_size: None,
+        initial_size: Some((1200, 750)),
         ..Default::default()
     })
     .expect("Failed to create window");
@@ -20,7 +21,7 @@ fn main() {
     window.render_loop(move |mut frame_input| {
         app.camera.handle_events(&frame_input.events);
 
-        let mut layout = PanelLayout::default();
+        let mut content_rect: Option<egui::Rect> = None;
 
         gui.update(
             &mut frame_input.events,
@@ -28,17 +29,26 @@ fn main() {
             frame_input.viewport,
             frame_input.device_pixel_ratio,
             |gui_ctx| {
-                layout = app.render_ui(gui_ctx, frame_input.window_width);
+                content_rect = Some(app.render_ui(gui_ctx, frame_input.window_width));
             },
         );
 
         app.reload_model_if_needed(&context);
 
-        let viewport = app.compute_viewport(
-            &layout,
-            frame_input.device_pixel_ratio,
-            &frame_input.viewport,
-        );
+        let dpr = frame_input.device_pixel_ratio;
+        let viewport = content_rect
+            .map(|r| Viewport {
+                x: (r.min.x * dpr) as i32,
+                y: 0,
+                width: ((r.width() * dpr) as u32).max(1),
+                height: ((r.max.y * dpr) as u32).max(1),
+            })
+            .unwrap_or(Viewport {
+                x: 0,
+                y: 0,
+                width: 1,
+                height: 1,
+            });
 
         app.camera.set_viewport(viewport);
 
@@ -72,7 +82,12 @@ fn main() {
 
         if let Some(ref model) = app.canvas.model {
             let lights = app.canvas.model_lights();
-            clear_rt = clear_rt.render_partially(viewport.into(), &app.camera.camera, model, &lights);
+            clear_rt = clear_rt.render_partially(
+                viewport.into(),
+                &app.camera.camera,
+                model,
+                &lights,
+            );
         }
 
         if app.canvas.show_bones {
