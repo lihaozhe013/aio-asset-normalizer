@@ -98,23 +98,16 @@ impl App {
                 if path.exists() {
                     match self.canvas.load_glb(context, path) {
                         Ok(()) => {
-                            self.skeleton =
-                                Skeleton::from_glb(path).ok().or_else(|| {
-                                    self.log.append("[Info] No skeleton found (static mesh)");
+                            self.skeleton = Skeleton::from_glb(path).ok().or_else(|| {
+                                self.log.append("[Info] No skeleton found (static mesh)");
+                                None
+                            });
+                            self.animation_player = self.skeleton.as_ref().and_then(|skel| {
+                                AnimationPlayer::from_glb(path, skel).ok().or_else(|| {
+                                    self.log.append("[Info] No animations found");
                                     None
-                                });
-                            self.animation_player = self
-                                .skeleton
-                                .as_ref()
-                                .and_then(|skel| {
-                                    AnimationPlayer::from_glb(path, skel)
-                                        .ok()
-                                        .or_else(|| {
-                                            self.log
-                                                .append("[Info] No animations found");
-                                            None
-                                        })
-                                });
+                                })
+                            });
                             self.update_bone_visualization(context);
                         }
                         Err(e) => self.log.append(&format!("[Error] {}", e)),
@@ -149,14 +142,15 @@ impl App {
             .filter(|a| a.playing)
             .and_then(|a| self.skeleton.as_ref().map(|s| a.animated_bone_positions(s)))
             .or_else(|| {
-                self.skeleton.as_ref().map(|s| {
-                    (s.bone_positions(), s.joint_positions())
-                })
+                self.skeleton
+                    .as_ref()
+                    .map(|s| (s.bone_positions(), s.joint_positions()))
             })
             .unwrap_or_default();
 
         let highlighted = self.skeleton.as_ref().and_then(|s| s.highlighted_bone);
-        self.canvas.update_bones(context, &segments, &joints, highlighted);
+        self.canvas
+            .update_bones(context, &segments, &joints, highlighted);
     }
 
     fn start_conversion(&mut self) {
@@ -184,13 +178,15 @@ impl App {
             "remove_loose_vertices": self.config.remove_loose_vertices,
         });
 
-        if matches!(script_version, crate::modules::blender::bridge::ScriptVersion::V2) {
+        if matches!(
+            script_version,
+            crate::modules::blender::bridge::ScriptVersion::V2
+        ) {
             config_obj["correct_bone_axes"] =
                 serde_json::Value::Bool(self.config.correct_bone_axes);
             config_obj["preserve_leaf_bones"] =
                 serde_json::Value::Bool(self.config.preserve_leaf_bones);
-            config_obj["bake_animations"] =
-                serde_json::Value::Bool(self.config.bake_animations);
+            config_obj["bake_animations"] = serde_json::Value::Bool(self.config.bake_animations);
         }
 
         let config_json = serde_json::to_string(&config_obj).unwrap_or_default();
@@ -321,7 +317,11 @@ impl App {
         actions
     }
 
-    pub fn render_ui(&mut self, ui: &mut three_d::egui::Ui, _window_width: u32) -> three_d::egui::Rect {
+    pub fn render_ui(
+        &mut self,
+        ui: &mut three_d::egui::Ui,
+        _window_width: u32,
+    ) -> three_d::egui::Rect {
         if !self.fonts_configured {
             fonts::configure(ui.ctx());
             self.fonts_configured = true;
@@ -393,8 +393,7 @@ impl App {
                     } else {
                         "开始转换"
                     };
-                    let enabled =
-                        !self.file_tree.selected_files().is_empty() && !self.converting;
+                    let enabled = !self.file_tree.selected_files().is_empty() && !self.converting;
                     ui.add_enabled_ui(enabled, |ui| {
                         let btn = ui.button(RichText::new(btn_text).strong());
                         if btn.clicked() {
@@ -448,9 +447,7 @@ impl App {
             if ui.button("2.0x").clicked() {
                 anim.speed = 2.0;
             }
-            ui.add(
-                three_d::egui::Slider::new(&mut anim.speed, 0.1..=3.0).text("x"),
-            );
+            ui.add(three_d::egui::Slider::new(&mut anim.speed, 0.1..=3.0).text("x"));
         });
 
         if anim.clips.len() > 1 {
@@ -473,15 +470,10 @@ impl App {
 
         let mut slider_val = anim.current_time;
         ui.horizontal(|ui| {
-            ui.label(format!(
-                "{:.2}s / {:.2}s",
-                anim.current_time, clip.duration
-            ));
+            ui.label(format!("{:.2}s / {:.2}s", anim.current_time, clip.duration));
         });
         if ui
-            .add(
-                three_d::egui::Slider::new(&mut slider_val, 0.0..=clip.duration).text("时间"),
-            )
+            .add(three_d::egui::Slider::new(&mut slider_val, 0.0..=clip.duration).text("时间"))
             .changed()
         {
             anim.current_time = slider_val;
@@ -510,5 +502,4 @@ impl App {
                 });
             });
     }
-
 }

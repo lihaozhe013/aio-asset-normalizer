@@ -107,9 +107,15 @@ pub fn run_task(
         )
     })?;
 
-    let _ = tx.send(format!("[Bridge] Script v{:.0}: {}", 
-        if matches!(task.script_version, ScriptVersion::V2) { "2" } else { "1" },
-        script.display()));
+    let _ = tx.send(format!(
+        "[Bridge] Script v{:.0}: {}",
+        if matches!(task.script_version, ScriptVersion::V2) {
+            "2"
+        } else {
+            "1"
+        },
+        script.display()
+    ));
     let _ = tx.send(format!("[Bridge] Blender: {}", blender.display()));
     let _ = tx.send(format!("[Bridge] Input:  {}", task.input.display()));
     let _ = tx.send(format!("[Bridge] Output: {}", task.output.display()));

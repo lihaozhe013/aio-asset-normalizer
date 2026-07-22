@@ -39,9 +39,7 @@ impl AnimationPlayer {
         let (document, buffers, _images) =
             gltf::import(path).map_err(|e| format!("GLTF parse error: {}", e))?;
 
-        let get_buf = |buffer: gltf::Buffer| {
-            Some(&buffers[buffer.index()])
-        };
+        let get_buf = |buffer: gltf::Buffer| Some(&buffers[buffer.index()]);
 
         let mut clips = Vec::new();
 
@@ -65,11 +63,10 @@ impl AnimationPlayer {
 
                 let buf_fn = |buf: gltf::Buffer| get_buf(buf).map(|d| &**d);
 
-                let times: Vec<f32> =
-                    match gltf::accessor::Iter::new(input_accessor, buf_fn) {
-                        Some(iter) => iter.collect(),
-                        None => continue,
-                    };
+                let times: Vec<f32> = match gltf::accessor::Iter::new(input_accessor, buf_fn) {
+                    Some(iter) => iter.collect(),
+                    None => continue,
+                };
 
                 if let Some(&t) = times.last() {
                     max_time = max_time.max(t);
@@ -88,8 +85,7 @@ impl AnimationPlayer {
                         if let Some(iter) =
                             gltf::accessor::Iter::<[f32; 3]>::new(output_accessor, buf_fn)
                         {
-                            let values: Vec<Vec3> =
-                                iter.map(|v| vec3(v[0], v[1], v[2])).collect();
+                            let values: Vec<Vec3> = iter.map(|v| vec3(v[0], v[1], v[2])).collect();
                             ch.translation_keys = times
                                 .into_iter()
                                 .zip(values)
@@ -104,9 +100,8 @@ impl AnimationPlayer {
                         if let Some(iter) =
                             gltf::accessor::Iter::<[f32; 4]>::new(output_accessor, buf_fn)
                         {
-                            let values: Vec<Quat> = iter
-                                .map(|v| Quat::new(v[3], v[0], v[1], v[2]))
-                                .collect();
+                            let values: Vec<Quat> =
+                                iter.map(|v| Quat::new(v[3], v[0], v[1], v[2])).collect();
                             ch.rotation_keys = times
                                 .into_iter()
                                 .zip(values)
@@ -121,8 +116,7 @@ impl AnimationPlayer {
                         if let Some(iter) =
                             gltf::accessor::Iter::<[f32; 3]>::new(output_accessor, buf_fn)
                         {
-                            let values: Vec<Vec3> =
-                                iter.map(|v| vec3(v[0], v[1], v[2])).collect();
+                            let values: Vec<Vec3> = iter.map(|v| vec3(v[0], v[1], v[2])).collect();
                             ch.scale_keys = times
                                 .into_iter()
                                 .zip(values)
@@ -326,7 +320,11 @@ fn interpolate_vec3(t: f32, keys: &[Keyframe<Vec3>]) -> Option<Vec3> {
     for i in 0..keys.len() - 1 {
         if t >= keys[i].time && t <= keys[i + 1].time {
             let dt = keys[i + 1].time - keys[i].time;
-            let factor = if dt > 0.0 { (t - keys[i].time) / dt } else { 0.0 };
+            let factor = if dt > 0.0 {
+                (t - keys[i].time) / dt
+            } else {
+                0.0
+            };
             return Some(keys[i].value + (keys[i + 1].value - keys[i].value) * factor);
         }
     }
@@ -346,7 +344,11 @@ fn interpolate_quat(t: f32, keys: &[Keyframe<Quat>]) -> Option<Quat> {
     for i in 0..keys.len() - 1 {
         if t >= keys[i].time && t <= keys[i + 1].time {
             let dt = keys[i + 1].time - keys[i].time;
-            let factor = if dt > 0.0 { (t - keys[i].time) / dt } else { 0.0 };
+            let factor = if dt > 0.0 {
+                (t - keys[i].time) / dt
+            } else {
+                0.0
+            };
             return Some(keys[i].value.slerp(keys[i + 1].value, factor));
         }
     }

@@ -33,11 +33,8 @@ fn render_bone_node(ui: &mut egui::Ui, skeleton: &mut Skeleton, bone_idx: usize,
     if has_children {
         let id = ui.make_persistent_id(format!("bone_{}", bone_idx));
 
-        let header = egui::collapsing_header::CollapsingState::load_with_default_open(
-            ui.ctx(),
-            id,
-            true,
-        );
+        let header =
+            egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, true);
 
         header
             .show_header(ui, |ui| {

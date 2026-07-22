@@ -107,10 +107,7 @@ fn build_bone_sticks(
     Gm::new(Mesh::new(context, &cpu_mesh), ColorMaterial::default())
 }
 
-fn build_joint_spheres(
-    context: &Context,
-    positions: &[Vec3],
-) -> Gm<Mesh, ColorMaterial> {
+fn build_joint_spheres(context: &Context, positions: &[Vec3]) -> Gm<Mesh, ColorMaterial> {
     let joint_radius = 0.03;
     let mut sphere_template = CpuMesh::sphere(6);
     sphere_template

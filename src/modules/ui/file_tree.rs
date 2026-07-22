@@ -107,7 +107,11 @@ impl FileTree {
 
             let children = if is_dir && max_depth > 1 {
                 let sub = Self::scan_dir(&entry_path, max_depth - 1);
-                if sub.is_empty() { None } else { Some(sub) }
+                if sub.is_empty() {
+                    None
+                } else {
+                    Some(sub)
+                }
             } else if is_dir {
                 None
             } else {
@@ -157,10 +161,7 @@ impl FileTree {
             HashSet::new()
         };
 
-        let inverted: HashSet<PathBuf> = all
-            .difference(&self.selected)
-            .cloned()
-            .collect();
+        let inverted: HashSet<PathBuf> = all.difference(&self.selected).cloned().collect();
         self.selected = inverted;
     }
 
@@ -289,7 +290,11 @@ impl FileTree {
                     self.invert_selection();
                 }
             });
-            ui.label(format!("已选 {} / 共 {} 个文件", self.selected.len(), total));
+            ui.label(format!(
+                "已选 {} / 共 {} 个文件",
+                self.selected.len(),
+                total
+            ));
         } else {
             ui.label(egui::RichText::new("未发现支持的文件").weak());
         }
