@@ -323,11 +323,19 @@ impl App {
         full_viewport: &Viewport,
     ) -> Viewport {
         let panel_px = (panel_width * device_pixel_ratio) as i32;
+        let mut width = full_viewport.width.saturating_sub(panel_px as u32);
+        let mut height = full_viewport.height;
+        if width < 1 {
+            width = 1;
+        }
+        if height < 1 {
+            height = 1;
+        }
         Viewport {
             x: panel_px,
             y: 0,
-            width: full_viewport.width.saturating_sub(panel_px as u32),
-            height: full_viewport.height,
+            width,
+            height,
         }
     }
 }

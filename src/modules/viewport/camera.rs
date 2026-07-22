@@ -45,6 +45,9 @@ impl OrbitCamera {
     }
 
     pub fn set_viewport(&mut self, viewport: Viewport) {
+        if viewport.width < 1 || viewport.height < 1 {
+            return;
+        }
         self.camera.set_viewport(viewport);
     }
 
