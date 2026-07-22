@@ -31,6 +31,7 @@ This project is deliberately decoupled. Every agent action must respect these bo
 - **Commit only on request** -- Never `git commit`, `git push`, or create a PR unless explicitly asked.
 - Before committing, inspect `git status` and `git diff --stat`. Stage only the intended files; never stage generated artifacts (`target/`, `*.pdb`) or secrets.
 - Write concise, descriptive commit messages in English that match the repo's existing style.
+- **Use Conventional Commits** -- format commit messages as `type: description`, e.g. `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`.
 
 ## Code Conventions
 
