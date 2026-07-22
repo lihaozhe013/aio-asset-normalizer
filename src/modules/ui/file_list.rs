@@ -14,7 +14,6 @@ impl FileList {
         }
     }
 
-    #[allow(dead_code)]
     pub fn files(&self) -> &[PathBuf] {
         &self.files
     }

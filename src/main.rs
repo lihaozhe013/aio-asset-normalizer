@@ -32,6 +32,8 @@ fn main() {
             },
         );
 
+        app.reload_model_if_needed(&context);
+
         let viewport = app.compute_viewport(
             panel_width,
             frame_input.device_pixel_ratio,
@@ -40,8 +42,8 @@ fn main() {
 
         app.camera.set_viewport(viewport);
 
-        frame_input
-            .screen()
+        let screen = frame_input.screen();
+        let clear_rt = screen
             .clear(ClearState::color_and_depth(0.12, 0.13, 0.17, 1.0, 1.0))
             .render_partially(viewport.into(), &app.camera.camera, &app.canvas.axes, &[])
             .render_partially(viewport.into(), &app.camera.camera, &app.canvas.grid, &[])
@@ -50,9 +52,17 @@ fn main() {
                 &app.camera.camera,
                 &app.canvas.origin_sphere,
                 &[],
-            )
-            .write(|| gui.render())
-            .unwrap();
+            );
+
+        if let Some(ref model) = app.canvas.model {
+            let lights = app.canvas.model_lights();
+            clear_rt
+                .render_partially(viewport.into(), &app.camera.camera, model, &lights)
+                .write(|| gui.render())
+                .unwrap();
+        } else {
+            clear_rt.write(|| gui.render()).unwrap();
+        }
 
         FrameOutput::default()
     });

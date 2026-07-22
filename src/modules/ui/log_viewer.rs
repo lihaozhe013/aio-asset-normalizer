@@ -13,7 +13,6 @@ impl LogViewer {
         }
     }
 
-    #[allow(dead_code)]
     pub fn append(&mut self, line: &str) {
         self.entries.push(line.to_owned());
     }
