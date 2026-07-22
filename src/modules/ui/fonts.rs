@@ -1,12 +1,13 @@
-use three_d::egui::{Context, FontData, FontDefinitions, FontFamily};
 use std::sync::Arc;
+use three_d::egui::{Context, FontData, FontDefinitions, FontFamily};
 
 pub fn configure(ctx: &Context) {
     if let Some(font_data) = load_system_font() {
         let mut fonts = FontDefinitions::default();
-        fonts
-            .font_data
-            .insert("system_cjk".to_owned(), Arc::new(FontData::from_owned(font_data)));
+        fonts.font_data.insert(
+            "system_cjk".to_owned(),
+            Arc::new(FontData::from_owned(font_data)),
+        );
         fonts
             .families
             .get_mut(&FontFamily::Proportional)

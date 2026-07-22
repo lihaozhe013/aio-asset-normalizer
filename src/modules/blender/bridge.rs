@@ -45,7 +45,11 @@ fn find_in_path(name: &str) -> Option<PathBuf> {
     } else {
         name.to_owned()
     };
-    for dir in paths.split(if cfg!(target_os = "windows") { ';' } else { ':' }) {
+    for dir in paths.split(if cfg!(target_os = "windows") {
+        ';'
+    } else {
+        ':'
+    }) {
         let candidate = PathBuf::from(dir).join(&exe_name);
         if candidate.exists() {
             return Some(candidate);

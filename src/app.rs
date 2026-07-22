@@ -104,19 +104,18 @@ impl App {
             return;
         }
 
-        let config_json =
-            serde_json::to_string(&serde_json::json!({
-                "target_scale": self.config.target_scale,
-                "up_axis": match self.config.up_axis {
-                    crate::modules::ui::config_panel::UpAxis::YUp => "Y",
-                    crate::modules::ui::config_panel::UpAxis::ZUp => "Z",
-                },
-                "remove_unused_materials": self.config.remove_unused_materials,
-                "remove_cameras": self.config.remove_cameras,
-                "remove_lights": self.config.remove_lights,
-                "remove_loose_vertices": self.config.remove_loose_vertices,
-            }))
-            .unwrap_or_default();
+        let config_json = serde_json::to_string(&serde_json::json!({
+            "target_scale": self.config.target_scale,
+            "up_axis": match self.config.up_axis {
+                crate::modules::ui::config_panel::UpAxis::YUp => "Y",
+                crate::modules::ui::config_panel::UpAxis::ZUp => "Z",
+            },
+            "remove_unused_materials": self.config.remove_unused_materials,
+            "remove_cameras": self.config.remove_cameras,
+            "remove_lights": self.config.remove_lights,
+            "remove_loose_vertices": self.config.remove_loose_vertices,
+        }))
+        .unwrap_or_default();
 
         let (tx, rx) = mpsc::channel();
         self.conversion_rx = Some(rx);
@@ -124,14 +123,12 @@ impl App {
         self.log.clear();
         self.log.append("[Normalizer] Starting conversion...");
 
-        let last_output = files
-            .first()
-            .map(|p| {
-                let stem = p.file_stem().unwrap_or_default();
-                p.parent()
-                    .unwrap_or(PathBuf::from(".").as_ref())
-                    .join(format!("{}_normalized.glb", stem.to_string_lossy()))
-            });
+        let last_output = files.first().map(|p| {
+            let stem = p.file_stem().unwrap_or_default();
+            p.parent()
+                .unwrap_or(PathBuf::from(".").as_ref())
+                .join(format!("{}_normalized.glb", stem.to_string_lossy()))
+        });
 
         self.last_output = last_output;
 
@@ -142,9 +139,7 @@ impl App {
                     .unwrap_or(PathBuf::from(".").as_ref())
                     .join(format!(
                         "{}_normalized.glb",
-                        file.file_stem()
-                            .unwrap_or_default()
-                            .to_string_lossy()
+                        file.file_stem().unwrap_or_default().to_string_lossy()
                     ));
 
                 let task = crate::modules::blender::task::ConversionTask {
@@ -156,10 +151,7 @@ impl App {
                 let _ = tx.send(format!("[Normalizer] Processing: {}", task.input.display()));
                 match bridge::run_task(&task, &tx) {
                     Ok(true) => {
-                        let _ = tx.send(format!(
-                            "[Normalizer] Success: {}",
-                            task.output.display()
-                        ));
+                        let _ = tx.send(format!("[Normalizer] Success: {}", task.output.display()));
                     }
                     Ok(false) => {
                         let _ = tx.send(format!("[Normalizer] Failed with non-zero exit code"));

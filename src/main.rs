@@ -1,8 +1,8 @@
 mod app;
 mod modules;
 
-use three_d::*;
 use app::App;
+use three_d::*;
 
 fn main() {
     let window = Window::new(WindowSettings {
@@ -43,17 +43,23 @@ fn main() {
         app.camera.set_viewport(viewport);
 
         let screen = frame_input.screen();
-        let mut clear_rt = screen.clear(ClearState::color_and_depth(
-            0.12, 0.13, 0.17, 1.0, 1.0,
-        ));
+        let mut clear_rt = screen.clear(ClearState::color_and_depth(0.12, 0.13, 0.17, 1.0, 1.0));
 
         if app.canvas.show_axes {
-            clear_rt = clear_rt
-                .render_partially(viewport.into(), &app.camera.camera, &app.canvas.axes, &[]);
+            clear_rt = clear_rt.render_partially(
+                viewport.into(),
+                &app.camera.camera,
+                &app.canvas.axes,
+                &[],
+            );
         }
         if app.canvas.show_grid {
-            clear_rt = clear_rt
-                .render_partially(viewport.into(), &app.camera.camera, &app.canvas.grid, &[]);
+            clear_rt = clear_rt.render_partially(
+                viewport.into(),
+                &app.camera.camera,
+                &app.canvas.grid,
+                &[],
+            );
         }
         if app.canvas.show_origin {
             clear_rt = clear_rt.render_partially(

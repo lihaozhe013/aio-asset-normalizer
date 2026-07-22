@@ -39,8 +39,8 @@ impl ViewportCanvas {
     }
 
     pub fn load_glb(&mut self, context: &Context, path: &Path) -> Result<(), String> {
-        let mut raw = three_d_asset::io::load(&[path])
-            .map_err(|e| format!("Asset load error: {}", e))?;
+        let mut raw =
+            three_d_asset::io::load(&[path]).map_err(|e| format!("Asset load error: {}", e))?;
 
         let cpu_model: CpuModel = raw
             .deserialize("Scene")

@@ -40,11 +40,7 @@ impl LogViewer {
             .auto_shrink([false; 2])
             .stick_to_bottom(self.auto_scroll)
             .show(ui, |ui| {
-                ui.label(
-                    egui::RichText::new(&text)
-                        .monospace()
-                        .weak(),
-                );
+                ui.label(egui::RichText::new(&text).monospace().weak());
             });
     }
 }

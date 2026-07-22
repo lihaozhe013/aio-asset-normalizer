@@ -70,9 +70,7 @@ impl OrbitCamera {
                         let sensitivity = 0.005;
                         self.theta -= delta.0 as f32 * sensitivity;
                         self.phi -= delta.1 as f32 * sensitivity;
-                        self.phi = self
-                            .phi
-                            .clamp(0.05, std::f32::consts::PI - 0.05);
+                        self.phi = self.phi.clamp(0.05, std::f32::consts::PI - 0.05);
                         self.update_camera_view();
                     }
                     if self.panning {

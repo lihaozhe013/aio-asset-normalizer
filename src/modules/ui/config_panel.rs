@@ -56,10 +56,7 @@ impl NormalizationConfig {
             });
 
         ui.label("清理策略:");
-        ui.checkbox(
-            &mut self.remove_unused_materials,
-            "清除无用材质",
-        );
+        ui.checkbox(&mut self.remove_unused_materials, "清除无用材质");
         ui.checkbox(&mut self.remove_cameras, "清除相机");
         ui.checkbox(&mut self.remove_lights, "清除灯光");
         ui.checkbox(&mut self.remove_loose_vertices, "清除游离顶点");
