@@ -4,15 +4,14 @@ use std::time::Instant;
 
 use crate::modules::{
     animation::AnimationPlayer,
-    blender::bridge,
+    blender,
     skeleton::Skeleton,
     ui::{
-        bone_tree,
         config_panel::NormalizationConfig,
         file_tree::FileTree,
-        fonts,
         log_viewer::LogViewer,
-        menu_bar::{self, MenuAction},
+        main_panel,
+        menu_bar::MenuAction,
     },
     viewport::{camera::OrbitCamera, canvas::ViewportCanvas},
 };
@@ -21,16 +20,16 @@ use three_d::*;
 pub struct App {
     pub camera: OrbitCamera,
     pub canvas: ViewportCanvas,
-    fonts_configured: bool,
+    pub(crate) fonts_configured: bool,
     pub file_tree: FileTree,
     pub config: NormalizationConfig,
     pub log: LogViewer,
     conversion_rx: Option<mpsc::Receiver<String>>,
-    converting: bool,
+    pub(crate) converting: bool,
     last_output: Option<PathBuf>,
     needs_reload: bool,
     quit_requested: bool,
-    show_about: bool,
+    pub(crate) show_about: bool,
     pub skeleton: Option<Skeleton>,
     pub animation_player: Option<AnimationPlayer>,
     last_frame_time: Instant,
@@ -153,7 +152,7 @@ impl App {
             .update_bones(context, &segments, &joints, highlighted);
     }
 
-    fn start_conversion(&mut self) {
+    pub(crate) fn start_conversion(&mut self) {
         let files: Vec<PathBuf> = self.file_tree.selected_files();
         if files.is_empty() || self.converting {
             return;
@@ -224,7 +223,7 @@ impl App {
                 };
 
                 let _ = tx.send(format!("[Normalizer] Processing: {}", task.input.display()));
-                match bridge::run_task(&task, &tx) {
+                match blender::bridge::run_task(&task, &tx) {
                     Ok(true) => {
                         let _ = tx.send(format!("[Normalizer] Success: {}", task.output.display()));
                     }
@@ -240,7 +239,7 @@ impl App {
         });
     }
 
-    fn dispatch_action(&mut self, action: &MenuAction) {
+    pub(crate) fn dispatch_action(&mut self, action: &MenuAction) {
         match action {
             MenuAction::ImportFiles => {
                 if let Some(path) = rfd::FileDialog::new()
@@ -288,218 +287,11 @@ impl App {
         }
     }
 
-    fn collect_shortcut_actions(ctx: &three_d::egui::Context) -> Vec<MenuAction> {
-        let mut actions = Vec::new();
-        ctx.input(|i| {
-            let ctrl = i.modifiers.ctrl || i.modifiers.command;
-            if ctrl && i.key_pressed(three_d::egui::Key::Q) {
-                actions.push(MenuAction::Quit);
-            }
-            if ctrl && !i.modifiers.shift && i.key_pressed(three_d::egui::Key::O) {
-                actions.push(MenuAction::ImportFiles);
-            }
-            if ctrl && i.modifiers.shift && i.key_pressed(three_d::egui::Key::O) {
-                actions.push(MenuAction::ImportFolder);
-            }
-            if ctrl && i.key_pressed(three_d::egui::Key::R) {
-                actions.push(MenuAction::ResetCamera);
-            }
-            if ctrl && i.key_pressed(three_d::egui::Key::G) {
-                actions.push(MenuAction::ToggleGrid);
-            }
-            if ctrl && i.key_pressed(three_d::egui::Key::A) {
-                actions.push(MenuAction::ToggleAxes);
-            }
-            if ctrl && i.key_pressed(three_d::egui::Key::B) {
-                actions.push(MenuAction::ToggleBones);
-            }
-        });
-        actions
-    }
-
     pub fn render_ui(
         &mut self,
         ui: &mut three_d::egui::Ui,
-        _window_width: u32,
+        window_width: u32,
     ) -> three_d::egui::Rect {
-        if !self.fonts_configured {
-            fonts::configure(ui.ctx());
-            self.fonts_configured = true;
-        }
-
-        self.file_tree.handle_dropped_files(ui.ctx());
-        self.poll_tasks();
-
-        let shortcut_actions = Self::collect_shortcut_actions(ui.ctx());
-        let menu_actions = menu_bar::render(
-            ui,
-            self.canvas.show_grid,
-            self.canvas.show_axes,
-            self.canvas.show_origin,
-            self.canvas.show_bones,
-        );
-
-        for action in shortcut_actions.iter().chain(menu_actions.iter()) {
-            self.dispatch_action(action);
-        }
-
-        self.render_about_dialog(ui.ctx());
-
-        use three_d::egui::*;
-
-        Panel::left("file_tree")
-            .resizable(true)
-            .default_size(250.0)
-            .min_size(160.0)
-            .show_inside(ui, |ui| {
-                self.file_tree.render(ui);
-            });
-
-        Panel::right("inspector")
-            .resizable(true)
-            .default_size(280.0)
-            .min_size(200.0)
-            .show_inside(ui, |ui| {
-                ScrollArea::vertical().show(ui, |ui| {
-                    ui.heading("格式转换");
-                    ui.separator();
-                    self.config.render_inspector(ui);
-
-                    if self.skeleton.is_some() {
-                        ui.separator();
-                        CollapsingHeader::new("骨骼层级")
-                            .default_open(true)
-                            .show(ui, |ui| {
-                                ui.checkbox(&mut self.canvas.show_bones, "显示骨骼");
-                                if let Some(ref mut skel) = self.skeleton {
-                                    bone_tree::render_bone_tree(ui, skel);
-                                }
-                            });
-                    }
-
-                    if self.animation_player.is_some() {
-                        ui.separator();
-                        CollapsingHeader::new("动画播放")
-                            .default_open(true)
-                            .show(ui, |ui| {
-                                self.render_animation_controls(ui);
-                            });
-                    }
-
-                    ui.separator();
-
-                    let btn_text = if self.converting {
-                        "正在转换..."
-                    } else {
-                        "开始转换"
-                    };
-                    let enabled = !self.file_tree.selected_files().is_empty() && !self.converting;
-                    ui.add_enabled_ui(enabled, |ui| {
-                        let btn = ui.button(RichText::new(btn_text).strong());
-                        if btn.clicked() {
-                            self.start_conversion();
-                        }
-                    });
-                });
-            });
-
-        let content_rect = ui.available_rect_before_wrap();
-
-        Panel::bottom("log")
-            .resizable(true)
-            .default_size(150.0)
-            .min_size(80.0)
-            .show_inside(ui, |ui| {
-                self.log.render(ui);
-            });
-
-        content_rect
-    }
-
-    fn render_animation_controls(&mut self, ui: &mut three_d::egui::Ui) {
-        let anim = match self.animation_player.as_mut() {
-            Some(a) => a,
-            None => {
-                ui.label("No animation data");
-                return;
-            }
-        };
-
-        ui.horizontal(|ui| {
-            let play_label = if anim.playing { "暂停" } else { "播放" };
-            if ui.button(play_label).clicked() {
-                anim.toggle_play();
-            }
-            if ui.button("停止").clicked() {
-                anim.stop();
-            }
-            ui.checkbox(&mut anim.looping, "循环");
-        });
-
-        ui.horizontal(|ui| {
-            ui.label("速度:");
-            if ui.button("0.5x").clicked() {
-                anim.speed = 0.5;
-            }
-            if ui.button("1.0x").clicked() {
-                anim.speed = 1.0;
-            }
-            if ui.button("2.0x").clicked() {
-                anim.speed = 2.0;
-            }
-            ui.add(three_d::egui::Slider::new(&mut anim.speed, 0.1..=3.0).text("x"));
-        });
-
-        if anim.clips.len() > 1 {
-            ui.horizontal(|ui| {
-                ui.label("动画片段:");
-                let names = anim.clip_names();
-                for (i, name) in names.iter().enumerate() {
-                    let selected = anim.current_clip == i;
-                    if ui.selectable_label(selected, name).clicked() {
-                        anim.set_clip(i);
-                    }
-                }
-            });
-        }
-
-        let clip = match anim.current_clip() {
-            Some(c) => c,
-            None => return,
-        };
-
-        let mut slider_val = anim.current_time;
-        ui.horizontal(|ui| {
-            ui.label(format!("{:.2}s / {:.2}s", anim.current_time, clip.duration));
-        });
-        if ui
-            .add(three_d::egui::Slider::new(&mut slider_val, 0.0..=clip.duration).text("时间"))
-            .changed()
-        {
-            anim.current_time = slider_val;
-            anim.update_bone_transforms();
-        }
-    }
-
-    fn render_about_dialog(&mut self, ctx: &three_d::egui::Context) {
-        use three_d::egui::*;
-        Window::new("About AIO Asset Normalizer")
-            .open(&mut self.show_about)
-            .collapsible(false)
-            .resizable(false)
-            .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
-            .show(ctx, |ui| {
-                ui.vertical_centered(|ui| {
-                    ui.heading("AIO Asset Normalizer");
-                    ui.label("v0.1.0");
-                    ui.separator();
-                    ui.label("Cross-platform 3D asset batch normalization tool");
-                    ui.add_space(8.0);
-                    ui.hyperlink_to(
-                        "GitHub Repository",
-                        "https://github.com/anomalyco/aio-asset-normalizer",
-                    );
-                });
-            });
+        main_panel::render_ui(self, ui, window_width)
     }
 }
