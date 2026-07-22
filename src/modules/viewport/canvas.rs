@@ -7,6 +7,9 @@ pub struct ViewportCanvas {
     pub grid: Gm<Mesh, ColorMaterial>,
     pub origin_sphere: Gm<Mesh, ColorMaterial>,
     pub model: Option<Model<PhysicalMaterial>>,
+    pub show_axes: bool,
+    pub show_grid: bool,
+    pub show_origin: bool,
     ambient_light: AmbientLight,
     directional_light: DirectionalLight,
 }
@@ -18,6 +21,9 @@ impl ViewportCanvas {
             grid: helpers::build_grid(context),
             origin_sphere: helpers::build_origin_sphere(context),
             model: None,
+            show_axes: true,
+            show_grid: true,
+            show_origin: true,
             ambient_light: AmbientLight {
                 intensity: 0.3,
                 color: Srgba::new(255, 255, 255, 255),

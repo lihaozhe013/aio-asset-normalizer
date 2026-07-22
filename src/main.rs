@@ -43,16 +43,26 @@ fn main() {
         app.camera.set_viewport(viewport);
 
         let screen = frame_input.screen();
-        let clear_rt = screen
-            .clear(ClearState::color_and_depth(0.12, 0.13, 0.17, 1.0, 1.0))
-            .render_partially(viewport.into(), &app.camera.camera, &app.canvas.axes, &[])
-            .render_partially(viewport.into(), &app.camera.camera, &app.canvas.grid, &[])
-            .render_partially(
+        let mut clear_rt = screen.clear(ClearState::color_and_depth(
+            0.12, 0.13, 0.17, 1.0, 1.0,
+        ));
+
+        if app.canvas.show_axes {
+            clear_rt = clear_rt
+                .render_partially(viewport.into(), &app.camera.camera, &app.canvas.axes, &[]);
+        }
+        if app.canvas.show_grid {
+            clear_rt = clear_rt
+                .render_partially(viewport.into(), &app.camera.camera, &app.canvas.grid, &[]);
+        }
+        if app.canvas.show_origin {
+            clear_rt = clear_rt.render_partially(
                 viewport.into(),
                 &app.camera.camera,
                 &app.canvas.origin_sphere,
                 &[],
             );
+        }
 
         if let Some(ref model) = app.canvas.model {
             let lights = app.canvas.model_lights();
@@ -64,6 +74,9 @@ fn main() {
             clear_rt.write(|| gui.render()).unwrap();
         }
 
-        FrameOutput::default()
+        FrameOutput {
+            exit: app.quit_requested(),
+            ..Default::default()
+        }
     });
 }

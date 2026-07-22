@@ -95,6 +95,16 @@ impl OrbitCamera {
         }
     }
 
+    pub fn reset(&mut self) {
+        let position = vec3(4.0, 3.0, 6.0);
+        self.target = vec3(0.0, 0.5, 0.0);
+        let direction = position - self.target;
+        self.radius = direction.magnitude();
+        self.theta = f32::atan2(direction.z, direction.x);
+        self.phi = f32::acos(direction.y / self.radius);
+        self.update_camera_view();
+    }
+
     fn camera_position(&self) -> Vec3 {
         let x = self.radius * self.phi.sin() * self.theta.cos();
         let y = self.radius * self.phi.cos();

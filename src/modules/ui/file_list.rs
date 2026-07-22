@@ -83,9 +83,24 @@ impl FileList {
         self.render_drop_hint(ui);
     }
 
-    fn add_path(&mut self, path: PathBuf) {
+    pub fn clear(&mut self) {
+        self.files.clear();
+    }
+
+    pub fn add_path(&mut self, path: PathBuf) {
         if self.is_supported(&path) && !self.files.contains(&path) {
             self.files.push(path);
+        }
+    }
+
+    pub fn scan_folder(&mut self, folder: &PathBuf) {
+        if let Ok(entries) = std::fs::read_dir(folder) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() {
+                    self.add_path(path);
+                }
+            }
         }
     }
 

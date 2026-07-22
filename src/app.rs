@@ -3,7 +3,13 @@ use std::sync::mpsc;
 
 use crate::modules::{
     blender::bridge,
-    ui::{config_panel::NormalizationConfig, file_list::FileList, fonts, log_viewer::LogViewer},
+    ui::{
+        config_panel::NormalizationConfig,
+        file_list::FileList,
+        fonts,
+        log_viewer::LogViewer,
+        menu_bar::{self, MenuAction},
+    },
     viewport::{camera::OrbitCamera, canvas::ViewportCanvas},
 };
 use three_d::*;
@@ -19,6 +25,8 @@ pub struct App {
     converting: bool,
     last_output: Option<PathBuf>,
     needs_reload: bool,
+    quit_requested: bool,
+    show_about: bool,
 }
 
 impl App {
@@ -37,7 +45,13 @@ impl App {
             converting: false,
             last_output: None,
             needs_reload: false,
+            quit_requested: false,
+            show_about: false,
         }
+    }
+
+    pub fn quit_requested(&self) -> bool {
+        self.quit_requested
     }
 
     pub fn poll_tasks(&mut self) {
@@ -159,6 +173,74 @@ impl App {
         });
     }
 
+    fn dispatch_action(&mut self, action: &MenuAction) {
+        match action {
+            MenuAction::ImportFiles => {
+                if let Some(path) = rfd::FileDialog::new()
+                    .add_filter("3D 模型", &["fbx", "blend", "obj", "glb"])
+                    .pick_file()
+                {
+                    self.file_list.add_path(path);
+                }
+            }
+            MenuAction::ImportFolder => {
+                if let Some(folder) = rfd::FileDialog::new().pick_folder() {
+                    self.file_list.scan_folder(&folder);
+                }
+            }
+            MenuAction::ClearFileList => {
+                self.file_list.clear();
+            }
+            MenuAction::ResetConfig => {
+                self.config = NormalizationConfig::default();
+            }
+            MenuAction::ResetCamera => {
+                self.camera.reset();
+            }
+            MenuAction::ToggleGrid => {
+                self.canvas.show_grid = !self.canvas.show_grid;
+            }
+            MenuAction::ToggleAxes => {
+                self.canvas.show_axes = !self.canvas.show_axes;
+            }
+            MenuAction::ToggleOrigin => {
+                self.canvas.show_origin = !self.canvas.show_origin;
+            }
+            MenuAction::About => {
+                self.show_about = true;
+            }
+            MenuAction::Quit => {
+                self.quit_requested = true;
+            }
+        }
+    }
+
+    fn collect_shortcut_actions(ctx: &three_d::egui::Context) -> Vec<MenuAction> {
+        let mut actions = Vec::new();
+        ctx.input(|i| {
+            let ctrl = i.modifiers.ctrl || i.modifiers.command;
+            if ctrl && i.key_pressed(three_d::egui::Key::Q) {
+                actions.push(MenuAction::Quit);
+            }
+            if ctrl && !i.modifiers.shift && i.key_pressed(three_d::egui::Key::O) {
+                actions.push(MenuAction::ImportFiles);
+            }
+            if ctrl && i.modifiers.shift && i.key_pressed(three_d::egui::Key::O) {
+                actions.push(MenuAction::ImportFolder);
+            }
+            if ctrl && i.key_pressed(three_d::egui::Key::R) {
+                actions.push(MenuAction::ResetCamera);
+            }
+            if ctrl && i.key_pressed(three_d::egui::Key::G) {
+                actions.push(MenuAction::ToggleGrid);
+            }
+            if ctrl && i.key_pressed(three_d::egui::Key::A) {
+                actions.push(MenuAction::ToggleAxes);
+            }
+        });
+        actions
+    }
+
     pub fn render_ui(&mut self, ui: &mut three_d::egui::Ui, window_width: u32) -> f32 {
         if !self.fonts_configured {
             fonts::configure(ui.ctx());
@@ -167,6 +249,20 @@ impl App {
 
         self.file_list.handle_dropped_files(ui.ctx());
         self.poll_tasks();
+
+        let shortcut_actions = Self::collect_shortcut_actions(ui.ctx());
+        let menu_actions = menu_bar::render(
+            ui,
+            self.canvas.show_grid,
+            self.canvas.show_axes,
+            self.canvas.show_origin,
+        );
+
+        for action in shortcut_actions.iter().chain(menu_actions.iter()) {
+            self.dispatch_action(action);
+        }
+
+        self.render_about_dialog(ui.ctx());
 
         use three_d::egui::*;
         Panel::left("control_panel")
@@ -204,6 +300,28 @@ impl App {
                 });
             });
         window_width as f32 - ui.available_width()
+    }
+
+    fn render_about_dialog(&mut self, ctx: &three_d::egui::Context) {
+        use three_d::egui::*;
+        Window::new("About AIO Asset Normalizer")
+            .open(&mut self.show_about)
+            .collapsible(false)
+            .resizable(false)
+            .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
+            .show(ctx, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.heading("AIO Asset Normalizer");
+                    ui.label("v0.1.0");
+                    ui.separator();
+                    ui.label("Cross-platform 3D asset batch normalization tool");
+                    ui.add_space(8.0);
+                    ui.hyperlink_to(
+                        "GitHub Repository",
+                        "https://github.com/anomalyco/aio-asset-normalizer",
+                    );
+                });
+            });
     }
 
     pub fn compute_viewport(

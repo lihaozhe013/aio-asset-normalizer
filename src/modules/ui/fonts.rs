@@ -11,7 +11,7 @@ pub fn configure(ctx: &Context) {
             .families
             .get_mut(&FontFamily::Proportional)
             .unwrap()
-            .insert(0, "system_cjk".to_owned());
+            .push("system_cjk".to_owned());
         fonts
             .families
             .get_mut(&FontFamily::Monospace)
