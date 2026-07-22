@@ -1,5 +1,5 @@
 use crate::modules::{
-    ui::fonts,
+    ui::{config_panel::NormalizationConfig, file_list::FileList, fonts, log_viewer::LogViewer},
     viewport::{camera::OrbitCamera, canvas::ViewportCanvas},
 };
 use three_d::*;
@@ -8,6 +8,9 @@ pub struct App {
     pub camera: OrbitCamera,
     pub canvas: ViewportCanvas,
     fonts_configured: bool,
+    pub file_list: FileList,
+    pub config: NormalizationConfig,
+    pub log: LogViewer,
 }
 
 impl App {
@@ -16,6 +19,9 @@ impl App {
             camera: OrbitCamera::new(viewport),
             canvas: ViewportCanvas::new(context),
             fonts_configured: false,
+            file_list: FileList::new(),
+            config: NormalizationConfig::default(),
+            log: LogViewer::new(),
         }
     }
 
@@ -24,6 +30,8 @@ impl App {
             fonts::configure(ui.ctx());
             self.fonts_configured = true;
         }
+
+        self.file_list.handle_dropped_files(ui.ctx());
 
         use three_d::egui::*;
         Panel::left("control_panel")
@@ -36,17 +44,15 @@ impl App {
                     ui.separator();
 
                     ui.collapsing("资产导入", |ui| {
-                        ui.label("拖拽模型文件到此处...");
+                        self.file_list.render(ui);
                     });
 
                     ui.collapsing("转换配置", |ui| {
-                        ui.label("目标单位比例: 1.0");
-                        ui.label("目标朝向: Y-Up / Z-Forward");
-                        ui.label("清理策略: 清除无用材质");
+                        self.config.render(ui);
                     });
 
                     ui.collapsing("日志输出", |ui| {
-                        ui.label("就绪，等待任务...");
+                        self.log.render(ui);
                     });
                 });
             });

@@ -13,5 +13,6 @@ eframe = "0.34"
 gltf = { version = "1.4", features = ["KHR_lights_punctual", "extensions", "names"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+rfd = "0.15"
 
 three-d-asset = { version = "0.10", features = ["gltf"] }

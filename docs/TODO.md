@@ -6,17 +6,7 @@
 
 ## Milestone 1.0 -- MVP Core Pipeline & 3D Preview
 
-### Phase 2: UI Panels (2D Control Panel)
-
-- [ ] **File List Panel** (`file_list.rs`): system file dialog for picking FBX/Blend/OBJ files, display selected files in a scrollable list, remove/clear items
-- [ ] **Drag & Drop** support: accept dropped file/directory paths into the file list
-- [ ] **Config Panel** (`config_panel.rs`): target unit scale (float input), up-axis dropdown (Y-Up / Z-Up), cleanup checkboxes (remove unused materials, cameras, lights, loose vertices)
-- [ ] **Log Viewer** (`log_viewer.rs`): scrollable text area showing stdout/stderr from Blender subprocess, auto-scroll to bottom, clear button
-
-### Phase 3: Orbit Camera & 3D Viewport Enhancements
-
-- [ ] OrbitCamera: mouse right-drag to rotate, middle-drag to pan, scroll to zoom, with sensible min/max distance limits
-- [ ] Wire viewport camera into the egui+three-d split layout properly (render scissor region right of panel)
+### Phase 3: 3D Viewport Enhancements
 - [ ] Add `.glb` model loading into viewport (three-d-asset gltf importer)
 - [ ] Auto-load converted `.glb` into preview after Blender task finishes
 
