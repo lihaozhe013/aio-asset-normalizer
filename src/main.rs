@@ -5,6 +5,8 @@ use app::App;
 use three_d::*;
 
 fn main() {
+    let prefs = modules::preferences::load();
+
     let window = Window::new(WindowSettings {
         title: "AIO Asset Normalizer".to_string(),
         min_size: (1024, 600),
@@ -16,7 +18,7 @@ fn main() {
 
     let context = window.gl();
     let mut gui = three_d::GUI::new(&context);
-    let mut app = App::new(&context, window.viewport());
+    let mut app = App::new(&context, window.viewport(), &prefs);
 
     window.render_loop(move |mut frame_input| {
         app.camera.handle_events(&frame_input.events);

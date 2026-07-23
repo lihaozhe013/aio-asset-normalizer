@@ -5,9 +5,13 @@ use std::time::Instant;
 use crate::modules::{
     animation::AnimationPlayer,
     blender,
+    preferences::{
+        self, ConversionPreferences, FileTreePreferences, LogViewerPreferences, UserPreferences,
+        ViewPreferences,
+    },
     skeleton::Skeleton,
     ui::{
-        config_panel::NormalizationConfig,
+        config_panel::{NormalizationConfig, ScriptVersion, UpAxis},
         file_tree::FileTree,
         log_viewer::LogViewer,
         main_panel,
@@ -33,20 +37,39 @@ pub struct App {
     pub skeleton: Option<Skeleton>,
     pub animation_player: Option<AnimationPlayer>,
     last_frame_time: Instant,
+    pub(crate) needs_save: bool,
 }
 
 impl App {
-    pub fn new(context: &Context, viewport: Viewport) -> Self {
+    pub fn new(context: &Context, viewport: Viewport, prefs: &UserPreferences) -> Self {
         let mut canvas = ViewportCanvas::new(context);
+        canvas.show_grid = prefs.view.show_grid;
+        canvas.show_axes = prefs.view.show_axes;
+        canvas.show_origin = prefs.view.show_origin;
+        canvas.show_bones = prefs.view.show_bones;
         canvas.model = None;
+
+        let mut file_tree = FileTree::new();
+        file_tree.show_all_files = prefs.file_tree.show_all_files;
+        if let Some(ref dir) = prefs.file_tree.last_opened_directory {
+            let path = PathBuf::from(dir);
+            if path.exists() && path.is_dir() {
+                file_tree.open_folder(path);
+            }
+        }
+
+        let mut log = LogViewer::new();
+        log.auto_scroll = prefs.log_viewer.auto_scroll;
+
+        let config = prefs_to_config(&prefs.conversion);
 
         Self {
             camera: OrbitCamera::new(viewport),
             canvas,
             fonts_configured: false,
-            file_tree: FileTree::new(),
-            config: NormalizationConfig::default(),
-            log: LogViewer::new(),
+            file_tree,
+            config,
+            log,
             conversion_rx: None,
             converting: false,
             last_output: None,
@@ -56,6 +79,7 @@ impl App {
             skeleton: None,
             animation_player: None,
             last_frame_time: Instant::now(),
+            needs_save: false,
         }
     }
 
@@ -239,6 +263,48 @@ impl App {
         });
     }
 
+    pub fn collect_preferences(&self) -> UserPreferences {
+        let prefs = UserPreferences {
+            version: 1,
+            view: ViewPreferences {
+                show_grid: self.canvas.show_grid,
+                show_axes: self.canvas.show_axes,
+                show_origin: self.canvas.show_origin,
+                show_bones: self.canvas.show_bones,
+            },
+            file_tree: FileTreePreferences {
+                show_all_files: self.file_tree.show_all_files,
+                last_opened_directory: self
+                    .file_tree
+                    .root()
+                    .map(|p| p.to_string_lossy().to_string()),
+            },
+            log_viewer: LogViewerPreferences {
+                auto_scroll: self.log.auto_scroll,
+            },
+            conversion: ConversionPreferences {
+                target_scale: self.config.target_scale,
+                up_axis: match self.config.up_axis {
+                    UpAxis::YUp => "Y".to_owned(),
+                    UpAxis::ZUp => "Z".to_owned(),
+                },
+                script_version: match self.config.script_version {
+                    ScriptVersion::V1 => "V1".to_owned(),
+                    ScriptVersion::V2 => "V2".to_owned(),
+                },
+                remove_unused_materials: self.config.remove_unused_materials,
+                remove_cameras: self.config.remove_cameras,
+                remove_lights: self.config.remove_lights,
+                remove_loose_vertices: self.config.remove_loose_vertices,
+                correct_bone_axes: self.config.correct_bone_axes,
+                preserve_leaf_bones: self.config.preserve_leaf_bones,
+                bake_animations: self.config.bake_animations,
+            },
+        };
+
+        prefs
+    }
+
     pub(crate) fn dispatch_action(&mut self, action: &MenuAction) {
         match action {
             MenuAction::ImportFiles => {
@@ -249,39 +315,48 @@ impl App {
                     if let Some(parent) = path.parent().map(|p| p.to_path_buf()) {
                         self.file_tree.open_folder(parent);
                         self.file_tree.select_file(&path);
+                        self.needs_save = true;
                     }
                 }
             }
             MenuAction::ImportFolder => {
                 if let Some(folder) = rfd::FileDialog::new().pick_folder() {
                     self.file_tree.open_folder(folder);
+                    self.needs_save = true;
                 }
             }
             MenuAction::ClearFileList => {
                 self.file_tree.clear();
+                self.needs_save = true;
             }
             MenuAction::ResetConfig => {
                 self.config = NormalizationConfig::default();
+                self.needs_save = true;
             }
             MenuAction::ResetCamera => {
                 self.camera.reset();
             }
             MenuAction::ToggleGrid => {
                 self.canvas.show_grid = !self.canvas.show_grid;
+                self.needs_save = true;
             }
             MenuAction::ToggleAxes => {
                 self.canvas.show_axes = !self.canvas.show_axes;
+                self.needs_save = true;
             }
             MenuAction::ToggleOrigin => {
                 self.canvas.show_origin = !self.canvas.show_origin;
+                self.needs_save = true;
             }
             MenuAction::ToggleBones => {
                 self.canvas.show_bones = !self.canvas.show_bones;
+                self.needs_save = true;
             }
             MenuAction::About => {
                 self.show_about = true;
             }
             MenuAction::Quit => {
+                preferences::save(&self.collect_preferences());
                 self.quit_requested = true;
             }
         }
@@ -292,6 +367,36 @@ impl App {
         ui: &mut three_d::egui::Ui,
         window_width: u32,
     ) -> three_d::egui::Rect {
-        main_panel::render_ui(self, ui, window_width)
+        let rect = main_panel::render_ui(self, ui, window_width);
+
+        if self.needs_save && !self.quit_requested {
+            self.needs_save = false;
+            preferences::save(&self.collect_preferences());
+        }
+
+        rect
+    }
+}
+
+fn prefs_to_config(prefs: &ConversionPreferences) -> NormalizationConfig {
+    let up_axis = match prefs.up_axis.as_str() {
+        "Z" => UpAxis::ZUp,
+        _ => UpAxis::YUp,
+    };
+    let script_version = match prefs.script_version.as_str() {
+        "V2" => ScriptVersion::V2,
+        _ => ScriptVersion::V1,
+    };
+    NormalizationConfig {
+        target_scale: prefs.target_scale,
+        up_axis,
+        script_version,
+        remove_unused_materials: prefs.remove_unused_materials,
+        remove_cameras: prefs.remove_cameras,
+        remove_lights: prefs.remove_lights,
+        remove_loose_vertices: prefs.remove_loose_vertices,
+        correct_bone_axes: prefs.correct_bone_axes,
+        preserve_leaf_bones: prefs.preserve_leaf_bones,
+        bake_animations: prefs.bake_animations,
     }
 }

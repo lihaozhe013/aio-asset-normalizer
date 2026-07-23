@@ -2,7 +2,7 @@ use three_d::egui;
 
 pub struct LogViewer {
     entries: Vec<String>,
-    auto_scroll: bool,
+    pub auto_scroll: bool,
 }
 
 impl LogViewer {
@@ -21,12 +21,16 @@ impl LogViewer {
         self.entries.clear();
     }
 
-    pub fn render(&mut self, ui: &mut egui::Ui) {
+    pub fn render(&mut self, ui: &mut egui::Ui) -> bool {
+        let mut prefs_changed = false;
+
         ui.horizontal(|ui| {
             if ui.button("清空").clicked() {
                 self.clear();
             }
-            ui.checkbox(&mut self.auto_scroll, "自动滚动");
+            if ui.checkbox(&mut self.auto_scroll, "自动滚动").changed() {
+                prefs_changed = true;
+            }
         });
 
         let text = if self.entries.is_empty() {
@@ -42,5 +46,7 @@ impl LogViewer {
                 let label_text = egui::RichText::new(&text).monospace().weak();
                 ui.label(label_text);
             });
+
+        prefs_changed
     }
 }

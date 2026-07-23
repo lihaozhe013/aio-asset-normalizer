@@ -36,7 +36,9 @@ pub fn render_ui(
         .default_size(250.0)
         .min_size(160.0)
         .show_inside(ui, |ui| {
-            app.file_tree.render(ui);
+            if app.file_tree.render(ui) {
+                app.needs_save = true;
+            }
         });
 
     Panel::right("inspector")
@@ -47,14 +49,21 @@ pub fn render_ui(
             ScrollArea::vertical().show(ui, |ui| {
                 ui.heading("格式转换");
                 ui.separator();
-                app.config.render_inspector(ui);
+                if app.config.render_inspector(ui) {
+                    app.needs_save = true;
+                }
 
                 if app.skeleton.is_some() {
                     ui.separator();
                     CollapsingHeader::new("骨骼层级")
                         .default_open(true)
                         .show(ui, |ui| {
-                            ui.checkbox(&mut app.canvas.show_bones, "显示骨骼");
+                            if ui
+                                .checkbox(&mut app.canvas.show_bones, "显示骨骼")
+                                .changed()
+                            {
+                                app.needs_save = true;
+                            }
                             if let Some(ref mut skel) = app.skeleton {
                                 bone_tree::render_bone_tree(ui, skel);
                             }
@@ -94,7 +103,9 @@ pub fn render_ui(
         .default_size(150.0)
         .min_size(80.0)
         .show_inside(ui, |ui| {
-            app.log.render(ui);
+            if app.log.render(ui) {
+                app.needs_save = true;
+            }
         });
 
     content_rect

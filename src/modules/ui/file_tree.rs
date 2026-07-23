@@ -10,7 +10,7 @@ pub struct FileTree {
     root_entries: Option<Vec<FileTreeEntry>>,
     selected: HashSet<PathBuf>,
     open_dirs: HashSet<PathBuf>,
-    show_all_files: bool,
+    pub show_all_files: bool,
 }
 
 pub struct FileTreeEntry {
@@ -49,6 +49,10 @@ impl FileTree {
             .collect();
         files.sort();
         files
+    }
+
+    pub fn root(&self) -> Option<&PathBuf> {
+        self.root.as_ref()
     }
 
     pub fn clear(&mut self) {
@@ -265,10 +269,12 @@ impl FileTree {
         }
     }
 
-    pub fn render(&mut self, ui: &mut egui::Ui) {
+    pub fn render(&mut self, ui: &mut egui::Ui) -> bool {
+        let mut prefs_changed = false;
+
         if self.root.is_none() {
             self.render_open_prompt(ui);
-            return;
+            return prefs_changed;
         }
 
         let root_name = self
@@ -316,6 +322,7 @@ impl FileTree {
         let mut show_all = self.show_all_files;
         if ui.checkbox(&mut show_all, "显示所有文件").changed() {
             self.show_all_files = show_all;
+            prefs_changed = true;
             self.rescan();
         }
         if self.show_all_files {
@@ -372,6 +379,8 @@ impl FileTree {
                 entry.children = Some(children);
             }
         }
+
+        prefs_changed
     }
 
     fn render_open_prompt(&mut self, ui: &mut egui::Ui) {

@@ -1,0 +1,22 @@
+version: 1
+view:
+  show_grid: true
+  show_axes: true
+  show_origin: true
+  show_bones: true
+file_tree:
+  show_all_files: false
+  last_opened_directory: null
+log_viewer:
+  auto_scroll: true
+conversion:
+  target_scale: 1.0
+  up_axis: "Y"
+  script_version: "V1"
+  remove_unused_materials: true
+  remove_cameras: true
+  remove_lights: true
+  remove_loose_vertices: false
+  correct_bone_axes: true
+  preserve_leaf_bones: true
+  bake_animations: true

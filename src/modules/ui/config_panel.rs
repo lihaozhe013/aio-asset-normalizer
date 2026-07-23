@@ -61,28 +61,40 @@ impl Default for NormalizationConfig {
 }
 
 impl NormalizationConfig {
-    pub fn render_inspector(&mut self, ui: &mut egui::Ui) {
+    pub fn render_inspector(&mut self, ui: &mut egui::Ui) -> bool {
+        let mut changed = false;
+
         ui.horizontal(|ui| {
             ui.label("目标单位比例:");
-            ui.add(
-                egui::DragValue::new(&mut self.target_scale)
-                    .speed(0.1)
-                    .range(0.01..=100.0),
-            );
+            if ui
+                .add(
+                    egui::DragValue::new(&mut self.target_scale)
+                        .speed(0.1)
+                        .range(0.01..=100.0),
+                )
+                .changed()
+            {
+                changed = true;
+            }
         });
 
         ui.add_space(4.0);
 
-        egui::ComboBox::from_label("目标朝向")
+        if egui::ComboBox::from_label("目标朝向")
             .selected_text(self.up_axis.label())
             .show_ui(ui, |ui| {
                 ui.selectable_value(&mut self.up_axis, UpAxis::YUp, UpAxis::YUp.label());
                 ui.selectable_value(&mut self.up_axis, UpAxis::ZUp, UpAxis::ZUp.label());
-            });
+            })
+            .response
+            .changed()
+        {
+            changed = true;
+        }
 
         ui.add_space(4.0);
 
-        egui::ComboBox::from_label("脚本版本")
+        if egui::ComboBox::from_label("脚本版本")
             .selected_text(self.script_version.label())
             .show_ui(ui, |ui| {
                 ui.selectable_value(
@@ -95,22 +107,64 @@ impl NormalizationConfig {
                     ScriptVersion::V2,
                     ScriptVersion::V2.label(),
                 );
-            });
+            })
+            .response
+            .changed()
+        {
+            changed = true;
+        }
 
         ui.add_space(4.0);
 
         ui.label(egui::RichText::new("清理策略").strong());
-        ui.checkbox(&mut self.remove_unused_materials, "移除未使用材质");
-        ui.checkbox(&mut self.remove_cameras, "移除摄像机");
-        ui.checkbox(&mut self.remove_lights, "移除灯光");
-        ui.checkbox(&mut self.remove_loose_vertices, "移除孤立顶点");
+        if ui
+            .checkbox(&mut self.remove_unused_materials, "移除未使用材质")
+            .changed()
+        {
+            changed = true;
+        }
+        if ui
+            .checkbox(&mut self.remove_cameras, "移除摄像机")
+            .changed()
+        {
+            changed = true;
+        }
+        if ui
+            .checkbox(&mut self.remove_lights, "移除灯光")
+            .changed()
+        {
+            changed = true;
+        }
+        if ui
+            .checkbox(&mut self.remove_loose_vertices, "移除孤立顶点")
+            .changed()
+        {
+            changed = true;
+        }
 
         if self.script_version == ScriptVersion::V2 {
             ui.add_space(4.0);
             ui.label(egui::RichText::new("骨骼与动画 (V2)").strong());
-            ui.checkbox(&mut self.correct_bone_axes, "骨骼轴向校正");
-            ui.checkbox(&mut self.preserve_leaf_bones, "保留末端骨骼");
-            ui.checkbox(&mut self.bake_animations, "烘焙动画关键帧");
+            if ui
+                .checkbox(&mut self.correct_bone_axes, "骨骼轴向校正")
+                .changed()
+            {
+                changed = true;
+            }
+            if ui
+                .checkbox(&mut self.preserve_leaf_bones, "保留末端骨骼")
+                .changed()
+            {
+                changed = true;
+            }
+            if ui
+                .checkbox(&mut self.bake_animations, "烘焙动画关键帧")
+                .changed()
+            {
+                changed = true;
+            }
         }
+
+        changed
     }
 }
