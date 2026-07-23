@@ -9,6 +9,8 @@ pub struct FileTree {
     root: Option<PathBuf>,
     root_entries: Option<Vec<FileTreeEntry>>,
     selected: HashSet<PathBuf>,
+    open_dirs: HashSet<PathBuf>,
+    show_all_files: bool,
 }
 
 pub struct FileTreeEntry {
@@ -33,11 +35,18 @@ impl FileTree {
             root: None,
             root_entries: None,
             selected: HashSet::new(),
+            open_dirs: HashSet::new(),
+            show_all_files: false,
         }
     }
 
     pub fn selected_files(&self) -> Vec<PathBuf> {
-        let mut files: Vec<PathBuf> = self.selected.iter().cloned().collect();
+        let mut files: Vec<PathBuf> = self
+            .selected
+            .iter()
+            .filter(|p| Self::is_supported(p))
+            .cloned()
+            .collect();
         files.sort();
         files
     }
@@ -46,6 +55,7 @@ impl FileTree {
         self.root = None;
         self.root_entries = None;
         self.selected.clear();
+        self.open_dirs.clear();
     }
 
     pub fn select_file(&mut self, path: &Path) {
@@ -55,7 +65,14 @@ impl FileTree {
     pub fn open_folder(&mut self, path: PathBuf) {
         self.root = Some(path.clone());
         self.selected.clear();
-        self.root_entries = Some(Self::scan_dir(&path, 2));
+        self.open_dirs.clear();
+        self.root_entries = Some(Self::scan_dir(&path, 2, self.show_all_files));
+    }
+
+    fn rescan(&mut self) {
+        if let Some(ref root) = self.root.clone() {
+            self.root_entries = Some(Self::scan_dir(root, 2, self.show_all_files));
+        }
     }
 
     pub fn handle_dropped_files(&mut self, ctx: &egui::Context) {
@@ -83,7 +100,7 @@ impl FileTree {
         }
     }
 
-    fn scan_dir(path: &Path, max_depth: usize) -> Vec<FileTreeEntry> {
+    fn scan_dir(path: &Path, max_depth: usize, show_all_files: bool) -> Vec<FileTreeEntry> {
         let mut entries: Vec<FileTreeEntry> = Vec::new();
 
         let dir_iter = match std::fs::read_dir(path) {
@@ -95,7 +112,7 @@ impl FileTree {
             let entry_path = entry.path();
             let is_dir = entry_path.is_dir();
 
-            if !is_dir && !Self::is_supported(&entry_path) {
+            if !is_dir && !show_all_files && !Self::is_supported(&entry_path) {
                 continue;
             }
 
@@ -106,7 +123,7 @@ impl FileTree {
                 .into_owned();
 
             let children = if is_dir && max_depth > 1 {
-                let sub = Self::scan_dir(&entry_path, max_depth - 1);
+                let sub = Self::scan_dir(&entry_path, max_depth - 1, show_all_files);
                 if sub.is_empty() {
                     None
                 } else {
@@ -167,7 +184,7 @@ impl FileTree {
 
     fn collect_files(entries: &[FileTreeEntry], set: &mut HashSet<PathBuf>) {
         for entry in entries {
-            if !entry.is_dir {
+            if !entry.is_dir && Self::is_supported(&entry.path) {
                 set.insert(entry.path.clone());
             }
             if let Some(ref children) = entry.children {
@@ -176,11 +193,11 @@ impl FileTree {
         }
     }
 
-    fn collect_visible(&self, ctx: &egui::Context) -> Vec<FlatItem> {
+    fn collect_visible(&self) -> Vec<FlatItem> {
         let mut result = Vec::new();
         if let Some(ref entries) = self.root_entries {
             for entry in entries {
-                self.collect_visible_recursive(entry, 0, ctx, &mut result);
+                self.collect_visible_recursive(entry, 0, &mut result);
             }
         }
         result
@@ -190,14 +207,9 @@ impl FileTree {
         &self,
         entry: &FileTreeEntry,
         depth: usize,
-        ctx: &egui::Context,
         result: &mut Vec<FlatItem>,
     ) {
-        let id_source = format!("ft_dir:{}", entry.path.display());
-        let id = egui::Id::new(&id_source);
-        let is_open = egui::collapsing_header::CollapsingState::load(ctx, id)
-            .map(|s| s.is_open())
-            .unwrap_or(false);
+        let is_open = self.open_dirs.contains(&entry.path);
         let is_loaded = entry.children.is_some();
 
         result.push(FlatItem {
@@ -212,7 +224,7 @@ impl FileTree {
         if entry.is_dir && is_open && is_loaded {
             if let Some(ref children) = entry.children {
                 for child in children {
-                    self.collect_visible_recursive(child, depth + 1, ctx, result);
+                    self.collect_visible_recursive(child, depth + 1, result);
                 }
             }
         }
@@ -301,7 +313,16 @@ impl FileTree {
 
         ui.separator();
 
-        let visible = self.collect_visible(ui.ctx());
+        let mut show_all = self.show_all_files;
+        if ui.checkbox(&mut show_all, "显示所有文件").changed() {
+            self.show_all_files = show_all;
+            self.rescan();
+        }
+        if self.show_all_files {
+            ui.label(egui::RichText::new("灰色条目为非支持格式，不可选择").small().weak());
+        }
+
+        let visible = self.collect_visible();
         let mut load_requests: Vec<PathBuf> = Vec::new();
 
         egui::ScrollArea::vertical()
@@ -316,20 +337,29 @@ impl FileTree {
                         ui.horizontal(|ui| {
                             ui.add_space(item.depth as f32 * INDENT);
                             let cr = header.show_unindented(ui, |_ui| {});
-                            if cr.body_returned.is_some() && !item.is_loaded {
-                                load_requests.push(item.path.clone());
+                            if cr.body_returned.is_some() {
+                                self.open_dirs.insert(item.path.clone());
+                                if !item.is_loaded {
+                                    load_requests.push(item.path.clone());
+                                }
+                            } else {
+                                self.open_dirs.remove(&item.path);
                             }
                         });
                     } else {
                         ui.horizontal(|ui| {
                             ui.add_space(item.depth as f32 * INDENT + ARROW_OFFSET);
-                            let mut checked = self.selected.contains(&item.path);
-                            if ui.checkbox(&mut checked, &item.name).changed() {
-                                if checked {
-                                    self.selected.insert(item.path.clone());
-                                } else {
-                                    self.selected.remove(&item.path);
+                            if Self::is_supported(&item.path) {
+                                let mut checked = self.selected.contains(&item.path);
+                                if ui.checkbox(&mut checked, &item.name).changed() {
+                                    if checked {
+                                        self.selected.insert(item.path.clone());
+                                    } else {
+                                        self.selected.remove(&item.path);
+                                    }
                                 }
+                            } else {
+                                ui.label(egui::RichText::new(&item.name).weak());
                             }
                         });
                     }
@@ -338,7 +368,7 @@ impl FileTree {
 
         for path in &load_requests {
             if let Some(entry) = self.find_entry_mut(path) {
-                let children = Self::scan_dir(path, 1);
+                let children = Self::scan_dir(path, 1, show_all);
                 entry.children = Some(children);
             }
         }
