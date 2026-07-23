@@ -1,3 +1,4 @@
+use crate::modules::preferences::ConversionPreferences;
 use three_d::egui;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -166,5 +167,53 @@ impl NormalizationConfig {
         }
 
         changed
+    }
+}
+
+impl From<&ConversionPreferences> for NormalizationConfig {
+    fn from(prefs: &ConversionPreferences) -> Self {
+        let up_axis = match prefs.up_axis.as_str() {
+            "Z" => UpAxis::ZUp,
+            _ => UpAxis::YUp,
+        };
+        let script_version = match prefs.script_version.as_str() {
+            "V2" => ScriptVersion::V2,
+            _ => ScriptVersion::V1,
+        };
+        Self {
+            target_scale: prefs.target_scale,
+            up_axis,
+            script_version,
+            remove_unused_materials: prefs.remove_unused_materials,
+            remove_cameras: prefs.remove_cameras,
+            remove_lights: prefs.remove_lights,
+            remove_loose_vertices: prefs.remove_loose_vertices,
+            correct_bone_axes: prefs.correct_bone_axes,
+            preserve_leaf_bones: prefs.preserve_leaf_bones,
+            bake_animations: prefs.bake_animations,
+        }
+    }
+}
+
+impl From<&NormalizationConfig> for ConversionPreferences {
+    fn from(config: &NormalizationConfig) -> Self {
+        Self {
+            target_scale: config.target_scale,
+            up_axis: match config.up_axis {
+                UpAxis::YUp => "Y".to_owned(),
+                UpAxis::ZUp => "Z".to_owned(),
+            },
+            script_version: match config.script_version {
+                ScriptVersion::V1 => "V1".to_owned(),
+                ScriptVersion::V2 => "V2".to_owned(),
+            },
+            remove_unused_materials: config.remove_unused_materials,
+            remove_cameras: config.remove_cameras,
+            remove_lights: config.remove_lights,
+            remove_loose_vertices: config.remove_loose_vertices,
+            correct_bone_axes: config.correct_bone_axes,
+            preserve_leaf_bones: config.preserve_leaf_bones,
+            bake_animations: config.bake_animations,
+        }
     }
 }

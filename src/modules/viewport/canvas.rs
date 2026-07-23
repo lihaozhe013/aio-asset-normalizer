@@ -1,4 +1,5 @@
 use super::helpers;
+use crate::modules::preferences::ViewPreferences;
 use std::path::Path;
 use three_d::*;
 
@@ -80,6 +81,22 @@ impl ViewportCanvas {
 
     pub fn model_lights(&self) -> [&dyn Light; 2] {
         [&self.ambient_light, &self.directional_light]
+    }
+
+    pub fn apply_view_prefs(&mut self, prefs: &ViewPreferences) {
+        self.show_grid = prefs.show_grid;
+        self.show_axes = prefs.show_axes;
+        self.show_origin = prefs.show_origin;
+        self.show_bones = prefs.show_bones;
+    }
+
+    pub fn to_view_prefs(&self) -> ViewPreferences {
+        ViewPreferences {
+            show_grid: self.show_grid,
+            show_axes: self.show_axes,
+            show_origin: self.show_origin,
+            show_bones: self.show_bones,
+        }
     }
 }
 

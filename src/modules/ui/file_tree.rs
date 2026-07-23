@@ -1,3 +1,4 @@
+use crate::modules::preferences::FileTreePreferences;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use three_d::egui;
@@ -71,6 +72,23 @@ impl FileTree {
         self.selected.clear();
         self.open_dirs.clear();
         self.root_entries = Some(Self::scan_dir(&path, 2, self.show_all_files));
+    }
+
+    pub fn apply_prefs(&mut self, prefs: &FileTreePreferences) {
+        self.show_all_files = prefs.show_all_files;
+        if let Some(ref dir) = prefs.last_opened_directory {
+            let path = PathBuf::from(dir);
+            if path.exists() && path.is_dir() {
+                self.open_folder(path);
+            }
+        }
+    }
+
+    pub fn to_prefs(&self) -> FileTreePreferences {
+        FileTreePreferences {
+            show_all_files: self.show_all_files,
+            last_opened_directory: self.root().map(|p| p.to_string_lossy().to_string()),
+        }
     }
 
     fn rescan(&mut self) {

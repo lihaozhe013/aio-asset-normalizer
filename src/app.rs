@@ -5,13 +5,10 @@ use std::time::Instant;
 use crate::modules::{
     animation::AnimationPlayer,
     blender,
-    preferences::{
-        self, ConversionPreferences, FileTreePreferences, LogViewerPreferences, UserPreferences,
-        ViewPreferences,
-    },
+    preferences::{self, UserPreferences},
     skeleton::Skeleton,
     ui::{
-        config_panel::{NormalizationConfig, ScriptVersion, UpAxis},
+        config_panel::NormalizationConfig,
         file_tree::FileTree,
         log_viewer::LogViewer,
         main_panel,
@@ -43,25 +40,16 @@ pub struct App {
 impl App {
     pub fn new(context: &Context, viewport: Viewport, prefs: &UserPreferences) -> Self {
         let mut canvas = ViewportCanvas::new(context);
-        canvas.show_grid = prefs.view.show_grid;
-        canvas.show_axes = prefs.view.show_axes;
-        canvas.show_origin = prefs.view.show_origin;
-        canvas.show_bones = prefs.view.show_bones;
+        canvas.apply_view_prefs(&prefs.view);
         canvas.model = None;
 
         let mut file_tree = FileTree::new();
-        file_tree.show_all_files = prefs.file_tree.show_all_files;
-        if let Some(ref dir) = prefs.file_tree.last_opened_directory {
-            let path = PathBuf::from(dir);
-            if path.exists() && path.is_dir() {
-                file_tree.open_folder(path);
-            }
-        }
+        file_tree.apply_prefs(&prefs.file_tree);
 
         let mut log = LogViewer::new();
-        log.auto_scroll = prefs.log_viewer.auto_scroll;
+        log.apply_prefs(&prefs.log_viewer);
 
-        let config = prefs_to_config(&prefs.conversion);
+        let config = NormalizationConfig::from(&prefs.conversion);
 
         Self {
             camera: OrbitCamera::new(viewport),
@@ -264,45 +252,13 @@ impl App {
     }
 
     pub fn collect_preferences(&self) -> UserPreferences {
-        let prefs = UserPreferences {
+        UserPreferences {
             version: 1,
-            view: ViewPreferences {
-                show_grid: self.canvas.show_grid,
-                show_axes: self.canvas.show_axes,
-                show_origin: self.canvas.show_origin,
-                show_bones: self.canvas.show_bones,
-            },
-            file_tree: FileTreePreferences {
-                show_all_files: self.file_tree.show_all_files,
-                last_opened_directory: self
-                    .file_tree
-                    .root()
-                    .map(|p| p.to_string_lossy().to_string()),
-            },
-            log_viewer: LogViewerPreferences {
-                auto_scroll: self.log.auto_scroll,
-            },
-            conversion: ConversionPreferences {
-                target_scale: self.config.target_scale,
-                up_axis: match self.config.up_axis {
-                    UpAxis::YUp => "Y".to_owned(),
-                    UpAxis::ZUp => "Z".to_owned(),
-                },
-                script_version: match self.config.script_version {
-                    ScriptVersion::V1 => "V1".to_owned(),
-                    ScriptVersion::V2 => "V2".to_owned(),
-                },
-                remove_unused_materials: self.config.remove_unused_materials,
-                remove_cameras: self.config.remove_cameras,
-                remove_lights: self.config.remove_lights,
-                remove_loose_vertices: self.config.remove_loose_vertices,
-                correct_bone_axes: self.config.correct_bone_axes,
-                preserve_leaf_bones: self.config.preserve_leaf_bones,
-                bake_animations: self.config.bake_animations,
-            },
-        };
-
-        prefs
+            view: self.canvas.to_view_prefs(),
+            file_tree: self.file_tree.to_prefs(),
+            log_viewer: self.log.to_prefs(),
+            conversion: (&self.config).into(),
+        }
     }
 
     pub(crate) fn dispatch_action(&mut self, action: &MenuAction) {
@@ -375,28 +331,5 @@ impl App {
         }
 
         rect
-    }
-}
-
-fn prefs_to_config(prefs: &ConversionPreferences) -> NormalizationConfig {
-    let up_axis = match prefs.up_axis.as_str() {
-        "Z" => UpAxis::ZUp,
-        _ => UpAxis::YUp,
-    };
-    let script_version = match prefs.script_version.as_str() {
-        "V2" => ScriptVersion::V2,
-        _ => ScriptVersion::V1,
-    };
-    NormalizationConfig {
-        target_scale: prefs.target_scale,
-        up_axis,
-        script_version,
-        remove_unused_materials: prefs.remove_unused_materials,
-        remove_cameras: prefs.remove_cameras,
-        remove_lights: prefs.remove_lights,
-        remove_loose_vertices: prefs.remove_loose_vertices,
-        correct_bone_axes: prefs.correct_bone_axes,
-        preserve_leaf_bones: prefs.preserve_leaf_bones,
-        bake_animations: prefs.bake_animations,
     }
 }

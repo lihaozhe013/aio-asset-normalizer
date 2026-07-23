@@ -1,3 +1,4 @@
+use crate::modules::preferences::LogViewerPreferences;
 use three_d::egui;
 
 pub struct LogViewer {
@@ -19,6 +20,16 @@ impl LogViewer {
 
     pub fn clear(&mut self) {
         self.entries.clear();
+    }
+
+    pub fn apply_prefs(&mut self, prefs: &LogViewerPreferences) {
+        self.auto_scroll = prefs.auto_scroll;
+    }
+
+    pub fn to_prefs(&self) -> LogViewerPreferences {
+        LogViewerPreferences {
+            auto_scroll: self.auto_scroll,
+        }
     }
 
     pub fn render(&mut self, ui: &mut egui::Ui) -> bool {
