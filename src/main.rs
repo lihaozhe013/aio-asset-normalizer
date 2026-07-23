@@ -31,7 +31,8 @@ fn main() {
             frame_input.viewport,
             frame_input.device_pixel_ratio,
             |gui_ctx| {
-                content_rect = Some(app.render_ui(gui_ctx, frame_input.window_width));
+                content_rect =
+                    Some(app.render_ui(gui_ctx, frame_input.window_width));
             },
         );
 
@@ -55,7 +56,8 @@ fn main() {
         app.camera.set_viewport(viewport);
 
         let screen = frame_input.screen();
-        let mut clear_rt = screen.clear(ClearState::color_and_depth(0.12, 0.13, 0.17, 1.0, 1.0));
+        let mut clear_rt = screen
+            .clear(ClearState::color_and_depth(0.12, 0.13, 0.17, 1.0, 1.0));
 
         if app.canvas.show_axes {
             clear_rt = clear_rt.render_partially(
@@ -84,18 +86,30 @@ fn main() {
 
         if let Some(ref model) = app.canvas.model {
             let lights = app.canvas.model_lights();
-            clear_rt =
-                clear_rt.render_partially(viewport.into(), &app.camera.camera, model, &lights);
+            clear_rt = clear_rt.render_partially(
+                viewport.into(),
+                &app.camera.camera,
+                model,
+                &lights,
+            );
         }
 
         if app.canvas.show_bones {
             if let Some(ref sticks) = app.canvas.bone_sticks {
-                clear_rt =
-                    clear_rt.render_partially(viewport.into(), &app.camera.camera, sticks, &[]);
+                clear_rt = clear_rt.render_partially(
+                    viewport.into(),
+                    &app.camera.camera,
+                    sticks,
+                    &[],
+                );
             }
             if let Some(ref joints) = app.canvas.bone_joints {
-                clear_rt =
-                    clear_rt.render_partially(viewport.into(), &app.camera.camera, joints, &[]);
+                clear_rt = clear_rt.render_partially(
+                    viewport.into(),
+                    &app.camera.camera,
+                    joints,
+                    &[],
+                );
             }
         }
 

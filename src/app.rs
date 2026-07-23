@@ -8,11 +8,8 @@ use crate::modules::{
     preferences::{self, UserPreferences},
     skeleton::Skeleton,
     ui::{
-        config_panel::NormalizationConfig,
-        file_tree::FileTree,
-        log_viewer::LogViewer,
-        main_panel,
-        menu_bar::MenuAction,
+        config_panel::NormalizationConfig, file_tree::FileTree,
+        log_viewer::LogViewer, main_panel, menu_bar::MenuAction,
     },
     viewport::{camera::OrbitCamera, canvas::ViewportCanvas},
 };
@@ -38,7 +35,11 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(context: &Context, viewport: Viewport, prefs: &UserPreferences) -> Self {
+    pub fn new(
+        context: &Context,
+        viewport: Viewport,
+        prefs: &UserPreferences,
+    ) -> Self {
         let mut canvas = ViewportCanvas::new(context);
         canvas.apply_view_prefs(&prefs.view);
         canvas.model = None;
@@ -113,19 +114,26 @@ impl App {
                                 self.log.append("[Info] No skeleton found (static mesh)");
                                 None
                             });
-                            self.animation_player = self.skeleton.as_ref().and_then(|skel| {
-                                AnimationPlayer::from_glb(path, skel).ok().or_else(|| {
-                                    self.log.append("[Info] No animations found");
-                                    None
-                                })
-                            });
+                            self.animation_player =
+                                self.skeleton.as_ref().and_then(|skel| {
+                                    AnimationPlayer::from_glb(path, skel)
+                                        .ok()
+                                        .or_else(|| {
+                                            self.log.append(
+                                                "[Info] No animations found",
+                                            );
+                                            None
+                                        })
+                                });
                             self.update_bone_visualization(context);
                         }
                         Err(e) => self.log.append(&format!("[Error] {}", e)),
                     }
                 } else {
-                    self.log
-                        .append(&format!("[Error] Output not found: {}", path.display()));
+                    self.log.append(&format!(
+                        "[Error] Output not found: {}",
+                        path.display()
+                    ));
                 }
             }
         }
@@ -151,7 +159,9 @@ impl App {
             .animation_player
             .as_ref()
             .filter(|a| a.playing)
-            .and_then(|a| self.skeleton.as_ref().map(|s| a.animated_bone_positions(s)))
+            .and_then(|a| {
+                self.skeleton.as_ref().map(|s| a.animated_bone_positions(s))
+            })
             .or_else(|| {
                 self.skeleton
                     .as_ref()
@@ -159,7 +169,8 @@ impl App {
             })
             .unwrap_or_default();
 
-        let highlighted = self.skeleton.as_ref().and_then(|s| s.highlighted_bone);
+        let highlighted =
+            self.skeleton.as_ref().and_then(|s| s.highlighted_bone);
         self.canvas
             .update_bones(context, &segments, &joints, highlighted);
     }
@@ -197,10 +208,12 @@ impl App {
                 serde_json::Value::Bool(self.config.correct_bone_axes);
             config_obj["preserve_leaf_bones"] =
                 serde_json::Value::Bool(self.config.preserve_leaf_bones);
-            config_obj["bake_animations"] = serde_json::Value::Bool(self.config.bake_animations);
+            config_obj["bake_animations"] =
+                serde_json::Value::Bool(self.config.bake_animations);
         }
 
-        let config_json = serde_json::to_string(&config_obj).unwrap_or_default();
+        let config_json =
+            serde_json::to_string(&config_obj).unwrap_or_default();
 
         let (tx, rx) = mpsc::channel();
         self.conversion_rx = Some(rx);
@@ -234,13 +247,21 @@ impl App {
                     script_version,
                 };
 
-                let _ = tx.send(format!("[Normalizer] Processing: {}", task.input.display()));
+                let _ = tx.send(format!(
+                    "[Normalizer] Processing: {}",
+                    task.input.display()
+                ));
                 match blender::bridge::run_task(&task, &tx) {
                     Ok(true) => {
-                        let _ = tx.send(format!("[Normalizer] Success: {}", task.output.display()));
+                        let _ = tx.send(format!(
+                            "[Normalizer] Success: {}",
+                            task.output.display()
+                        ));
                     }
                     Ok(false) => {
-                        let _ = tx.send(format!("[Normalizer] Failed with non-zero exit code"));
+                        let _ = tx.send(format!(
+                            "[Normalizer] Failed with non-zero exit code"
+                        ));
                     }
                     Err(e) => {
                         let _ = tx.send(format!("[Normalizer] Error: {}", e));
@@ -268,7 +289,8 @@ impl App {
                     .add_filter("3D 模型", &["fbx", "blend", "obj", "glb"])
                     .pick_file()
                 {
-                    if let Some(parent) = path.parent().map(|p| p.to_path_buf()) {
+                    if let Some(parent) = path.parent().map(|p| p.to_path_buf())
+                    {
                         self.file_tree.open_folder(parent);
                         self.file_tree.select_file(&path);
                         self.needs_save = true;

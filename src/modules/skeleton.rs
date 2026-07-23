@@ -37,8 +37,8 @@ pub struct Skeleton {
 
 impl Skeleton {
     pub fn from_glb(path: &Path) -> Result<Self, String> {
-        let (document, buffers, _images) =
-            gltf::import(path).map_err(|e| format!("GLTF parse error: {}", e))?;
+        let (document, buffers, _images) = gltf::import(path)
+            .map_err(|e| format!("GLTF parse error: {}", e))?;
 
         let skin = document
             .skins()
@@ -80,13 +80,15 @@ impl Skeleton {
 
             let ibm = ibms.get(joint_idx).copied().unwrap_or([[1.0; 4]; 4]);
             let ibm_mat = Mat4::new(
-                ibm[0][0], ibm[1][0], ibm[2][0], ibm[3][0], ibm[0][1], ibm[1][1], ibm[2][1],
-                ibm[3][1], ibm[0][2], ibm[1][2], ibm[2][2], ibm[3][2], ibm[0][3], ibm[1][3],
-                ibm[2][3], ibm[3][3],
+                ibm[0][0], ibm[1][0], ibm[2][0], ibm[3][0], ibm[0][1],
+                ibm[1][1], ibm[2][1], ibm[3][1], ibm[0][2], ibm[1][2],
+                ibm[2][2], ibm[3][2], ibm[0][3], ibm[1][3], ibm[2][3],
+                ibm[3][3],
             );
 
             let parent_node_idx = node_parent.get(&node_idx).copied();
-            let parent_index = parent_node_idx.and_then(|pni| bone_nodes.get(&pni).copied());
+            let parent_index =
+                parent_node_idx.and_then(|pni| bone_nodes.get(&pni).copied());
 
             bones.push(Bone {
                 name: joint.name().unwrap_or("unnamed").to_string(),
@@ -146,7 +148,11 @@ impl Skeleton {
     }
 }
 
-fn propagate_global_transform(bones: &mut [Bone], idx: usize, parent_global: Mat4) {
+fn propagate_global_transform(
+    bones: &mut [Bone],
+    idx: usize,
+    parent_global: Mat4,
+) {
     let local = bones[idx].local_rest_transform;
     let new_global = parent_global * local;
     bones[idx].global_rest_transform = new_global;

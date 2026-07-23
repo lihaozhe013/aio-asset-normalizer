@@ -54,16 +54,15 @@ pub fn load() -> UserPreferences {
 
     let user_path = user_config_path();
     let merged = if user_path.exists() {
-        let user_str =
-            std::fs::read_to_string(&user_path).unwrap_or_default();
-        let user_value: serde_yaml::Value = serde_yaml::from_str(&user_str)
-            .unwrap_or(serde_yaml::Value::Null);
+        let user_str = std::fs::read_to_string(&user_path).unwrap_or_default();
+        let user_value: serde_yaml::Value =
+            serde_yaml::from_str(&user_str).unwrap_or(serde_yaml::Value::Null);
 
-        let merged = merge_yaml_values(template_value.clone(), user_value.clone());
+        let merged =
+            merge_yaml_values(template_value.clone(), user_value.clone());
 
         if merged != user_value {
-            let merged_str =
-                serde_yaml::to_string(&merged).unwrap_or_default();
+            let merged_str = serde_yaml::to_string(&merged).unwrap_or_default();
             if let Some(parent) = user_path.parent() {
                 std::fs::create_dir_all(parent).ok();
             }

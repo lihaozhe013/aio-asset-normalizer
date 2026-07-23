@@ -55,11 +55,14 @@ pub fn render_ui(
 
                 if app.skeleton.is_some() {
                     ui.separator();
-                    CollapsingHeader::new("骨骼层级")
-                        .default_open(true)
-                        .show(ui, |ui| {
+                    CollapsingHeader::new("骨骼层级").default_open(true).show(
+                        ui,
+                        |ui| {
                             if ui
-                                .checkbox(&mut app.canvas.show_bones, "显示骨骼")
+                                .checkbox(
+                                    &mut app.canvas.show_bones,
+                                    "显示骨骼",
+                                )
                                 .changed()
                             {
                                 app.needs_save = true;
@@ -67,16 +70,18 @@ pub fn render_ui(
                             if let Some(ref mut skel) = app.skeleton {
                                 bone_tree::render_bone_tree(ui, skel);
                             }
-                        });
+                        },
+                    );
                 }
 
                 if app.animation_player.is_some() {
                     ui.separator();
-                    CollapsingHeader::new("动画播放")
-                        .default_open(true)
-                        .show(ui, |ui| {
+                    CollapsingHeader::new("动画播放").default_open(true).show(
+                        ui,
+                        |ui| {
                             render_animation_controls(app, ui);
-                        });
+                        },
+                    );
                 }
 
                 ui.separator();
@@ -86,7 +91,8 @@ pub fn render_ui(
                 } else {
                     "开始转换"
                 };
-                let enabled = !app.file_tree.selected_files().is_empty() && !app.converting;
+                let enabled = !app.file_tree.selected_files().is_empty()
+                    && !app.converting;
                 ui.add_enabled_ui(enabled, |ui| {
                     let btn = ui.button(RichText::new(btn_text).strong());
                     if btn.clicked() {
@@ -200,7 +206,9 @@ fn render_about_dialog(app: &mut App, ctx: &three_d::egui::Context) {
         });
 }
 
-fn collect_shortcut_actions(ctx: &three_d::egui::Context) -> Vec<menu_bar::MenuAction> {
+fn collect_shortcut_actions(
+    ctx: &three_d::egui::Context,
+) -> Vec<menu_bar::MenuAction> {
     use menu_bar::MenuAction;
     let mut actions = Vec::new();
     ctx.input(|i| {

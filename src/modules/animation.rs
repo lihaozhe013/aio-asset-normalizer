@@ -36,8 +36,8 @@ pub struct AnimationPlayer {
 
 impl AnimationPlayer {
     pub fn from_glb(path: &Path, skeleton: &Skeleton) -> Result<Self, String> {
-        let (document, buffers, _images) =
-            gltf::import(path).map_err(|e| format!("GLTF parse error: {}", e))?;
+        let (document, buffers, _images) = gltf::import(path)
+            .map_err(|e| format!("GLTF parse error: {}", e))?;
 
         let get_buf = |buffer: gltf::Buffer| Some(&buffers[buffer.index()]);
 
@@ -63,10 +63,11 @@ impl AnimationPlayer {
 
                 let buf_fn = |buf: gltf::Buffer| get_buf(buf).map(|d| &**d);
 
-                let times: Vec<f32> = match gltf::accessor::Iter::new(input_accessor, buf_fn) {
-                    Some(iter) => iter.collect(),
-                    None => continue,
-                };
+                let times: Vec<f32> =
+                    match gltf::accessor::Iter::new(input_accessor, buf_fn) {
+                        Some(iter) => iter.collect(),
+                        None => continue,
+                    };
 
                 if let Some(&t) = times.last() {
                     max_time = max_time.max(t);
@@ -83,9 +84,13 @@ impl AnimationPlayer {
                 let has_data = match property {
                     gltf::animation::Property::Translation => {
                         if let Some(iter) =
-                            gltf::accessor::Iter::<[f32; 3]>::new(output_accessor, buf_fn)
+                            gltf::accessor::Iter::<[f32; 3]>::new(
+                                output_accessor,
+                                buf_fn,
+                            )
                         {
-                            let values: Vec<Vec3> = iter.map(|v| vec3(v[0], v[1], v[2])).collect();
+                            let values: Vec<Vec3> =
+                                iter.map(|v| vec3(v[0], v[1], v[2])).collect();
                             ch.translation_keys = times
                                 .into_iter()
                                 .zip(values)
@@ -98,10 +103,14 @@ impl AnimationPlayer {
                     }
                     gltf::animation::Property::Rotation => {
                         if let Some(iter) =
-                            gltf::accessor::Iter::<[f32; 4]>::new(output_accessor, buf_fn)
+                            gltf::accessor::Iter::<[f32; 4]>::new(
+                                output_accessor,
+                                buf_fn,
+                            )
                         {
-                            let values: Vec<Quat> =
-                                iter.map(|v| Quat::new(v[3], v[0], v[1], v[2])).collect();
+                            let values: Vec<Quat> = iter
+                                .map(|v| Quat::new(v[3], v[0], v[1], v[2]))
+                                .collect();
                             ch.rotation_keys = times
                                 .into_iter()
                                 .zip(values)
@@ -114,9 +123,13 @@ impl AnimationPlayer {
                     }
                     gltf::animation::Property::Scale => {
                         if let Some(iter) =
-                            gltf::accessor::Iter::<[f32; 3]>::new(output_accessor, buf_fn)
+                            gltf::accessor::Iter::<[f32; 3]>::new(
+                                output_accessor,
+                                buf_fn,
+                            )
                         {
-                            let values: Vec<Vec3> = iter.map(|v| vec3(v[0], v[1], v[2])).collect();
+                            let values: Vec<Vec3> =
+                                iter.map(|v| vec3(v[0], v[1], v[2])).collect();
                             ch.scale_keys = times
                                 .into_iter()
                                 .zip(values)
@@ -237,8 +250,12 @@ impl AnimationPlayer {
         }
     }
 
-    pub fn animated_bone_positions(&self, skeleton: &Skeleton) -> (Vec<(Vec3, Vec3)>, Vec<Vec3>) {
-        let mut global_transforms: Vec<Mat4> = vec![Mat4::identity(); skeleton.bones.len()];
+    pub fn animated_bone_positions(
+        &self,
+        skeleton: &Skeleton,
+    ) -> (Vec<(Vec3, Vec3)>, Vec<Vec3>) {
+        let mut global_transforms: Vec<Mat4> =
+            vec![Mat4::identity(); skeleton.bones.len()];
 
         for bone in &skeleton.bones {
             let local = self
@@ -325,7 +342,9 @@ fn interpolate_vec3(t: f32, keys: &[Keyframe<Vec3>]) -> Option<Vec3> {
             } else {
                 0.0
             };
-            return Some(keys[i].value + (keys[i + 1].value - keys[i].value) * factor);
+            return Some(
+                keys[i].value + (keys[i + 1].value - keys[i].value) * factor,
+            );
         }
     }
     Some(keys[0].value)

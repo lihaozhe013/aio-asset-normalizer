@@ -84,8 +84,16 @@ impl NormalizationConfig {
         if egui::ComboBox::from_label("目标朝向")
             .selected_text(self.up_axis.label())
             .show_ui(ui, |ui| {
-                ui.selectable_value(&mut self.up_axis, UpAxis::YUp, UpAxis::YUp.label());
-                ui.selectable_value(&mut self.up_axis, UpAxis::ZUp, UpAxis::ZUp.label());
+                ui.selectable_value(
+                    &mut self.up_axis,
+                    UpAxis::YUp,
+                    UpAxis::YUp.label(),
+                );
+                ui.selectable_value(
+                    &mut self.up_axis,
+                    UpAxis::ZUp,
+                    UpAxis::ZUp.label(),
+                );
             })
             .response
             .changed()
@@ -130,10 +138,7 @@ impl NormalizationConfig {
         {
             changed = true;
         }
-        if ui
-            .checkbox(&mut self.remove_lights, "移除灯光")
-            .changed()
-        {
+        if ui.checkbox(&mut self.remove_lights, "移除灯光").changed() {
             changed = true;
         }
         if ui

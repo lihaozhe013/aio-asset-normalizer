@@ -58,14 +58,20 @@ pub fn render(
                 ui.menu_button("View", |ui| {
                     let check = |b: bool| if b { "[x]" } else { "[ ]" };
                     if ui
-                        .button(format!("{} Show Grid         Ctrl+G", check(show_grid)))
+                        .button(format!(
+                            "{} Show Grid         Ctrl+G",
+                            check(show_grid)
+                        ))
                         .clicked()
                     {
                         actions.push(MenuAction::ToggleGrid);
                         ui.close();
                     }
                     if ui
-                        .button(format!("{} Show Axes         Ctrl+A", check(show_axes)))
+                        .button(format!(
+                            "{} Show Axes         Ctrl+A",
+                            check(show_axes)
+                        ))
                         .clicked()
                     {
                         actions.push(MenuAction::ToggleAxes);
@@ -79,7 +85,10 @@ pub fn render(
                         ui.close();
                     }
                     if ui
-                        .button(format!("{} Show Bones        Ctrl+B", check(show_bones)))
+                        .button(format!(
+                            "{} Show Bones        Ctrl+B",
+                            check(show_bones)
+                        ))
                         .clicked()
                     {
                         actions.push(MenuAction::ToggleBones);

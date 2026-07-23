@@ -87,13 +87,16 @@ impl FileTree {
     pub fn to_prefs(&self) -> FileTreePreferences {
         FileTreePreferences {
             show_all_files: self.show_all_files,
-            last_opened_directory: self.root().map(|p| p.to_string_lossy().to_string()),
+            last_opened_directory: self
+                .root()
+                .map(|p| p.to_string_lossy().to_string()),
         }
     }
 
     fn rescan(&mut self) {
         if let Some(ref root) = self.root.clone() {
-            self.root_entries = Some(Self::scan_dir(root, 2, self.show_all_files));
+            self.root_entries =
+                Some(Self::scan_dir(root, 2, self.show_all_files));
         }
     }
 
@@ -122,7 +125,11 @@ impl FileTree {
         }
     }
 
-    fn scan_dir(path: &Path, max_depth: usize, show_all_files: bool) -> Vec<FileTreeEntry> {
+    fn scan_dir(
+        path: &Path,
+        max_depth: usize,
+        show_all_files: bool,
+    ) -> Vec<FileTreeEntry> {
         let mut entries: Vec<FileTreeEntry> = Vec::new();
 
         let dir_iter = match std::fs::read_dir(path) {
@@ -145,7 +152,8 @@ impl FileTree {
                 .into_owned();
 
             let children = if is_dir && max_depth > 1 {
-                let sub = Self::scan_dir(&entry_path, max_depth - 1, show_all_files);
+                let sub =
+                    Self::scan_dir(&entry_path, max_depth - 1, show_all_files);
                 if sub.is_empty() {
                     None
                 } else {
@@ -177,7 +185,12 @@ impl FileTree {
     fn is_supported(path: &Path) -> bool {
         path.extension()
             .and_then(|e| e.to_str())
-            .map(|e| matches!(e.to_lowercase().as_str(), "fbx" | "blend" | "obj" | "glb"))
+            .map(|e| {
+                matches!(
+                    e.to_lowercase().as_str(),
+                    "fbx" | "blend" | "obj" | "glb"
+                )
+            })
             .unwrap_or(false)
     }
 
@@ -192,7 +205,8 @@ impl FileTree {
     }
 
     pub fn invert_selection(&mut self) {
-        let all: HashSet<PathBuf> = if let Some(ref entries) = self.root_entries {
+        let all: HashSet<PathBuf> = if let Some(ref entries) = self.root_entries
+        {
             let mut set = HashSet::new();
             Self::collect_files(entries, &mut set);
             set
@@ -200,7 +214,8 @@ impl FileTree {
             HashSet::new()
         };
 
-        let inverted: HashSet<PathBuf> = all.difference(&self.selected).cloned().collect();
+        let inverted: HashSet<PathBuf> =
+            all.difference(&self.selected).cloned().collect();
         self.selected = inverted;
     }
 
@@ -268,7 +283,9 @@ impl FileTree {
             }
             if entry.is_dir {
                 if let Some(ref mut children) = entry.children {
-                    if let found @ Some(_) = Self::find_entry_mut_recursive(children, target) {
+                    if let found @ Some(_) =
+                        Self::find_entry_mut_recursive(children, target)
+                    {
                         return found;
                     }
                 }
@@ -344,7 +361,11 @@ impl FileTree {
             self.rescan();
         }
         if self.show_all_files {
-            ui.label(egui::RichText::new("灰色条目为非支持格式，不可选择").small().weak());
+            ui.label(
+                egui::RichText::new("灰色条目为非支持格式，不可选择")
+                    .small()
+                    .weak(),
+            );
         }
 
         let visible = self.collect_visible();
@@ -373,10 +394,16 @@ impl FileTree {
                         });
                     } else {
                         ui.horizontal(|ui| {
-                            ui.add_space(item.depth as f32 * INDENT + ARROW_OFFSET);
+                            ui.add_space(
+                                item.depth as f32 * INDENT + ARROW_OFFSET,
+                            );
                             if Self::is_supported(&item.path) {
-                                let mut checked = self.selected.contains(&item.path);
-                                if ui.checkbox(&mut checked, &item.name).changed() {
+                                let mut checked =
+                                    self.selected.contains(&item.path);
+                                if ui
+                                    .checkbox(&mut checked, &item.name)
+                                    .changed()
+                                {
                                     if checked {
                                         self.selected.insert(item.path.clone());
                                     } else {
@@ -384,7 +411,9 @@ impl FileTree {
                                     }
                                 }
                             } else {
-                                ui.label(egui::RichText::new(&item.name).weak());
+                                ui.label(
+                                    egui::RichText::new(&item.name).weak(),
+                                );
                             }
                         });
                     }

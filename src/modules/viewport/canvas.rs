@@ -45,16 +45,21 @@ impl ViewportCanvas {
         }
     }
 
-    pub fn load_glb(&mut self, context: &Context, path: &Path) -> Result<(), String> {
-        let mut raw =
-            three_d_asset::io::load(&[path]).map_err(|e| format!("Asset load error: {}", e))?;
+    pub fn load_glb(
+        &mut self,
+        context: &Context,
+        path: &Path,
+    ) -> Result<(), String> {
+        let mut raw = three_d_asset::io::load(&[path])
+            .map_err(|e| format!("Asset load error: {}", e))?;
 
         let cpu_model: CpuModel = raw
             .deserialize("Scene")
             .or_else(|_| raw.deserialize("scene"))
             .map_err(|e| format!("No model found in GLB: {}", e))?;
 
-        let model = Model::new(context, &cpu_model).map_err(|e| e.to_string())?;
+        let model =
+            Model::new(context, &cpu_model).map_err(|e| e.to_string())?;
 
         self.model = Some(model);
         self.bone_sticks = None;
@@ -75,7 +80,8 @@ impl ViewportCanvas {
             return;
         }
 
-        self.bone_sticks = Some(build_bone_sticks(context, bone_segments, highlighted));
+        self.bone_sticks =
+            Some(build_bone_sticks(context, bone_segments, highlighted));
         self.bone_joints = Some(build_joint_spheres(context, joint_positions));
     }
 
@@ -124,7 +130,10 @@ fn build_bone_sticks(
     Gm::new(Mesh::new(context, &cpu_mesh), ColorMaterial::default())
 }
 
-fn build_joint_spheres(context: &Context, positions: &[Vec3]) -> Gm<Mesh, ColorMaterial> {
+fn build_joint_spheres(
+    context: &Context,
+    positions: &[Vec3],
+) -> Gm<Mesh, ColorMaterial> {
     let joint_radius = 0.03;
     let mut sphere_template = CpuMesh::sphere(6);
     sphere_template
@@ -161,14 +170,16 @@ fn build_joint_spheres(context: &Context, positions: &[Vec3]) -> Gm<Mesh, ColorM
             }
             Positions::F64(verts) => {
                 for v in verts {
-                    all_positions.push(vec3(v.x as f32, v.y as f32, v.z as f32) + pos);
+                    all_positions
+                        .push(vec3(v.x as f32, v.y as f32, v.z as f32) + pos);
                     all_colors.push(color);
                 }
             }
         }
     }
 
-    let mut all_indices = Vec::with_capacity(sphere_indices.len() * positions.len());
+    let mut all_indices =
+        Vec::with_capacity(sphere_indices.len() * positions.len());
     for i in 0..positions.len() {
         let offset = (i * sphere_vertex_count) as u32;
         for idx in &sphere_indices {

@@ -73,12 +73,14 @@ impl OrbitCamera {
                         let sensitivity = 0.005;
                         self.theta -= delta.0 as f32 * sensitivity;
                         self.phi -= delta.1 as f32 * sensitivity;
-                        self.phi = self.phi.clamp(0.05, std::f32::consts::PI - 0.05);
+                        self.phi =
+                            self.phi.clamp(0.05, std::f32::consts::PI - 0.05);
                         self.update_camera_view();
                     }
                     if self.panning {
                         let sensitivity = self.radius * 0.001;
-                        let forward = (self.target - self.camera_position()).normalize();
+                        let forward =
+                            (self.target - self.camera_position()).normalize();
                         let right = forward.cross(vec3(0.0, 1.0, 0.0));
                         let up = right.cross(forward);
                         self.target -= right * (delta.0 as f32 * sensitivity);
@@ -88,7 +90,8 @@ impl OrbitCamera {
                 }
                 Event::MouseWheel { delta, .. } => {
                     self.radius -= delta.1 as f32 * 0.5;
-                    self.radius = self.radius.clamp(self.min_radius, self.max_radius);
+                    self.radius =
+                        self.radius.clamp(self.min_radius, self.max_radius);
                     self.update_camera_view();
                 }
                 _ => {}
