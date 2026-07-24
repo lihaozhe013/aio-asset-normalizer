@@ -40,8 +40,15 @@ impl LogViewer {
                 self.clear();
             }
             if ui.button("复制").clicked() {
-                let text = self.entries.join("\n");
-                ui.ctx().copy_text(text);
+                let text = if self.entries.is_empty() {
+                    "就绪，等待任务...".to_owned()
+                } else {
+                    self.entries.join("\n")
+                };
+                ui.ctx().copy_text(text.clone());
+                if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                    clipboard.set_text(&text).ok();
+                }
             }
             if ui.checkbox(&mut self.auto_scroll, "自动滚动").changed() {
                 prefs_changed = true;
@@ -53,13 +60,17 @@ impl LogViewer {
         } else {
             self.entries.join("\n")
         };
+        let mut text_ref: &str = &text;
 
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .stick_to_bottom(self.auto_scroll)
             .show(ui, |ui| {
-                let label_text = egui::RichText::new(&text).monospace().weak();
-                ui.label(label_text);
+                ui.add(
+                    egui::TextEdit::multiline(&mut text_ref)
+                        .desired_width(f32::INFINITY)
+                        .font(egui::TextStyle::Monospace),
+                );
             });
 
         prefs_changed
