@@ -39,6 +39,10 @@ impl LogViewer {
             if ui.button("清空").clicked() {
                 self.clear();
             }
+            if ui.button("复制").clicked() {
+                let text = self.entries.join("\n");
+                ui.ctx().copy_text(text);
+            }
             if ui.checkbox(&mut self.auto_scroll, "自动滚动").changed() {
                 prefs_changed = true;
             }
