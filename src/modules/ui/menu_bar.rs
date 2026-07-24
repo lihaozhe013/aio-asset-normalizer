@@ -10,6 +10,7 @@ pub enum MenuAction {
     ToggleAxes,
     ToggleOrigin,
     ToggleBones,
+    OpenPreferences,
     About,
     Quit,
 }
@@ -49,6 +50,11 @@ pub fn render(
                 });
 
                 ui.menu_button("Edit", |ui| {
+                    if ui.button("Preferences...").clicked() {
+                        actions.push(MenuAction::OpenPreferences);
+                        ui.close();
+                    }
+                    ui.separator();
                     if ui.button("Reset All to Defaults").clicked() {
                         actions.push(MenuAction::ResetConfig);
                         ui.close();

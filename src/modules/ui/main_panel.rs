@@ -30,6 +30,14 @@ pub fn render_ui(
     }
 
     render_about_dialog(app, ui.ctx());
+    render_preferences_dialog(app, ui.ctx());
+
+    if app.pending_browse_blender {
+        app.pending_browse_blender = false;
+        if let Some(p) = rfd::FileDialog::new().pick_file() {
+            app.blender_path = Some(p.to_string_lossy().to_string());
+        }
+    }
 
     Panel::left("file_tree")
         .resizable(true)
@@ -203,6 +211,58 @@ fn render_about_dialog(app: &mut App, ctx: &three_d::egui::Context) {
                     "https://github.com/anomalyco/aio-asset-normalizer",
                 );
             });
+        });
+}
+
+fn render_preferences_dialog(app: &mut App, ctx: &three_d::egui::Context) {
+    use three_d::egui::*;
+    Window::new("Preferences")
+        .open(&mut app.show_preferences)
+        .collapsible(false)
+        .resizable(false)
+        .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
+        .show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Blender path:");
+                let mut path = app.blender_path.clone().unwrap_or_default();
+                let changed = ui.text_edit_singleline(&mut path).changed();
+                if changed {
+                    let trimmed = path.trim();
+                    app.blender_path = if trimmed.is_empty() {
+                        None
+                    } else {
+                        Some(trimmed.to_owned())
+                    };
+                }
+                if ui.button("Browse...").clicked() {
+                    app.pending_browse_blender = true;
+                }
+            });
+
+            if app.blender_path.is_some() {
+                if ui.button("Reset").clicked() {
+                    app.blender_path = None;
+                }
+            }
+
+            let detected = crate::modules::blender::bridge::find_blender(None)
+                .map(|p| p.to_string_lossy().to_string());
+
+            ui.add_space(8.0);
+            ui.separator();
+            ui.add_space(4.0);
+
+            match detected {
+                Some(ref d) => {
+                    ui.label(RichText::new(format!("Detected: {}", d)).weak());
+                }
+                None => {
+                    ui.label(
+                        RichText::new("No Blender found on system PATH")
+                            .color(Color32::RED),
+                    );
+                }
+            }
         });
 }
 

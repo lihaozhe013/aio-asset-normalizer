@@ -36,12 +36,17 @@ def main():
     print(f"[Normalizer V2] Output: {output_path}")
     print(f"[Normalizer V2] Config: {json.dumps(config, indent=2)}")
 
-    clear_scene()
-    import_file(input_path)
-    apply_config(config)
-    export_glb(output_path, config)
-
-    print("[Normalizer V2] Done.")
+    try:
+        clear_scene()
+        import_file(input_path)
+        apply_config(config)
+        export_glb(output_path, config)
+        print("[Normalizer V2] Done.")
+    except Exception as e:
+        print(f"[Normalizer V2] Fatal error: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 
 
 def clear_scene():
@@ -298,7 +303,7 @@ def export_glb(output_path, config):
         export_normals=True,
         export_tangents=False,
         export_materials="EXPORT",
-        export_colors=True,
+        export_vertex_color="MATERIAL",
         use_mesh_edges=False,
         use_mesh_vertices=False,
         export_cameras=False,

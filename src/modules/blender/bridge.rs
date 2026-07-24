@@ -12,11 +12,16 @@ pub enum ScriptVersion {
     V2,
 }
 
-pub fn find_blender() -> Option<PathBuf> {
+pub fn find_blender(preferred: Option<&str>) -> Option<PathBuf> {
+    if let Some(path) = preferred {
+        if let Some(resolved) = resolve_blender_path(path) {
+            return Some(resolved);
+        }
+    }
+
     if let Ok(path) = std::env::var("BLENDER_PATH") {
-        let p = PathBuf::from(path);
-        if p.exists() {
-            return Some(p);
+        if let Some(resolved) = resolve_blender_path(&path) {
+            return Some(resolved);
         }
     }
 
@@ -31,15 +36,49 @@ pub fn find_blender() -> Option<PathBuf> {
             "C:\\Program Files\\Blender Foundation\\Blender 3.6\\blender.exe",
         ];
         for candidate in candidates {
-            let p = PathBuf::from(candidate);
-            if p.exists() {
-                return Some(p);
+            if let Some(resolved) = resolve_blender_path(candidate) {
+                return Some(resolved);
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let candidates = ["/Applications/Blender.app"];
+        for candidate in candidates {
+            if let Some(resolved) = resolve_blender_path(candidate) {
+                return Some(resolved);
             }
         }
     }
 
     if let Some(path) = find_in_path("blender") {
         return Some(path);
+    }
+
+    None
+}
+
+fn resolve_blender_path<P: AsRef<Path>>(path: P) -> Option<PathBuf> {
+    let p = path.as_ref();
+
+    if p.is_file() {
+        return Some(p.to_path_buf());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        if p.is_dir() && p.extension().map_or(false, |e| e == "app") {
+            let inner = p.join("Contents").join("MacOS");
+            if let Ok(entries) = std::fs::read_dir(&inner) {
+                for entry in entries.flatten() {
+                    let candidate = entry.path();
+                    if candidate.is_file() {
+                        return Some(candidate);
+                    }
+                }
+            }
+        }
     }
 
     None
@@ -58,7 +97,7 @@ fn find_in_path(name: &str) -> Option<PathBuf> {
         ':'
     }) {
         let candidate = PathBuf::from(dir).join(&exe_name);
-        if candidate.exists() {
+        if candidate.is_file() {
             return Some(candidate);
         }
     }
@@ -88,10 +127,10 @@ pub fn run_task(
     task: &super::task::ConversionTask,
     tx: &mpsc::Sender<String>,
 ) -> std::io::Result<bool> {
-    let blender = find_blender().ok_or_else(|| {
+    let blender = find_blender(task.blender_path.as_deref()).ok_or_else(|| {
         std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            "Blender executable not found. Set BLENDER_PATH environment variable.",
+            "Blender executable not found. Set path in Edit > Preferences or set BLENDER_PATH environment variable.",
         )
     })?;
 
@@ -158,5 +197,15 @@ pub fn run_task(
     });
 
     let status = child.wait()?;
-    Ok(status.success())
+    if !status.success() {
+        return Ok(false);
+    }
+    if !task.output.exists() {
+        let _ = tx.send(
+            "[Bridge] Output file was not created (check stderr for errors)"
+                .to_owned(),
+        );
+        return Ok(false);
+    }
+    Ok(true)
 }

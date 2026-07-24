@@ -5,6 +5,8 @@ use std::path::PathBuf;
 pub struct UserPreferences {
     pub version: u32,
     #[serde(default)]
+    pub blender_path: Option<String>,
+    #[serde(default)]
     pub view: ViewPreferences,
     #[serde(default)]
     pub file_tree: FileTreePreferences,

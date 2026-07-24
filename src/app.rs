@@ -22,12 +22,15 @@ pub struct App {
     pub file_tree: FileTree,
     pub config: NormalizationConfig,
     pub log: LogViewer,
+    pub blender_path: Option<String>,
     conversion_rx: Option<mpsc::Receiver<String>>,
     pub(crate) converting: bool,
     last_output: Option<PathBuf>,
     needs_reload: bool,
     quit_requested: bool,
     pub(crate) show_about: bool,
+    pub(crate) show_preferences: bool,
+    pub(crate) pending_browse_blender: bool,
     pub skeleton: Option<Skeleton>,
     pub animation_player: Option<AnimationPlayer>,
     last_frame_time: Instant,
@@ -59,12 +62,15 @@ impl App {
             file_tree,
             config,
             log,
+            blender_path: prefs.blender_path.clone(),
             conversion_rx: None,
             converting: false,
             last_output: None,
             needs_reload: false,
             quit_requested: false,
             show_about: false,
+            show_preferences: false,
+            pending_browse_blender: false,
             skeleton: None,
             animation_player: None,
             last_frame_time: Instant::now(),
@@ -230,6 +236,8 @@ impl App {
 
         self.last_output = last_output;
 
+        let blender_path = self.blender_path.clone();
+
         std::thread::spawn(move || {
             for file in &files {
                 let output = file
@@ -245,6 +253,7 @@ impl App {
                     output,
                     config_json: config_json.clone(),
                     script_version,
+                    blender_path: blender_path.clone(),
                 };
 
                 let _ = tx.send(format!(
@@ -275,6 +284,7 @@ impl App {
     pub fn collect_preferences(&self) -> UserPreferences {
         UserPreferences {
             version: 1,
+            blender_path: self.blender_path.clone(),
             view: self.canvas.to_view_prefs(),
             file_tree: self.file_tree.to_prefs(),
             log_viewer: self.log.to_prefs(),
@@ -332,6 +342,9 @@ impl App {
             }
             MenuAction::About => {
                 self.show_about = true;
+            }
+            MenuAction::OpenPreferences => {
+                self.show_preferences = true;
             }
             MenuAction::Quit => {
                 preferences::save(&self.collect_preferences());

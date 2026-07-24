@@ -20,4 +20,5 @@ pub struct ConversionTask {
     pub output: PathBuf,
     pub config_json: String,
     pub script_version: super::bridge::ScriptVersion,
+    pub blender_path: Option<String>,
 }
