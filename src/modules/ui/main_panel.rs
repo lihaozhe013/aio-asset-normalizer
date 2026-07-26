@@ -36,6 +36,7 @@ pub fn render_ui(
         app.pending_browse_blender = false;
         if let Some(p) = rfd::FileDialog::new().pick_file() {
             app.blender_path = Some(p.to_string_lossy().to_string());
+            app.needs_save = true;
         }
     }
 
@@ -233,6 +234,7 @@ fn render_preferences_dialog(app: &mut App, ctx: &three_d::egui::Context) {
                     } else {
                         Some(trimmed.to_owned())
                     };
+                    app.needs_save = true;
                 }
                 if ui.button("Browse...").clicked() {
                     app.pending_browse_blender = true;
@@ -242,10 +244,11 @@ fn render_preferences_dialog(app: &mut App, ctx: &three_d::egui::Context) {
             if app.blender_path.is_some() {
                 if ui.button("Reset").clicked() {
                     app.blender_path = None;
+                    app.needs_save = true;
                 }
             }
 
-            let detected = crate::modules::blender::bridge::find_blender(None)
+            let detected = crate::modules::blender::bridge::find_blender(app.blender_path.as_deref())
                 .map(|p| p.to_string_lossy().to_string());
 
             ui.add_space(8.0);
