@@ -100,6 +100,20 @@ impl FileTree {
         }
     }
 
+    pub fn refresh(&mut self) {
+        if let Some(ref root) = self.root.clone() {
+            let show_all = self.show_all_files;
+            self.root_entries = Some(Self::scan_dir(root, 2, show_all));
+            let open: Vec<PathBuf> = self.open_dirs.iter().cloned().collect();
+            for path in &open {
+                if let Some(entry) = self.find_entry_mut(path) {
+                    let children = Self::scan_dir(path, 1, show_all);
+                    entry.children = Some(children);
+                }
+            }
+        }
+    }
+
     pub fn handle_dropped_files(&mut self, ctx: &egui::Context) {
         let dropped = ctx.input(|i| i.raw.dropped_files.clone());
         if dropped.is_empty() {
@@ -325,6 +339,9 @@ impl FileTree {
                 if let Some(folder) = rfd::FileDialog::new().pick_folder() {
                     self.open_folder(folder);
                 }
+            }
+            if ui.button("刷新").clicked() {
+                self.refresh();
             }
         });
 

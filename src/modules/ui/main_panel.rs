@@ -248,8 +248,10 @@ fn render_preferences_dialog(app: &mut App, ctx: &three_d::egui::Context) {
                 }
             }
 
-            let detected = crate::modules::blender::bridge::find_blender(app.blender_path.as_deref())
-                .map(|p| p.to_string_lossy().to_string());
+            let detected = crate::modules::blender::bridge::find_blender(
+                app.blender_path.as_deref(),
+            )
+            .map(|p| p.to_string_lossy().to_string());
 
             ui.add_space(8.0);
             ui.separator();
