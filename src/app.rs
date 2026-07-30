@@ -115,10 +115,7 @@ impl App {
     pub fn reload_model_if_needed(&mut self, context: &Context) {
         if self.needs_reload {
             self.needs_reload = false;
-            let path = self
-                .last_preview
-                .as_ref()
-                .or(self.last_output.as_ref());
+            let path = self.last_preview.as_ref().or(self.last_output.as_ref());
             if let Some(path) = path {
                 if path.exists() {
                     self.skeleton = None;

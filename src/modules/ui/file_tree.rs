@@ -111,8 +111,7 @@ impl FileTree {
     pub fn refresh_open_dirs(&mut self) {
         let show_all = self.show_all_files;
         if let Some(ref root) = self.root.clone() {
-            self.root_entries =
-                Some(Self::scan_dir(root, 2, show_all));
+            self.root_entries = Some(Self::scan_dir(root, 2, show_all));
         }
         let open_dirs: Vec<PathBuf> = self.open_dirs.iter().cloned().collect();
         for dir in &open_dirs {
@@ -463,8 +462,7 @@ impl FileTree {
                                 }
                                 if Self::is_glb(&item.path) {
                                     if ui.small_button("预览").clicked() {
-                                        preview_glb =
-                                            Some(item.path.clone());
+                                        preview_glb = Some(item.path.clone());
                                     }
                                 }
                             } else {

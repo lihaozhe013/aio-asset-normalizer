@@ -216,9 +216,7 @@ fn render_about_dialog(app: &mut App, ctx: &three_d::egui::Context) {
                 ui.label("Cross-platform 3D asset batch normalization tool");
                 ui.add_space(4.0);
                 ui.label(RichText::new("Author: Li Haozhe").strong());
-                ui.label(
-                    RichText::new("Year: 2026").color(Color32::GRAY),
-                );
+                ui.label(RichText::new("Year: 2026").color(Color32::GRAY));
                 ui.add_space(8.0);
                 let link_text = RichText::new("GitHub")
                     .color(Color32::from_rgb(100, 149, 237))

@@ -58,7 +58,9 @@ impl ViewportCanvas {
             .map_err(|e| format!("No model found in GLB: {}", e))?;
 
         for geom in cpu_model.geometries.iter_mut() {
-            if let three_d_asset::Geometry::Triangles(ref mut mesh) = geom.geometry {
+            if let three_d_asset::Geometry::Triangles(ref mut mesh) =
+                geom.geometry
+            {
                 if mesh.tangents.is_none()
                     && mesh.normals.is_some()
                     && mesh.uvs.is_some()
