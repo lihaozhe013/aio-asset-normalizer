@@ -45,8 +45,12 @@ pub fn render_ui(
         .default_size(250.0)
         .min_size(160.0)
         .show_inside(ui, |ui| {
-            if app.file_tree.render(ui) {
+            let (prefs_changed, preview_path) = app.file_tree.render(ui);
+            if prefs_changed {
                 app.needs_save = true;
+            }
+            if let Some(path) = preview_path {
+                app.preview_glb(&path);
             }
         });
 

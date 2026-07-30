@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::Instant;
 
@@ -26,6 +26,7 @@ pub struct App {
     conversion_rx: Option<mpsc::Receiver<String>>,
     pub(crate) converting: bool,
     last_output: Option<PathBuf>,
+    last_preview: Option<PathBuf>,
     needs_reload: bool,
     quit_requested: bool,
     pub(crate) show_about: bool,
@@ -66,6 +67,7 @@ impl App {
             conversion_rx: None,
             converting: false,
             last_output: None,
+            last_preview: None,
             needs_reload: false,
             quit_requested: false,
             show_about: false,
@@ -113,7 +115,11 @@ impl App {
     pub fn reload_model_if_needed(&mut self, context: &Context) {
         if self.needs_reload {
             self.needs_reload = false;
-            if let Some(ref path) = self.last_output {
+            let path = self
+                .last_preview
+                .as_ref()
+                .or(self.last_output.as_ref());
+            if let Some(path) = path {
                 if path.exists() {
                     match self.canvas.load_glb(context, path) {
                         Ok(()) => {
@@ -159,6 +165,12 @@ impl App {
         }
 
         self.last_frame_time = now;
+    }
+
+    pub fn preview_glb(&mut self, path: &Path) {
+        self.last_preview = Some(path.to_path_buf());
+        self.last_output = None;
+        self.needs_reload = true;
     }
 
     pub fn update_bone_visualization(&mut self, context: &Context) {

@@ -19,4 +19,4 @@ rfd = "0.15"
 arboard = "3"
 open = "5"
 
-three-d-asset = { version = "0.10", features = ["gltf"] }
+three-d-asset = { version = "0.10", features = ["gltf", "image"] }

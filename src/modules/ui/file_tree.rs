@@ -226,6 +226,13 @@ impl FileTree {
             .unwrap_or(false)
     }
 
+    fn is_glb(path: &Path) -> bool {
+        path.extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.eq_ignore_ascii_case("glb"))
+            .unwrap_or(false)
+    }
+
     pub fn select_all(&mut self) {
         if let Some(ref entries) = self.root_entries {
             Self::collect_files(entries, &mut self.selected);
@@ -336,12 +343,13 @@ impl FileTree {
         }
     }
 
-    pub fn render(&mut self, ui: &mut egui::Ui) -> bool {
+    pub fn render(&mut self, ui: &mut egui::Ui) -> (bool, Option<PathBuf>) {
         let mut prefs_changed = false;
+        let mut preview_glb: Option<PathBuf> = None;
 
         if self.root.is_none() {
             self.render_open_prompt(ui);
-            return prefs_changed;
+            return (prefs_changed, None);
         }
 
         let root_name = self
@@ -445,6 +453,12 @@ impl FileTree {
                                         self.selected.remove(&item.path);
                                     }
                                 }
+                                if Self::is_glb(&item.path) {
+                                    if ui.small_button("预览").clicked() {
+                                        preview_glb =
+                                            Some(item.path.clone());
+                                    }
+                                }
                             } else {
                                 ui.label(
                                     egui::RichText::new(&item.name).weak(),
@@ -462,7 +476,7 @@ impl FileTree {
             }
         }
 
-        prefs_changed
+        (prefs_changed, preview_glb)
     }
 
     fn render_open_prompt(&mut self, ui: &mut egui::Ui) {

@@ -53,10 +53,20 @@ impl ViewportCanvas {
         let mut raw = three_d_asset::io::load(&[path])
             .map_err(|e| format!("Asset load error: {}", e))?;
 
-        let cpu_model: CpuModel = raw
-            .deserialize("Scene")
-            .or_else(|_| raw.deserialize("scene"))
+        let mut cpu_model: CpuModel = raw
+            .deserialize(path)
             .map_err(|e| format!("No model found in GLB: {}", e))?;
+
+        for geom in cpu_model.geometries.iter_mut() {
+            if let three_d_asset::Geometry::Triangles(ref mut mesh) = geom.geometry {
+                if mesh.tangents.is_none()
+                    && mesh.normals.is_some()
+                    && mesh.uvs.is_some()
+                {
+                    mesh.compute_tangents();
+                }
+            }
+        }
 
         let model =
             Model::new(context, &cpu_model).map_err(|e| e.to_string())?;

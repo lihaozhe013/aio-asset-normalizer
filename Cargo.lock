@@ -3734,6 +3734,7 @@ dependencies = [
  "cgmath",
  "gltf",
  "half",
+ "image",
  "thiserror 2.0.19",
  "web-sys",
 ]
