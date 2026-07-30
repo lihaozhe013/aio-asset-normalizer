@@ -4,15 +4,15 @@ use std::path::Path;
 use three_d::*;
 
 pub struct ViewportCanvas {
-    pub axes: Gm<Mesh, ColorMaterial>,
-    pub grid: Gm<Mesh, ColorMaterial>,
+    pub axes: Vec<Gm<Mesh, ColorMaterial>>,
+    pub grid: Vec<Gm<Mesh, ColorMaterial>>,
     pub origin_sphere: Gm<Mesh, ColorMaterial>,
     pub model: Option<Model<PhysicalMaterial>>,
     pub show_axes: bool,
     pub show_grid: bool,
     pub show_origin: bool,
     pub show_bones: bool,
-    pub bone_sticks: Option<Gm<Mesh, ColorMaterial>>,
+    pub bone_sticks: Vec<Gm<Mesh, ColorMaterial>>,
     pub bone_joints: Option<Gm<Mesh, ColorMaterial>>,
     ambient_light: AmbientLight,
     directional_light: DirectionalLight,
@@ -29,7 +29,7 @@ impl ViewportCanvas {
             show_grid: true,
             show_origin: true,
             show_bones: true,
-            bone_sticks: None,
+            bone_sticks: Vec::new(),
             bone_joints: None,
             ambient_light: AmbientLight {
                 intensity: 0.3,
@@ -72,8 +72,9 @@ impl ViewportCanvas {
             Model::new(context, &cpu_model).map_err(|e| e.to_string())?;
 
         self.model = Some(model);
-        self.bone_sticks = None;
+        self.bone_sticks = Vec::new();
         self.bone_joints = None;
+        self.show_origin = false;
         Ok(())
     }
 
@@ -85,13 +86,13 @@ impl ViewportCanvas {
         highlighted: Option<usize>,
     ) {
         if bone_segments.is_empty() {
-            self.bone_sticks = None;
+            self.bone_sticks = Vec::new();
             self.bone_joints = None;
             return;
         }
 
         self.bone_sticks =
-            Some(build_bone_sticks(context, bone_segments, highlighted));
+            build_bone_sticks(context, bone_segments, highlighted);
         self.bone_joints = Some(build_joint_spheres(context, joint_positions));
     }
 
@@ -120,24 +121,40 @@ fn build_bone_sticks(
     context: &Context,
     segments: &[(Vec3, Vec3)],
     _highlighted: Option<usize>,
-) -> Gm<Mesh, ColorMaterial> {
-    let mut positions = Vec::new();
-    let mut colors = Vec::new();
+) -> Vec<Gm<Mesh, ColorMaterial>> {
     let bone_color = Srgba::new(255, 200, 60, 255);
+    let thickness = 0.012;
+    let mut meshes = Vec::new();
 
-    for (start, end) in segments {
-        positions.push(*start);
-        positions.push(*end);
-        colors.push(bone_color);
-        colors.push(bone_color);
+    for &(start, end) in segments {
+        let dir = (end - start).normalize();
+        let up = if dir.y.abs() < 0.99 {
+            vec3(0.0, 1.0, 0.0)
+        } else {
+            vec3(1.0, 0.0, 0.0)
+        };
+        let right = dir.cross(up).normalize() * thickness;
+        let positions = Positions::F32(vec![
+            start - right,
+            start + right,
+            end + right,
+            start - right,
+            end + right,
+            end - right,
+        ]);
+        let colors = vec![bone_color; 6];
+        let cpu_mesh = CpuMesh {
+            positions,
+            colors: Some(colors),
+            ..Default::default()
+        };
+        meshes.push(Gm::new(
+            Mesh::new(context, &cpu_mesh),
+            ColorMaterial::default(),
+        ));
     }
 
-    let cpu_mesh = CpuMesh {
-        positions: Positions::F32(positions),
-        colors: Some(colors),
-        ..Default::default()
-    };
-    Gm::new(Mesh::new(context, &cpu_mesh), ColorMaterial::default())
+    meshes
 }
 
 fn build_joint_spheres(

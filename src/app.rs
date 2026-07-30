@@ -121,6 +121,8 @@ impl App {
                 .or(self.last_output.as_ref());
             if let Some(path) = path {
                 if path.exists() {
+                    self.skeleton = None;
+                    self.animation_player = None;
                     match self.canvas.load_glb(context, path) {
                         Ok(()) => {
                             self.skeleton = Skeleton::from_glb(path).ok().or_else(|| {

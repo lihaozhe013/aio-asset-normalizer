@@ -1,23 +1,28 @@
 use three_d::*;
 
-pub fn build_axes(context: &Context) -> Gm<Mesh, ColorMaterial> {
-    let axis_len = 3.0;
+fn build_axis_quad(
+    context: &Context,
+    from: Vec3,
+    to: Vec3,
+    thickness: f32,
+    color: Srgba,
+) -> Gm<Mesh, ColorMaterial> {
+    let dir = (to - from).normalize();
+    let up = if dir.y.abs() < 0.99 {
+        vec3(0.0, 1.0, 0.0)
+    } else {
+        vec3(1.0, 0.0, 0.0)
+    };
+    let right = dir.cross(up).normalize() * thickness;
     let positions = Positions::F32(vec![
-        vec3(0.0, 0.0, 0.0),
-        vec3(axis_len, 0.0, 0.0),
-        vec3(0.0, 0.0, 0.0),
-        vec3(0.0, axis_len, 0.0),
-        vec3(0.0, 0.0, 0.0),
-        vec3(0.0, 0.0, axis_len),
+        from - right,
+        from + right,
+        to + right,
+        from - right,
+        to + right,
+        to - right,
     ]);
-    let colors = vec![
-        Srgba::new(255, 60, 60, 255),
-        Srgba::new(255, 60, 60, 255),
-        Srgba::new(60, 255, 60, 255),
-        Srgba::new(60, 255, 60, 255),
-        Srgba::new(60, 80, 255, 255),
-        Srgba::new(60, 80, 255, 255),
-    ];
+    let colors = vec![color; 6];
     let cpu_mesh = CpuMesh {
         positions,
         colors: Some(colors),
@@ -26,36 +31,96 @@ pub fn build_axes(context: &Context) -> Gm<Mesh, ColorMaterial> {
     Gm::new(Mesh::new(context, &cpu_mesh), ColorMaterial::default())
 }
 
-pub fn build_grid(context: &Context) -> Gm<Mesh, ColorMaterial> {
+pub fn build_axes(context: &Context) -> Vec<Gm<Mesh, ColorMaterial>> {
+    let len = 3.0;
+    let t = 0.015;
+    vec![
+        build_axis_quad(
+            context,
+            vec3(0.0, 0.0, 0.0),
+            vec3(len, 0.0, 0.0),
+            t,
+            Srgba::new(255, 60, 60, 255),
+        ),
+        build_axis_quad(
+            context,
+            vec3(0.0, 0.0, 0.0),
+            vec3(0.0, len, 0.0),
+            t,
+            Srgba::new(60, 255, 60, 255),
+        ),
+        build_axis_quad(
+            context,
+            vec3(0.0, 0.0, 0.0),
+            vec3(0.0, 0.0, len),
+            t,
+            Srgba::new(60, 80, 255, 255),
+        ),
+    ]
+}
+
+fn build_line_quad(
+    context: &Context,
+    from: Vec3,
+    to: Vec3,
+    thickness: f32,
+    color: Srgba,
+) -> Gm<Mesh, ColorMaterial> {
+    let dir = (to - from).normalize();
+    let up = if dir.y.abs() < 0.99 {
+        vec3(0.0, 1.0, 0.0)
+    } else {
+        vec3(1.0, 0.0, 0.0)
+    };
+    let right = dir.cross(up).normalize() * thickness;
+    let positions = Positions::F32(vec![
+        from - right,
+        from + right,
+        to + right,
+        from - right,
+        to + right,
+        to - right,
+    ]);
+    let colors = vec![color; 6];
+    let cpu_mesh = CpuMesh {
+        positions,
+        colors: Some(colors),
+        ..Default::default()
+    };
+    Gm::new(Mesh::new(context, &cpu_mesh), ColorMaterial::default())
+}
+
+pub fn build_grid(context: &Context) -> Vec<Gm<Mesh, ColorMaterial>> {
     let size = 10;
     let step = 1.0;
-    let mut positions = Vec::new();
-    let mut colors = Vec::new();
+    let t = 0.008;
     let major_color = Srgba::new(100, 100, 100, 255);
     let minor_color = Srgba::new(60, 60, 60, 255);
+    let mut lines = Vec::new();
 
     for i in -size..=size {
         let p = i as f32 * step;
         let is_major = i % 5 == 0;
         let c = if is_major { major_color } else { minor_color };
+        let s = size as f32 * step;
 
-        positions.push(vec3(p, 0.0, -(size as f32 * step)));
-        positions.push(vec3(p, 0.0, size as f32 * step));
-        colors.push(c);
-        colors.push(c);
-
-        positions.push(vec3(-(size as f32 * step), 0.0, p));
-        positions.push(vec3(size as f32 * step, 0.0, p));
-        colors.push(c);
-        colors.push(c);
+        lines.push(build_line_quad(
+            context,
+            vec3(p, 0.0, -s),
+            vec3(p, 0.0, s),
+            if is_major { t * 1.5 } else { t },
+            c,
+        ));
+        lines.push(build_line_quad(
+            context,
+            vec3(-s, 0.0, p),
+            vec3(s, 0.0, p),
+            if is_major { t * 1.5 } else { t },
+            c,
+        ));
     }
 
-    let cpu_mesh = CpuMesh {
-        positions: Positions::F32(positions),
-        colors: Some(colors),
-        ..Default::default()
-    };
-    Gm::new(Mesh::new(context, &cpu_mesh), ColorMaterial::default())
+    lines
 }
 
 pub fn build_origin_sphere(context: &Context) -> Gm<Mesh, ColorMaterial> {
