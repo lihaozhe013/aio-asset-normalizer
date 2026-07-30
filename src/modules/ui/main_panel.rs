@@ -46,7 +46,7 @@ pub fn render_ui(
         .min_size(160.0)
         .show_inside(ui, |ui| {
             let (prefs_changed, preview_path) = app.file_tree.render(ui);
-            if prefs_changed {
+            if prefs_changed || app.file_tree.take_root_changed() {
                 app.needs_save = true;
             }
             if let Some(path) = preview_path {

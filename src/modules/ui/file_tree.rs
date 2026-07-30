@@ -12,6 +12,7 @@ pub struct FileTree {
     selected: HashSet<PathBuf>,
     open_dirs: HashSet<PathBuf>,
     pub show_all_files: bool,
+    root_changed: bool,
 }
 
 pub struct FileTreeEntry {
@@ -38,7 +39,12 @@ impl FileTree {
             selected: HashSet::new(),
             open_dirs: HashSet::new(),
             show_all_files: false,
+            root_changed: false,
         }
+    }
+
+    pub fn take_root_changed(&mut self) -> bool {
+        std::mem::replace(&mut self.root_changed, false)
     }
 
     pub fn selected_files(&self) -> Vec<PathBuf> {
@@ -61,6 +67,7 @@ impl FileTree {
         self.root_entries = None;
         self.selected.clear();
         self.open_dirs.clear();
+        self.root_changed = true;
     }
 
     pub fn select_file(&mut self, path: &Path) {
@@ -72,6 +79,7 @@ impl FileTree {
         self.selected.clear();
         self.open_dirs.clear();
         self.root_entries = Some(Self::scan_dir(&path, 2, self.show_all_files));
+        self.root_changed = true;
     }
 
     pub fn apply_prefs(&mut self, prefs: &FileTreePreferences) {
