@@ -100,6 +100,24 @@ impl FileTree {
         }
     }
 
+    pub fn refresh_open_dirs(&mut self) {
+        let show_all = self.show_all_files;
+        if let Some(ref root) = self.root.clone() {
+            self.root_entries =
+                Some(Self::scan_dir(root, 2, show_all));
+        }
+        let open_dirs: Vec<PathBuf> = self.open_dirs.iter().cloned().collect();
+        for dir in &open_dirs {
+            if !dir.exists() {
+                continue;
+            }
+            if let Some(entry) = self.find_entry_mut(dir) {
+                let children = Self::scan_dir(dir, 1, show_all);
+                entry.children = Some(children);
+            }
+        }
+    }
+
     pub fn refresh(&mut self) {
         if let Some(ref root) = self.root.clone() {
             let show_all = self.show_all_files;

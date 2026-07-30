@@ -105,6 +105,7 @@ impl App {
                 self.conversion_rx = None;
                 self.converting = false;
                 self.needs_reload = true;
+                self.file_tree.refresh_open_dirs();
             }
         }
     }
