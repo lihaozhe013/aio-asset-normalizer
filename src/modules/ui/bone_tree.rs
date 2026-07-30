@@ -46,10 +46,13 @@ pub fn render_bone_tree(ui: &mut egui::Ui, skeleton: &mut Skeleton) {
     let visible = collect_visible(skeleton, &root_bones, &open_state);
     let mut new_open_state = open_state.clone();
 
-    egui::ScrollArea::vertical()
+    let scroll_id = ui.make_persistent_id("bone_tree_scroll");
+
+    egui::ScrollArea::both()
         .auto_shrink([false; 2])
         .id_salt("bone_tree_scroll")
         .show(ui, |ui| {
+            shift_wheel_to_horizontal(ui, scroll_id);
             for item in &visible {
                 let bone = &skeleton.bones[item.bone_idx];
                 let bone_name = bone.name.clone();
@@ -125,4 +128,35 @@ fn collect_recursive(
             collect_recursive(skeleton, child, depth + 1, open_state, result);
         }
     }
+}
+
+/// Convert shift+vertical-wheel events into horizontal scroll on the given
+/// ScrollArea id. Uses raw input events (not `smooth_scroll_delta`) so this
+/// still works after a parent ScrollArea has already consumed the delta.
+/// ScrollArea::show clamps the offset at draw time, so we just nudge it.
+fn shift_wheel_to_horizontal(ui: &mut egui::Ui, scroll_id: egui::Id) {
+    let shift_delta_y: f32 = ui.ctx().input(|i| {
+        i.events
+            .iter()
+            .filter_map(|e| match e {
+                egui::Event::MouseWheel {
+                    delta, modifiers, ..
+                } if modifiers.shift => Some(delta.y),
+                _ => None,
+            })
+            .sum()
+    });
+
+    if shift_delta_y == 0.0 {
+        return;
+    }
+
+    ui.ctx().data_mut(|d| {
+        if let Some(mut state) =
+            d.get_persisted::<egui::scroll_area::State>(scroll_id)
+        {
+            state.offset.x -= shift_delta_y;
+            d.insert_persisted(scroll_id, state);
+        }
+    });
 }

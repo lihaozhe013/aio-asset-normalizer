@@ -57,9 +57,9 @@ pub fn render_ui(
     Panel::right("inspector")
         .resizable(true)
         .default_size(280.0)
-        .min_size(200.0)
+        .min_size(60.0)
         .show_inside(ui, |ui| {
-            ScrollArea::vertical().show(ui, |ui| {
+            ScrollArea::both().show(ui, |ui| {
                 ui.heading("格式转换");
                 ui.separator();
                 if app.config.render_inspector(ui) {
