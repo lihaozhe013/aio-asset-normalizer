@@ -89,7 +89,20 @@ impl OrbitCamera {
                     }
                 }
                 Event::MouseWheel { delta, .. } => {
-                    self.radius -= delta.1 as f32 * 0.5;
+                    // three-d scales mouse-wheel deltas by LINE_HEIGHT (24.0)
+                    // before delivering them, so delta.1 is approximately
+                    // +/-24 per physical wheel notch (and proportionally for
+                    // smooth/trackpad scrolling). Normalize to "notches" so
+                    // the sensitivity constant has an intuitive meaning.
+                    //
+                    // Then apply exponential zoom: each notch scales the
+                    // orbit radius by a fixed ratio, so the same scroll
+                    // distance produces the same proportional change
+                    // regardless of zoom level -- fine control when zoomed
+                    // in, quick traversal when zoomed out.
+                    let notches = delta.1 as f32 / 24.0;
+                    let zoom_per_notch: f32 = 0.95;
+                    self.radius *= zoom_per_notch.powf(notches);
                     self.radius =
                         self.radius.clamp(self.min_radius, self.max_radius);
                     self.update_camera_view();
