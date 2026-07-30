@@ -200,17 +200,31 @@ fn render_about_dialog(app: &mut App, ctx: &three_d::egui::Context) {
         .collapsible(false)
         .resizable(false)
         .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
+        .fixed_size([360.0, 240.0])
         .show(ctx, |ui| {
             ui.vertical_centered(|ui| {
                 ui.heading("AIO Asset Normalizer");
-                ui.label("v0.1.0");
+                ui.label(
+                    RichText::new(format!("v{}", env!("CARGO_PKG_VERSION")))
+                        .strong(),
+                );
                 ui.separator();
                 ui.label("Cross-platform 3D asset batch normalization tool");
-                ui.add_space(8.0);
-                ui.hyperlink_to(
-                    "GitHub Repository",
-                    "https://github.com/anomalyco/aio-asset-normalizer",
+                ui.add_space(4.0);
+                ui.label(RichText::new("Author: Li Haozhe").strong());
+                ui.label(
+                    RichText::new("Year: 2026").color(Color32::GRAY),
                 );
+                ui.add_space(8.0);
+                let link_text = RichText::new("GitHub")
+                    .color(Color32::from_rgb(100, 149, 237))
+                    .underline();
+                let link = ui.add(Label::new(link_text).sense(Sense::click()));
+                if link.clicked() {
+                    let _ = open::that(
+                        "https://github.com/lihaozhe013/aio-asset-normalizer",
+                    );
+                }
             });
         });
 }
