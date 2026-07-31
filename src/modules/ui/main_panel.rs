@@ -64,11 +64,14 @@ pub fn render_ui(
         .min_size(60.0)
         .show_inside(ui, |ui| {
             ScrollArea::both().show(ui, |ui| {
-                ui.heading(app.i18n.tr("panel.conversion"));
-                ui.separator();
-                if app.config.render_inspector(ui, &app.i18n) {
-                    app.needs_save = true;
-                }
+                CollapsingHeader::new(app.i18n.tr("panel.conversion"))
+                    .id_salt("conversion_section")
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        if app.config.render_inspector(ui, &app.i18n) {
+                            app.needs_save = true;
+                        }
+                    });
 
                 if app.skeleton.is_some() {
                     ui.separator();
