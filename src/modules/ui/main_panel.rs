@@ -213,6 +213,32 @@ fn render_animation_controls(app: &mut App, ui: &mut three_d::egui::Ui) {
 
 fn render_about_dialog(app: &mut App, ctx: &three_d::egui::Context) {
     use three_d::egui::*;
+    if !app.show_about {
+        return;
+    }
+
+    const ICON_PNG: &[u8] = include_bytes!(
+        "../../../assets/icon/aio-asset-normalizer-transparent.png"
+    );
+    if app.about_icon.is_none() {
+        let decoded_icon = image::load_from_memory(ICON_PNG)
+            .expect("failed to decode the About dialog icon")
+            .to_rgba8();
+        let icon_image = ColorImage::from_rgba_unmultiplied(
+            [
+                decoded_icon.width() as usize,
+                decoded_icon.height() as usize,
+            ],
+            decoded_icon.as_raw(),
+        );
+        app.about_icon = Some(ctx.load_texture(
+            "aio-asset-normalizer-about-icon",
+            icon_image,
+            TextureOptions::LINEAR,
+        ));
+    }
+    let icon_texture = app.about_icon.as_ref().unwrap().clone();
+
     Window::new(app.i18n.tr("about.title"))
         .open(&mut app.show_about)
         .collapsible(false)
@@ -221,6 +247,10 @@ fn render_about_dialog(app: &mut App, ctx: &three_d::egui::Context) {
         .fixed_size([360.0, 240.0])
         .show(ctx, |ui| {
             ui.vertical_centered(|ui| {
+                ui.add(
+                    Image::from_texture(&icon_texture)
+                        .fit_to_exact_size(vec2(72.0, 72.0)),
+                );
                 ui.heading("AIO Asset Normalizer");
                 ui.label(
                     RichText::new(format!("v{}", env!("CARGO_PKG_VERSION")))
