@@ -1,4 +1,5 @@
 use crate::app::App;
+use crate::modules::i18n::LanguagePreference;
 use crate::modules::ui::{bone_tree, fonts, menu_bar};
 
 pub fn render_ui(
@@ -19,6 +20,8 @@ pub fn render_ui(
     let shortcut_actions = collect_shortcut_actions(ui.ctx());
     let menu_actions = menu_bar::render(
         ui,
+        &app.i18n,
+        app.i18n.preference(),
         app.canvas.show_grid,
         app.canvas.show_axes,
         app.canvas.show_origin,
@@ -45,7 +48,8 @@ pub fn render_ui(
         .default_size(250.0)
         .min_size(160.0)
         .show_inside(ui, |ui| {
-            let (prefs_changed, preview_path) = app.file_tree.render(ui);
+            let (prefs_changed, preview_path) =
+                app.file_tree.render(ui, &app.i18n);
             if prefs_changed || app.file_tree.take_root_changed() {
                 app.needs_save = true;
             }
@@ -60,49 +64,49 @@ pub fn render_ui(
         .min_size(60.0)
         .show_inside(ui, |ui| {
             ScrollArea::both().show(ui, |ui| {
-                ui.heading("格式转换");
+                ui.heading(app.i18n.tr("panel.conversion"));
                 ui.separator();
-                if app.config.render_inspector(ui) {
+                if app.config.render_inspector(ui, &app.i18n) {
                     app.needs_save = true;
                 }
 
                 if app.skeleton.is_some() {
                     ui.separator();
-                    CollapsingHeader::new("骨骼层级").default_open(true).show(
-                        ui,
-                        |ui| {
+                    CollapsingHeader::new(app.i18n.tr("panel.skeleton"))
+                        .default_open(true)
+                        .show(ui, |ui| {
                             if ui
                                 .checkbox(
                                     &mut app.canvas.show_bones,
-                                    "显示骨骼",
+                                    app.i18n.tr("menu.show_bones"),
                                 )
                                 .changed()
                             {
                                 app.needs_save = true;
                             }
                             if let Some(ref mut skel) = app.skeleton {
-                                bone_tree::render_bone_tree(ui, skel);
+                                bone_tree::render_bone_tree(
+                                    ui, skel, &app.i18n,
+                                );
                             }
-                        },
-                    );
+                        });
                 }
 
                 if app.animation_player.is_some() {
                     ui.separator();
-                    CollapsingHeader::new("动画播放").default_open(true).show(
-                        ui,
-                        |ui| {
+                    CollapsingHeader::new(app.i18n.tr("panel.animation"))
+                        .default_open(true)
+                        .show(ui, |ui| {
                             render_animation_controls(app, ui);
-                        },
-                    );
+                        });
                 }
 
                 ui.separator();
 
                 let btn_text = if app.converting {
-                    "正在转换..."
+                    app.i18n.tr("button.converting").to_owned()
                 } else {
-                    "开始转换"
+                    app.i18n.tr("button.start_conversion").to_owned()
                 };
                 let enabled = !app.file_tree.selected_files().is_empty()
                     && !app.converting;
@@ -122,7 +126,7 @@ pub fn render_ui(
         .default_size(150.0)
         .min_size(80.0)
         .show_inside(ui, |ui| {
-            if app.log.render(ui) {
+            if app.log.render(ui, &app.i18n) {
                 app.needs_save = true;
             }
         });
@@ -136,24 +140,28 @@ fn render_animation_controls(app: &mut App, ui: &mut three_d::egui::Ui) {
     let anim = match app.animation_player.as_mut() {
         Some(a) => a,
         None => {
-            ui.label("No animation data");
+            ui.label(app.i18n.tr("label.no_animation_data"));
             return;
         }
     };
 
     ui.horizontal(|ui| {
-        let play_label = if anim.playing { "暂停" } else { "播放" };
+        let play_label = if anim.playing {
+            app.i18n.tr("button.pause")
+        } else {
+            app.i18n.tr("button.play")
+        };
         if ui.button(play_label).clicked() {
             anim.toggle_play();
         }
-        if ui.button("停止").clicked() {
+        if ui.button(app.i18n.tr("button.stop")).clicked() {
             anim.stop();
         }
-        ui.checkbox(&mut anim.looping, "循环");
+        ui.checkbox(&mut anim.looping, app.i18n.tr("label.looping"));
     });
 
     ui.horizontal(|ui| {
-        ui.label("速度:");
+        ui.label(app.i18n.tr("label.speed"));
         if ui.button("0.5x").clicked() {
             anim.speed = 0.5;
         }
@@ -168,7 +176,7 @@ fn render_animation_controls(app: &mut App, ui: &mut three_d::egui::Ui) {
 
     if anim.clips.len() > 1 {
         ui.horizontal(|ui| {
-            ui.label("动画片段:");
+            ui.label(app.i18n.tr("label.animation_clip"));
             let names = anim.clip_names();
             for (i, name) in names.iter().enumerate() {
                 let selected = anim.current_clip == i;
@@ -189,7 +197,10 @@ fn render_animation_controls(app: &mut App, ui: &mut three_d::egui::Ui) {
         ui.label(format!("{:.2}s / {:.2}s", anim.current_time, clip.duration));
     });
     if ui
-        .add(Slider::new(&mut slider_val, 0.0..=clip.duration).text("时间"))
+        .add(
+            Slider::new(&mut slider_val, 0.0..=clip.duration)
+                .text(app.i18n.tr("label.time")),
+        )
         .changed()
     {
         anim.current_time = slider_val;
@@ -199,7 +210,7 @@ fn render_animation_controls(app: &mut App, ui: &mut three_d::egui::Ui) {
 
 fn render_about_dialog(app: &mut App, ctx: &three_d::egui::Context) {
     use three_d::egui::*;
-    Window::new("About AIO Asset Normalizer")
+    Window::new(app.i18n.tr("about.title"))
         .open(&mut app.show_about)
         .collapsible(false)
         .resizable(false)
@@ -213,12 +224,15 @@ fn render_about_dialog(app: &mut App, ctx: &three_d::egui::Context) {
                         .strong(),
                 );
                 ui.separator();
-                ui.label("Cross-platform 3D asset batch normalization tool");
+                ui.label(app.i18n.tr("label.description"));
                 ui.add_space(4.0);
-                ui.label(RichText::new("Author: Li Haozhe").strong());
-                ui.label(RichText::new("Year: 2026").color(Color32::GRAY));
+                ui.label(RichText::new(app.i18n.tr("label.author")).strong());
+                ui.label(
+                    RichText::new(app.i18n.tr("label.year"))
+                        .color(Color32::GRAY),
+                );
                 ui.add_space(8.0);
-                let link_text = RichText::new("GitHub")
+                let link_text = RichText::new(app.i18n.tr("about.github"))
                     .color(Color32::from_rgb(100, 149, 237))
                     .underline();
                 let link = ui.add(Label::new(link_text).sense(Sense::click()));
@@ -233,14 +247,14 @@ fn render_about_dialog(app: &mut App, ctx: &three_d::egui::Context) {
 
 fn render_preferences_dialog(app: &mut App, ctx: &three_d::egui::Context) {
     use three_d::egui::*;
-    Window::new("Preferences")
+    Window::new(app.i18n.tr("preferences.title"))
         .open(&mut app.show_preferences)
         .collapsible(false)
         .resizable(false)
         .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
         .show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.label("Blender path:");
+                ui.label(app.i18n.tr("label.blender_path"));
                 let mut path = app.blender_path.clone().unwrap_or_default();
                 let changed = ui.text_edit_singleline(&mut path).changed();
                 if changed {
@@ -252,13 +266,13 @@ fn render_preferences_dialog(app: &mut App, ctx: &three_d::egui::Context) {
                     };
                     app.needs_save = true;
                 }
-                if ui.button("Browse...").clicked() {
+                if ui.button(app.i18n.tr("button.browse")).clicked() {
                     app.pending_browse_blender = true;
                 }
             });
 
             if app.blender_path.is_some() {
-                if ui.button("Reset").clicked() {
+                if ui.button(app.i18n.tr("button.reset")).clicked() {
                     app.blender_path = None;
                     app.needs_save = true;
                 }
@@ -275,15 +289,52 @@ fn render_preferences_dialog(app: &mut App, ctx: &three_d::egui::Context) {
 
             match detected {
                 Some(ref d) => {
-                    ui.label(RichText::new(format!("Detected: {}", d)).weak());
+                    ui.label(
+                        RichText::new(
+                            app.i18n
+                                .text("label.detected", &[("path", d.clone())]),
+                        )
+                        .weak(),
+                    );
                 }
                 None => {
                     ui.label(
-                        RichText::new("No Blender found on system PATH")
+                        RichText::new(app.i18n.tr("label.no_blender"))
                             .color(Color32::RED),
                     );
                 }
             }
+
+            ui.add_space(8.0);
+            ui.separator();
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                ui.label(app.i18n.tr("preferences.language"));
+                let mut preference = app.i18n.preference();
+                ComboBox::from_id_salt("language")
+                    .selected_text(preference.label(&app.i18n))
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut preference,
+                            LanguagePreference::Auto,
+                            LanguagePreference::Auto.label(&app.i18n),
+                        );
+                        ui.selectable_value(
+                            &mut preference,
+                            LanguagePreference::English,
+                            LanguagePreference::English.label(&app.i18n),
+                        );
+                        ui.selectable_value(
+                            &mut preference,
+                            LanguagePreference::Chinese,
+                            LanguagePreference::Chinese.label(&app.i18n),
+                        );
+                    });
+                if preference != app.i18n.preference() {
+                    app.i18n.set_preference(preference);
+                    app.needs_save = true;
+                }
+            });
         });
 }
 

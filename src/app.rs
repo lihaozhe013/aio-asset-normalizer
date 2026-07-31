@@ -5,6 +5,7 @@ use std::time::Instant;
 use crate::modules::{
     animation::AnimationPlayer,
     blender,
+    i18n::I18n,
     preferences::{self, UserPreferences},
     skeleton::Skeleton,
     ui::{
@@ -16,6 +17,7 @@ use crate::modules::{
 use three_d::*;
 
 pub struct App {
+    pub i18n: I18n,
     pub camera: OrbitCamera,
     pub canvas: ViewportCanvas,
     pub(crate) fonts_configured: bool,
@@ -57,6 +59,7 @@ impl App {
         let config = NormalizationConfig::from(&prefs.conversion);
 
         Self {
+            i18n: I18n::new(prefs.language),
             camera: OrbitCamera::new(viewport),
             canvas,
             fonts_configured: false,
@@ -122,18 +125,22 @@ impl App {
                     self.animation_player = None;
                     match self.canvas.load_glb(context, path) {
                         Ok(()) => {
-                            self.skeleton = Skeleton::from_glb(path).ok().or_else(|| {
-                                self.log.append("[Info] No skeleton found (static mesh)");
-                                None
-                            });
+                            self.skeleton =
+                                Skeleton::from_glb(path).ok().or_else(|| {
+                                    self.log.append(
+                                        self.i18n.tr("status.no_skeleton"),
+                                    );
+                                    None
+                                });
                             self.animation_player =
                                 self.skeleton.as_ref().and_then(|skel| {
                                     AnimationPlayer::from_glb(path, skel)
                                         .ok()
                                         .or_else(|| {
-                                            self.log.append(
-                                                "[Info] No animations found",
-                                            );
+                                            self.log
+                                                .append(self.i18n.tr(
+                                                    "status.no_animations",
+                                                ));
                                             None
                                         })
                                 });
@@ -142,9 +149,9 @@ impl App {
                         Err(e) => self.log.append(&format!("[Error] {}", e)),
                     }
                 } else {
-                    self.log.append(&format!(
-                        "[Error] Output not found: {}",
-                        path.display()
+                    self.log.append(&self.i18n.text(
+                        "status.output_not_found",
+                        &[("path", path.display().to_string())],
                     ));
                 }
             }
@@ -237,7 +244,7 @@ impl App {
         self.conversion_rx = Some(rx);
         self.converting = true;
         self.log.clear();
-        self.log.append("[Normalizer] Starting conversion...");
+        self.log.append(self.i18n.tr("status.normalizer_starting"));
 
         let last_output = files.first().map(|p| {
             let stem = p.file_stem().unwrap_or_default();
@@ -249,6 +256,7 @@ impl App {
         self.last_output = last_output;
 
         let blender_path = self.blender_path.clone();
+        let i18n = self.i18n.clone();
 
         std::thread::spawn(move || {
             for file in &files {
@@ -268,21 +276,21 @@ impl App {
                     blender_path: blender_path.clone(),
                 };
 
-                let _ = tx.send(format!(
-                    "[Normalizer] Processing: {}",
-                    task.input.display()
+                let _ = tx.send(i18n.text(
+                    "status.normalizer_processing",
+                    &[("path", task.input.display().to_string())],
                 ));
                 match blender::bridge::run_task(&task, &tx) {
                     Ok(true) => {
-                        let _ = tx.send(format!(
-                            "[Normalizer] Success: {}",
-                            task.output.display()
+                        let _ = tx.send(i18n.text(
+                            "status.normalizer_success",
+                            &[("path", task.output.display().to_string())],
                         ));
                     }
                     Ok(false) => {
-                        let _ = tx.send(format!(
-                            "[Normalizer] Failed with non-zero exit code"
-                        ));
+                        let _ = tx.send(
+                            i18n.tr("status.normalizer_failed").to_owned(),
+                        );
                     }
                     Err(e) => {
                         let _ = tx.send(format!("[Normalizer] Error: {}", e));
@@ -296,6 +304,7 @@ impl App {
     pub fn collect_preferences(&self) -> UserPreferences {
         UserPreferences {
             version: 1,
+            language: self.i18n.preference(),
             blender_path: self.blender_path.clone(),
             view: self.canvas.to_view_prefs(),
             file_tree: self.file_tree.to_prefs(),
@@ -308,7 +317,10 @@ impl App {
         match action {
             MenuAction::ImportFiles => {
                 if let Some(path) = rfd::FileDialog::new()
-                    .add_filter("3D 模型", &["fbx", "blend", "obj", "glb"])
+                    .add_filter(
+                        self.i18n.tr("files.model_filter"),
+                        &["fbx", "blend", "obj", "glb"],
+                    )
                     .pick_file()
                 {
                     if let Some(parent) = path.parent().map(|p| p.to_path_buf())
@@ -354,6 +366,10 @@ impl App {
             }
             MenuAction::About => {
                 self.show_about = true;
+            }
+            MenuAction::SetLanguage(preference) => {
+                self.i18n.set_preference(*preference);
+                self.needs_save = true;
             }
             MenuAction::OpenPreferences => {
                 self.show_preferences = true;

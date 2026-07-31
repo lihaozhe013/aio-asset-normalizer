@@ -1,3 +1,4 @@
+use crate::modules::i18n::I18n;
 use crate::modules::preferences::ConversionPreferences;
 use three_d::egui;
 
@@ -8,10 +9,10 @@ pub enum UpAxis {
 }
 
 impl UpAxis {
-    fn label(&self) -> &str {
+    fn label<'a>(&self, i18n: &'a I18n) -> &'a str {
         match self {
-            UpAxis::YUp => "Y-Up / Z-Forward",
-            UpAxis::ZUp => "Z-Up / Y-Forward",
+            UpAxis::YUp => i18n.tr("option.y_up"),
+            UpAxis::ZUp => i18n.tr("option.z_up"),
         }
     }
 }
@@ -23,10 +24,10 @@ pub enum ScriptVersion {
 }
 
 impl ScriptVersion {
-    fn label(&self) -> &str {
+    fn label<'a>(&self, i18n: &'a I18n) -> &'a str {
         match self {
-            ScriptVersion::V1 => "V1 (Static Mesh)",
-            ScriptVersion::V2 => "V2 (Skinned Mesh + Animation)",
+            ScriptVersion::V1 => i18n.tr("option.v1"),
+            ScriptVersion::V2 => i18n.tr("option.v2"),
         }
     }
 }
@@ -62,11 +63,11 @@ impl Default for NormalizationConfig {
 }
 
 impl NormalizationConfig {
-    pub fn render_inspector(&mut self, ui: &mut egui::Ui) -> bool {
+    pub fn render_inspector(&mut self, ui: &mut egui::Ui, i18n: &I18n) -> bool {
         let mut changed = false;
 
         ui.horizontal(|ui| {
-            ui.label("目标单位比例:");
+            ui.label(i18n.tr("label.target_scale"));
             if ui
                 .add(
                     egui::DragValue::new(&mut self.target_scale)
@@ -81,18 +82,18 @@ impl NormalizationConfig {
 
         ui.add_space(4.0);
 
-        if egui::ComboBox::from_label("目标朝向")
-            .selected_text(self.up_axis.label())
+        if egui::ComboBox::from_label(i18n.tr("label.target_orientation"))
+            .selected_text(self.up_axis.label(i18n))
             .show_ui(ui, |ui| {
                 ui.selectable_value(
                     &mut self.up_axis,
                     UpAxis::YUp,
-                    UpAxis::YUp.label(),
+                    UpAxis::YUp.label(i18n),
                 );
                 ui.selectable_value(
                     &mut self.up_axis,
                     UpAxis::ZUp,
-                    UpAxis::ZUp.label(),
+                    UpAxis::ZUp.label(i18n),
                 );
             })
             .response
@@ -103,18 +104,18 @@ impl NormalizationConfig {
 
         ui.add_space(4.0);
 
-        if egui::ComboBox::from_label("脚本版本")
-            .selected_text(self.script_version.label())
+        if egui::ComboBox::from_label(i18n.tr("label.script_version"))
+            .selected_text(self.script_version.label(i18n))
             .show_ui(ui, |ui| {
                 ui.selectable_value(
                     &mut self.script_version,
                     ScriptVersion::V1,
-                    ScriptVersion::V1.label(),
+                    ScriptVersion::V1.label(i18n),
                 );
                 ui.selectable_value(
                     &mut self.script_version,
                     ScriptVersion::V2,
-                    ScriptVersion::V2.label(),
+                    ScriptVersion::V2.label(i18n),
                 );
             })
             .response
@@ -125,24 +126,35 @@ impl NormalizationConfig {
 
         ui.add_space(4.0);
 
-        ui.label(egui::RichText::new("清理策略").strong());
+        ui.label(
+            egui::RichText::new(i18n.tr("panel.cleanup_strategy")).strong(),
+        );
         if ui
-            .checkbox(&mut self.remove_unused_materials, "移除未使用材质")
+            .checkbox(
+                &mut self.remove_unused_materials,
+                i18n.tr("label.remove_unused_materials"),
+            )
             .changed()
         {
             changed = true;
         }
         if ui
-            .checkbox(&mut self.remove_cameras, "移除摄像机")
+            .checkbox(&mut self.remove_cameras, i18n.tr("label.remove_cameras"))
             .changed()
         {
             changed = true;
         }
-        if ui.checkbox(&mut self.remove_lights, "移除灯光").changed() {
+        if ui
+            .checkbox(&mut self.remove_lights, i18n.tr("label.remove_lights"))
+            .changed()
+        {
             changed = true;
         }
         if ui
-            .checkbox(&mut self.remove_loose_vertices, "移除孤立顶点")
+            .checkbox(
+                &mut self.remove_loose_vertices,
+                i18n.tr("label.remove_loose_vertices"),
+            )
             .changed()
         {
             changed = true;
@@ -150,21 +162,33 @@ impl NormalizationConfig {
 
         if self.script_version == ScriptVersion::V2 {
             ui.add_space(4.0);
-            ui.label(egui::RichText::new("骨骼与动画 (V2)").strong());
+            ui.label(
+                egui::RichText::new(i18n.tr("panel.bones_animation_v2"))
+                    .strong(),
+            );
             if ui
-                .checkbox(&mut self.correct_bone_axes, "骨骼轴向校正")
+                .checkbox(
+                    &mut self.correct_bone_axes,
+                    i18n.tr("label.correct_bone_axes"),
+                )
                 .changed()
             {
                 changed = true;
             }
             if ui
-                .checkbox(&mut self.preserve_leaf_bones, "保留末端骨骼")
+                .checkbox(
+                    &mut self.preserve_leaf_bones,
+                    i18n.tr("label.preserve_leaf_bones"),
+                )
                 .changed()
             {
                 changed = true;
             }
             if ui
-                .checkbox(&mut self.bake_animations, "烘焙动画关键帧")
+                .checkbox(
+                    &mut self.bake_animations,
+                    i18n.tr("label.bake_animations"),
+                )
                 .changed()
             {
                 changed = true;

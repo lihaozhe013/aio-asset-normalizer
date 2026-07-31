@@ -1,3 +1,4 @@
+use crate::modules::i18n::I18n;
 use crate::modules::preferences::FileTreePreferences;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -350,12 +351,16 @@ impl FileTree {
         }
     }
 
-    pub fn render(&mut self, ui: &mut egui::Ui) -> (bool, Option<PathBuf>) {
+    pub fn render(
+        &mut self,
+        ui: &mut egui::Ui,
+        i18n: &I18n,
+    ) -> (bool, Option<PathBuf>) {
         let mut prefs_changed = false;
         let mut preview_glb: Option<PathBuf> = None;
 
         if self.root.is_none() {
-            self.render_open_prompt(ui);
+            self.render_open_prompt(ui, i18n);
             return (prefs_changed, None);
         }
 
@@ -364,16 +369,16 @@ impl FileTree {
             .as_ref()
             .and_then(|r| r.file_name())
             .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| "项目".to_owned());
+            .unwrap_or_else(|| i18n.tr("label.default_project").to_owned());
 
         ui.horizontal(|ui| {
             ui.heading(&root_name);
-            if ui.button("切换目录").clicked() {
+            if ui.button(i18n.tr("button.switch_directory")).clicked() {
                 if let Some(folder) = rfd::FileDialog::new().pick_folder() {
                     self.open_folder(folder);
                 }
             }
-            if ui.button("刷新").clicked() {
+            if ui.button(i18n.tr("button.refresh")).clicked() {
                 self.refresh();
             }
         });
@@ -383,36 +388,41 @@ impl FileTree {
         let total = self.total_file_count();
         if total > 0 {
             ui.horizontal(|ui| {
-                if ui.button("全选").clicked() {
+                if ui.button(i18n.tr("button.select_all")).clicked() {
                     self.select_all();
                 }
-                if ui.button("取消全选").clicked() {
+                if ui.button(i18n.tr("button.deselect_all")).clicked() {
                     self.deselect_all();
                 }
-                if ui.button("反选").clicked() {
+                if ui.button(i18n.tr("button.invert_selection")).clicked() {
                     self.invert_selection();
                 }
             });
-            ui.label(format!(
-                "已选 {} / 共 {} 个文件",
-                self.selected.len(),
-                total
+            ui.label(i18n.text(
+                "files.selected",
+                &[
+                    ("selected", self.selected.len().to_string()),
+                    ("total", total.to_string()),
+                ],
             ));
         } else {
-            ui.label(egui::RichText::new("未发现支持的文件").weak());
+            ui.label(egui::RichText::new(i18n.tr("files.no_supported")).weak());
         }
 
         ui.separator();
 
         let mut show_all = self.show_all_files;
-        if ui.checkbox(&mut show_all, "显示所有文件").changed() {
+        if ui
+            .checkbox(&mut show_all, i18n.tr("label.show_all_files"))
+            .changed()
+        {
             self.show_all_files = show_all;
             prefs_changed = true;
             self.rescan();
         }
         if self.show_all_files {
             ui.label(
-                egui::RichText::new("灰色条目为非支持格式，不可选择")
+                egui::RichText::new(i18n.tr("label.unsupported_files_hint"))
                     .small()
                     .weak(),
             );
@@ -461,7 +471,10 @@ impl FileTree {
                                     }
                                 }
                                 if Self::is_glb(&item.path) {
-                                    if ui.small_button("预览").clicked() {
+                                    if ui
+                                        .small_button(i18n.tr("button.preview"))
+                                        .clicked()
+                                    {
                                         preview_glb = Some(item.path.clone());
                                     }
                                 }
@@ -485,12 +498,14 @@ impl FileTree {
         (prefs_changed, preview_glb)
     }
 
-    fn render_open_prompt(&mut self, ui: &mut egui::Ui) {
+    fn render_open_prompt(&mut self, ui: &mut egui::Ui, i18n: &I18n) {
         ui.vertical_centered(|ui| {
             ui.add_space(20.0);
-            ui.label(egui::RichText::new("打开文件夹以浏览资产").weak());
+            ui.label(
+                egui::RichText::new(i18n.tr("label.open_folder_hint")).weak(),
+            );
             ui.add_space(8.0);
-            if ui.button("打开文件夹").clicked() {
+            if ui.button(i18n.tr("button.open_folder")).clicked() {
                 if let Some(folder) = rfd::FileDialog::new().pick_folder() {
                     self.open_folder(folder);
                 }

@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use three_d::egui;
 
+use crate::modules::i18n::I18n;
 use crate::modules::skeleton::Skeleton;
 
 const INDENT: f32 = 16.0;
@@ -10,17 +11,24 @@ const ARROW_OFFSET: f32 = 16.0;
 const OPEN_STATE_KEY: &str = "bone_tree_open_state";
 const OPEN_STATE_VERSION_KEY: &str = "bone_tree_open_state_version";
 
-pub fn render_bone_tree(ui: &mut egui::Ui, skeleton: &mut Skeleton) {
+pub fn render_bone_tree(
+    ui: &mut egui::Ui,
+    skeleton: &mut Skeleton,
+    i18n: &I18n,
+) {
     let root_bones: Vec<usize> = (0..skeleton.bones.len())
         .filter(|&i| skeleton.bones[i].parent_index.is_none())
         .collect();
 
     if root_bones.is_empty() {
-        ui.label("No skeleton data");
+        ui.label(i18n.tr("label.no_skeleton_data"));
         return;
     }
 
-    ui.label(format!("{} bones", skeleton.bones.len()));
+    ui.label(i18n.text(
+        "bones.count",
+        &[("count", skeleton.bones.len().to_string())],
+    ));
 
     let open_state_key = egui::Id::new(OPEN_STATE_KEY);
     let version_key = egui::Id::new(OPEN_STATE_VERSION_KEY);

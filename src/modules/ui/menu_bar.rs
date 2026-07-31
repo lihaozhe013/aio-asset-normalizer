@@ -1,3 +1,4 @@
+use crate::modules::i18n::{I18n, LanguagePreference};
 use three_d::egui;
 
 pub enum MenuAction {
@@ -12,11 +13,14 @@ pub enum MenuAction {
     ToggleBones,
     OpenPreferences,
     About,
+    SetLanguage(LanguagePreference),
     Quit,
 }
 
 pub fn render(
     ui: &mut egui::Ui,
+    i18n: &I18n,
+    language_preference: LanguagePreference,
     show_grid: bool,
     show_axes: bool,
     show_origin: bool,
@@ -28,45 +32,64 @@ pub fn render(
         .inner_margin(egui::Margin::symmetric(6, 2))
         .show(ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
-                ui.menu_button("File", |ui| {
-                    if ui.button("Import Files...    Ctrl+O").clicked() {
+                ui.menu_button(i18n.tr("menu.file"), |ui| {
+                    if ui
+                        .button(format!(
+                            "{}    Ctrl+O",
+                            i18n.tr("menu.import_files")
+                        ))
+                        .clicked()
+                    {
                         actions.push(MenuAction::ImportFiles);
                         ui.close();
                     }
-                    if ui.button("Import Folder...   Ctrl+Shift+O").clicked() {
+                    if ui
+                        .button(format!(
+                            "{}   Ctrl+Shift+O",
+                            i18n.tr("menu.import_folder")
+                        ))
+                        .clicked()
+                    {
                         actions.push(MenuAction::ImportFolder);
                         ui.close();
                     }
                     ui.separator();
-                    if ui.button("Clear File List").clicked() {
+                    if ui.button(i18n.tr("menu.clear_file_list")).clicked() {
                         actions.push(MenuAction::ClearFileList);
                         ui.close();
                     }
                     ui.separator();
-                    if ui.button("Quit               Ctrl+Q").clicked() {
+                    if ui
+                        .button(format!(
+                            "{}               Ctrl+Q",
+                            i18n.tr("menu.quit")
+                        ))
+                        .clicked()
+                    {
                         actions.push(MenuAction::Quit);
                         ui.close();
                     }
                 });
 
-                ui.menu_button("Edit", |ui| {
-                    if ui.button("Preferences...").clicked() {
+                ui.menu_button(i18n.tr("menu.edit"), |ui| {
+                    if ui.button(i18n.tr("menu.preferences")).clicked() {
                         actions.push(MenuAction::OpenPreferences);
                         ui.close();
                     }
                     ui.separator();
-                    if ui.button("Reset All to Defaults").clicked() {
+                    if ui.button(i18n.tr("menu.reset_defaults")).clicked() {
                         actions.push(MenuAction::ResetConfig);
                         ui.close();
                     }
                 });
 
-                ui.menu_button("View", |ui| {
+                ui.menu_button(i18n.tr("menu.view"), |ui| {
                     let check = |b: bool| if b { "[x]" } else { "[ ]" };
                     if ui
                         .button(format!(
-                            "{} Show Grid         Ctrl+G",
-                            check(show_grid)
+                            "{} {}         Ctrl+G",
+                            check(show_grid),
+                            i18n.tr("menu.show_grid")
                         ))
                         .clicked()
                     {
@@ -75,8 +98,9 @@ pub fn render(
                     }
                     if ui
                         .button(format!(
-                            "{} Show Axes         Ctrl+A",
-                            check(show_axes)
+                            "{} {}         Ctrl+A",
+                            check(show_axes),
+                            i18n.tr("menu.show_axes")
                         ))
                         .clicked()
                     {
@@ -84,7 +108,11 @@ pub fn render(
                         ui.close();
                     }
                     if ui
-                        .button(format!("{} Show Origin", check(show_origin)))
+                        .button(format!(
+                            "{} {}",
+                            check(show_origin),
+                            i18n.tr("menu.show_origin")
+                        ))
                         .clicked()
                     {
                         actions.push(MenuAction::ToggleOrigin);
@@ -92,8 +120,9 @@ pub fn render(
                     }
                     if ui
                         .button(format!(
-                            "{} Show Bones        Ctrl+B",
-                            check(show_bones)
+                            "{} {}        Ctrl+B",
+                            check(show_bones),
+                            i18n.tr("menu.show_bones")
                         ))
                         .clicked()
                     {
@@ -101,14 +130,37 @@ pub fn render(
                         ui.close();
                     }
                     ui.separator();
-                    if ui.button("Reset Camera      Ctrl+R").clicked() {
+                    if ui
+                        .button(format!(
+                            "{}      Ctrl+R",
+                            i18n.tr("menu.reset_camera")
+                        ))
+                        .clicked()
+                    {
                         actions.push(MenuAction::ResetCamera);
                         ui.close();
                     }
                 });
 
-                ui.menu_button("Help", |ui| {
-                    if ui.button("About AIO Asset Normalizer").clicked() {
+                ui.menu_button(i18n.tr("menu.language"), |ui| {
+                    for preference in [
+                        LanguagePreference::Auto,
+                        LanguagePreference::English,
+                        LanguagePreference::Chinese,
+                    ] {
+                        let selected = language_preference == preference;
+                        if ui
+                            .selectable_label(selected, preference.label(i18n))
+                            .clicked()
+                        {
+                            actions.push(MenuAction::SetLanguage(preference));
+                            ui.close();
+                        }
+                    }
+                });
+
+                ui.menu_button(i18n.tr("menu.help"), |ui| {
+                    if ui.button(i18n.tr("menu.about")).clicked() {
                         actions.push(MenuAction::About);
                         ui.close();
                     }

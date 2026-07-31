@@ -1,9 +1,13 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+use super::i18n::LanguagePreference;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserPreferences {
     pub version: u32,
+    #[serde(default)]
+    pub language: LanguagePreference,
     #[serde(default)]
     pub blender_path: Option<String>,
     #[serde(default)]
