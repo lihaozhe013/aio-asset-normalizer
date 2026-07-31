@@ -19,5 +19,10 @@ dirs = "5"
 rfd = "0.15"
 arboard = "3"
 open = "5"
+image = { version = "0.25", default-features = false, features = ["png"] }
+winit = "0.28"
 
 three-d-asset = { version = "0.10", features = ["gltf", "image"] }
+
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1"

@@ -2,6 +2,7 @@
 
 mod app;
 mod modules;
+mod window;
 
 use app::App;
 use three_d::*;
@@ -9,14 +10,7 @@ use three_d::*;
 fn main() {
     let prefs = modules::preferences::load();
 
-    let window = Window::new(WindowSettings {
-        title: "AIO Asset Normalizer".to_string(),
-        min_size: (1024, 600),
-        max_size: None,
-        initial_size: Some((1200, 750)),
-        ..Default::default()
-    })
-    .expect("Failed to create window");
+    let window = window::create().expect("Failed to create window");
 
     let context = window.gl();
     let mut gui = three_d::GUI::new(&context);
