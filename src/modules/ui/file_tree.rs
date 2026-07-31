@@ -371,69 +371,85 @@ impl FileTree {
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| i18n.tr("label.default_project").to_owned());
 
-        ui.horizontal(|ui| {
-            ui.heading(&root_name);
-            if ui.button(i18n.tr("button.switch_directory")).clicked() {
-                if let Some(folder) = rfd::FileDialog::new().pick_folder() {
-                    self.open_folder(folder);
-                }
-            }
-            if ui.button(i18n.tr("button.refresh")).clicked() {
-                self.refresh();
-            }
-        });
-
-        ui.separator();
-
-        let total = self.total_file_count();
-        if total > 0 {
-            ui.horizontal(|ui| {
-                if ui.button(i18n.tr("button.select_all")).clicked() {
-                    self.select_all();
-                }
-                if ui.button(i18n.tr("button.deselect_all")).clicked() {
-                    self.deselect_all();
-                }
-                if ui.button(i18n.tr("button.invert_selection")).clicked() {
-                    self.invert_selection();
-                }
-            });
-            ui.label(i18n.text(
-                "files.selected",
-                &[
-                    ("selected", self.selected.len().to_string()),
-                    ("total", total.to_string()),
-                ],
-            ));
-        } else {
-            ui.label(egui::RichText::new(i18n.tr("files.no_supported")).weak());
-        }
-
-        ui.separator();
-
-        let mut show_all = self.show_all_files;
-        if ui
-            .checkbox(&mut show_all, i18n.tr("label.show_all_files"))
-            .changed()
-        {
-            self.show_all_files = show_all;
-            prefs_changed = true;
-            self.rescan();
-        }
-        if self.show_all_files {
-            ui.label(
-                egui::RichText::new(i18n.tr("label.unsupported_files_hint"))
-                    .small()
-                    .weak(),
-            );
-        }
-
-        let visible = self.collect_visible();
         let mut load_requests: Vec<PathBuf> = Vec::new();
 
-        egui::ScrollArea::vertical()
+        egui::ScrollArea::both()
             .auto_shrink([false; 2])
             .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new(&root_name).strong().size(14.0),
+                    );
+                });
+
+                ui.horizontal(|ui| {
+                    if ui.button(i18n.tr("button.switch_directory")).clicked() {
+                        if let Some(folder) =
+                            rfd::FileDialog::new().pick_folder()
+                        {
+                            self.open_folder(folder);
+                        }
+                    }
+                    if ui.button(i18n.tr("button.refresh")).clicked() {
+                        self.refresh();
+                    }
+                });
+
+                ui.separator();
+
+                let total = self.total_file_count();
+                if total > 0 {
+                    ui.horizontal(|ui| {
+                        if ui.button(i18n.tr("button.select_all")).clicked() {
+                            self.select_all();
+                        }
+                        if ui.button(i18n.tr("button.deselect_all")).clicked() {
+                            self.deselect_all();
+                        }
+                        if ui
+                            .button(i18n.tr("button.invert_selection"))
+                            .clicked()
+                        {
+                            self.invert_selection();
+                        }
+                    });
+                    ui.label(i18n.text(
+                        "files.selected",
+                        &[
+                            ("selected", self.selected.len().to_string()),
+                            ("total", total.to_string()),
+                        ],
+                    ));
+                } else {
+                    ui.label(
+                        egui::RichText::new(i18n.tr("files.no_supported"))
+                            .weak(),
+                    );
+                }
+
+                ui.separator();
+
+                let mut show_all = self.show_all_files;
+                if ui
+                    .checkbox(&mut show_all, i18n.tr("label.show_all_files"))
+                    .changed()
+                {
+                    self.show_all_files = show_all;
+                    prefs_changed = true;
+                    self.rescan();
+                }
+                if self.show_all_files {
+                    ui.label(
+                        egui::RichText::new(
+                            i18n.tr("label.unsupported_files_hint"),
+                        )
+                        .small()
+                        .weak(),
+                    );
+                }
+
+                let visible = self.collect_visible();
+
                 for item in &visible {
                     if item.is_dir {
                         let header = egui::CollapsingHeader::new(&item.name)
@@ -488,6 +504,7 @@ impl FileTree {
                 }
             });
 
+        let show_all = self.show_all_files;
         for path in &load_requests {
             if let Some(entry) = self.find_entry_mut(path) {
                 let children = Self::scan_dir(path, 1, show_all);

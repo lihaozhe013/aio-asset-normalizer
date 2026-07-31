@@ -46,7 +46,7 @@ pub fn render_ui(
     Panel::left("file_tree")
         .resizable(true)
         .default_size(250.0)
-        .min_size(160.0)
+        .min_size(60.0)
         .show_inside(ui, |ui| {
             let (prefs_changed, preview_path) =
                 app.file_tree.render(ui, &app.i18n);
