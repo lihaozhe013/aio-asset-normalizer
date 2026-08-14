@@ -71,8 +71,8 @@ impl OrbitCamera {
                 Event::MouseMotion { delta, .. } => {
                     if self.rotating {
                         let sensitivity = 0.005;
-                        self.theta -= delta.0 as f32 * sensitivity;
-                        self.phi -= delta.1 as f32 * sensitivity;
+                        self.theta -= delta.0 * sensitivity;
+                        self.phi -= delta.1 * sensitivity;
                         self.phi =
                             self.phi.clamp(0.05, std::f32::consts::PI - 0.05);
                         self.update_camera_view();
@@ -83,8 +83,8 @@ impl OrbitCamera {
                             (self.target - self.camera_position()).normalize();
                         let right = forward.cross(vec3(0.0, 1.0, 0.0));
                         let up = right.cross(forward);
-                        self.target -= right * (delta.0 as f32 * sensitivity);
-                        self.target += up * (delta.1 as f32 * sensitivity);
+                        self.target -= right * (delta.0 * sensitivity);
+                        self.target += up * (delta.1 * sensitivity);
                         self.update_camera_view();
                     }
                 }
@@ -100,7 +100,7 @@ impl OrbitCamera {
                     // distance produces the same proportional change
                     // regardless of zoom level -- fine control when zoomed
                     // in, quick traversal when zoomed out.
-                    let notches = delta.1 as f32 / 24.0;
+                    let notches = delta.1 / 24.0;
                     let zoom_per_notch: f32 = 0.95;
                     self.radius *= zoom_per_notch.powf(notches);
                     self.radius =

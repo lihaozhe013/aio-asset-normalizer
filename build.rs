@@ -1,6 +1,4 @@
 fn main() {
-    println!("cargo:rerun-if-changed=blender_scripts/normalize_v1.py");
-
     #[cfg(windows)]
     {
         println!("cargo:rerun-if-changed=assets/icon/aio-asset-normalizer.ico");

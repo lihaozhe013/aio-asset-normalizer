@@ -1,5 +1,7 @@
 use crate::modules::i18n::I18n;
 use crate::modules::preferences::LogViewerPreferences;
+use std::fs::OpenOptions;
+use std::io::Write;
 use three_d::egui;
 
 pub struct LogViewer {
@@ -17,6 +19,13 @@ impl LogViewer {
 
     pub fn append(&mut self, line: &str) {
         self.entries.push(line.to_owned());
+        if let Ok(mut file) = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("debug.log")
+        {
+            let _ = writeln!(file, "{line}");
+        }
     }
 
     pub fn clear(&mut self) {

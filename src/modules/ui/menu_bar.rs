@@ -1,56 +1,66 @@
-use crate::modules::i18n::{I18n, LanguagePreference};
+use crate::modules::i18n::I18n;
 use three_d::egui;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Page {
+    GlbEditor,
+    BvhStudio,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MenuAction {
-    ImportFiles,
-    ImportFolder,
+    ImportGlb,
+    ImportBvh,
+    ImportMapping,
+    Save,
+    Export,
+    ExportBvhGlb,
+    ExportBvhAnimationClip,
     ClearFileList,
-    ResetConfig,
     ResetCamera,
     ToggleGrid,
     ToggleAxes,
     ToggleOrigin,
-    ToggleBones,
-    OpenPreferences,
+    OpenGlbEditor,
+    OpenBvhStudio,
     About,
-    SetLanguage(LanguagePreference),
+    SetLanguage(crate::modules::i18n::LanguagePreference),
     Quit,
 }
 
 pub fn render(
     ui: &mut egui::Ui,
     i18n: &I18n,
-    language_preference: LanguagePreference,
+    page: Page,
     show_grid: bool,
     show_axes: bool,
     show_origin: bool,
-    show_bones: bool,
 ) -> Vec<MenuAction> {
     let mut actions = Vec::new();
-
     egui::Frame::NONE
         .inner_margin(egui::Margin::symmetric(6, 2))
         .show(ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button(i18n.tr("menu.file"), |ui| {
-                    if ui
-                        .button(format!(
-                            "{}    Ctrl+O",
-                            i18n.tr("menu.import_files")
-                        ))
-                        .clicked()
-                    {
-                        actions.push(MenuAction::ImportFiles);
+                    if ui.button(i18n.tr("menu.import_glb")).clicked() {
+                        actions.push(MenuAction::ImportGlb);
                         ui.close();
                     }
-                    if ui
-                        .button(format!(
-                            "{}   Ctrl+Shift+O",
-                            i18n.tr("menu.import_folder")
-                        ))
-                        .clicked()
-                    {
-                        actions.push(MenuAction::ImportFolder);
+                    if ui.button(i18n.tr("menu.import_bvh")).clicked() {
+                        actions.push(MenuAction::ImportBvh);
+                        ui.close();
+                    }
+                    if ui.button(i18n.tr("menu.import_mapping")).clicked() {
+                        actions.push(MenuAction::ImportMapping);
+                        ui.close();
+                    }
+                    ui.separator();
+                    if ui.button(i18n.tr("menu.save")).clicked() {
+                        actions.push(MenuAction::Save);
+                        ui.close();
+                    }
+                    if ui.button(i18n.tr("menu.export")).clicked() {
+                        actions.push(MenuAction::Export);
                         ui.close();
                     }
                     ui.separator();
@@ -58,37 +68,40 @@ pub fn render(
                         actions.push(MenuAction::ClearFileList);
                         ui.close();
                     }
-                    ui.separator();
-                    if ui
-                        .button(format!(
-                            "{}               Ctrl+Q",
-                            i18n.tr("menu.quit")
-                        ))
-                        .clicked()
-                    {
+                    if ui.button(i18n.tr("menu.quit")).clicked() {
                         actions.push(MenuAction::Quit);
                         ui.close();
                     }
                 });
 
-                ui.menu_button(i18n.tr("menu.edit"), |ui| {
-                    if ui.button(i18n.tr("menu.preferences")).clicked() {
-                        actions.push(MenuAction::OpenPreferences);
+                ui.menu_button(i18n.tr("menu.page"), |ui| {
+                    if ui
+                        .selectable_label(
+                            page == Page::GlbEditor,
+                            i18n.tr("page.glb_editor"),
+                        )
+                        .clicked()
+                    {
+                        actions.push(MenuAction::OpenGlbEditor);
                         ui.close();
                     }
-                    ui.separator();
-                    if ui.button(i18n.tr("menu.reset_defaults")).clicked() {
-                        actions.push(MenuAction::ResetConfig);
+                    if ui
+                        .selectable_label(
+                            page == Page::BvhStudio,
+                            i18n.tr("page.bvh_studio"),
+                        )
+                        .clicked()
+                    {
+                        actions.push(MenuAction::OpenBvhStudio);
                         ui.close();
                     }
                 });
 
                 ui.menu_button(i18n.tr("menu.view"), |ui| {
-                    let check = |b: bool| if b { "[x]" } else { "[ ]" };
                     if ui
                         .button(format!(
-                            "{} {}         Ctrl+G",
-                            check(show_grid),
+                            "[{}] {}",
+                            if show_grid { "x" } else { " " },
                             i18n.tr("menu.show_grid")
                         ))
                         .clicked()
@@ -98,8 +111,8 @@ pub fn render(
                     }
                     if ui
                         .button(format!(
-                            "{} {}         Ctrl+A",
-                            check(show_axes),
+                            "[{}] {}",
+                            if show_axes { "x" } else { " " },
                             i18n.tr("menu.show_axes")
                         ))
                         .clicked()
@@ -109,8 +122,8 @@ pub fn render(
                     }
                     if ui
                         .button(format!(
-                            "{} {}",
-                            check(show_origin),
+                            "[{}] {}",
+                            if show_origin { "x" } else { " " },
                             i18n.tr("menu.show_origin")
                         ))
                         .clicked()
@@ -118,25 +131,7 @@ pub fn render(
                         actions.push(MenuAction::ToggleOrigin);
                         ui.close();
                     }
-                    if ui
-                        .button(format!(
-                            "{} {}        Ctrl+B",
-                            check(show_bones),
-                            i18n.tr("menu.show_bones")
-                        ))
-                        .clicked()
-                    {
-                        actions.push(MenuAction::ToggleBones);
-                        ui.close();
-                    }
-                    ui.separator();
-                    if ui
-                        .button(format!(
-                            "{}      Ctrl+R",
-                            i18n.tr("menu.reset_camera")
-                        ))
-                        .clicked()
-                    {
+                    if ui.button(i18n.tr("menu.reset_camera")).clicked() {
                         actions.push(MenuAction::ResetCamera);
                         ui.close();
                     }
@@ -144,13 +139,15 @@ pub fn render(
 
                 ui.menu_button(i18n.tr("menu.language"), |ui| {
                     for preference in [
-                        LanguagePreference::Auto,
-                        LanguagePreference::English,
-                        LanguagePreference::Chinese,
+                        crate::modules::i18n::LanguagePreference::Auto,
+                        crate::modules::i18n::LanguagePreference::English,
+                        crate::modules::i18n::LanguagePreference::Chinese,
                     ] {
-                        let selected = language_preference == preference;
                         if ui
-                            .selectable_label(selected, preference.label(i18n))
+                            .selectable_label(
+                                i18n.preference() == preference,
+                                preference.label(i18n),
+                            )
                             .clicked()
                         {
                             actions.push(MenuAction::SetLanguage(preference));
@@ -167,6 +164,5 @@ pub fn render(
                 });
             });
         });
-
     actions
 }

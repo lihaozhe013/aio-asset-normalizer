@@ -2,14 +2,12 @@
 name = "aio-asset-normalizer"
 version = "0.1.0"
 edition = "2021"
-description = "All-in-One 3D Asset Normalizer - 开源3D资产批处理与标准化桌面工具"
+description = "A cross-platform GLB editor and generic BVH motion standardization tool"
 license = "MIT"
 authors = []
 
 [dependencies]
 three-d = { version = "0.19", features = ["egui-gui"] }
-egui = "0.34"
-eframe = "0.34"
 gltf = { version = "1.4", features = ["KHR_lights_punctual", "extensions", "names"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

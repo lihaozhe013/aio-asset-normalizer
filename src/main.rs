@@ -94,25 +94,6 @@ fn main() {
             );
         }
 
-        if app.canvas.show_bones {
-            for stick in &app.canvas.bone_sticks {
-                clear_rt = clear_rt.render_partially(
-                    viewport.into(),
-                    &app.camera.camera,
-                    stick,
-                    &[],
-                );
-            }
-            if let Some(ref joints) = app.canvas.bone_joints {
-                clear_rt = clear_rt.render_partially(
-                    viewport.into(),
-                    &app.camera.camera,
-                    joints,
-                    &[],
-                );
-            }
-        }
-
         clear_rt.write(|| gui.render()).unwrap();
 
         FrameOutput {

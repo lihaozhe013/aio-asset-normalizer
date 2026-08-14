@@ -9,15 +9,11 @@ pub struct UserPreferences {
     #[serde(default)]
     pub language: LanguagePreference,
     #[serde(default)]
-    pub blender_path: Option<String>,
-    #[serde(default)]
     pub view: ViewPreferences,
     #[serde(default)]
     pub file_tree: FileTreePreferences,
     #[serde(default)]
     pub log_viewer: LogViewerPreferences,
-    #[serde(default)]
-    pub conversion: ConversionPreferences,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -25,7 +21,6 @@ pub struct ViewPreferences {
     pub show_grid: bool,
     pub show_axes: bool,
     pub show_origin: bool,
-    pub show_bones: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -37,20 +32,6 @@ pub struct FileTreePreferences {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct LogViewerPreferences {
     pub auto_scroll: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct ConversionPreferences {
-    pub target_scale: f32,
-    pub up_axis: String,
-    pub script_version: String,
-    pub remove_unused_materials: bool,
-    pub remove_cameras: bool,
-    pub remove_lights: bool,
-    pub remove_loose_vertices: bool,
-    pub correct_bone_axes: bool,
-    pub preserve_leaf_bones: bool,
-    pub bake_animations: bool,
 }
 
 pub fn load() -> UserPreferences {

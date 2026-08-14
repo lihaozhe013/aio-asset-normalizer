@@ -48,17 +48,6 @@ impl FileTree {
         std::mem::replace(&mut self.root_changed, false)
     }
 
-    pub fn selected_files(&self) -> Vec<PathBuf> {
-        let mut files: Vec<PathBuf> = self
-            .selected
-            .iter()
-            .filter(|p| Self::is_supported(p))
-            .cloned()
-            .collect();
-        files.sort();
-        files
-    }
-
     pub fn root(&self) -> Option<&PathBuf> {
         self.root.as_ref()
     }
@@ -106,23 +95,6 @@ impl FileTree {
         if let Some(ref root) = self.root.clone() {
             self.root_entries =
                 Some(Self::scan_dir(root, 2, self.show_all_files));
-        }
-    }
-
-    pub fn refresh_open_dirs(&mut self) {
-        let show_all = self.show_all_files;
-        if let Some(ref root) = self.root.clone() {
-            self.root_entries = Some(Self::scan_dir(root, 2, show_all));
-        }
-        let open_dirs: Vec<PathBuf> = self.open_dirs.iter().cloned().collect();
-        for dir in &open_dirs {
-            if !dir.exists() {
-                continue;
-            }
-            if let Some(entry) = self.find_entry_mut(dir) {
-                let children = Self::scan_dir(dir, 1, show_all);
-                entry.children = Some(children);
-            }
         }
     }
 
@@ -199,8 +171,6 @@ impl FileTree {
                 } else {
                     Some(sub)
                 }
-            } else if is_dir {
-                None
             } else {
                 None
             };
@@ -222,15 +192,10 @@ impl FileTree {
         entries
     }
 
-    fn is_supported(path: &Path) -> bool {
+    pub fn is_supported(path: &Path) -> bool {
         path.extension()
             .and_then(|e| e.to_str())
-            .map(|e| {
-                matches!(
-                    e.to_lowercase().as_str(),
-                    "fbx" | "blend" | "obj" | "glb"
-                )
-            })
+            .map(|e| e.eq_ignore_ascii_case("glb"))
             .unwrap_or(false)
     }
 
@@ -486,13 +451,12 @@ impl FileTree {
                                         self.selected.remove(&item.path);
                                     }
                                 }
-                                if Self::is_glb(&item.path) {
-                                    if ui
+                                if Self::is_glb(&item.path)
+                                    && ui
                                         .small_button(i18n.tr("button.preview"))
                                         .clicked()
-                                    {
-                                        preview_glb = Some(item.path.clone());
-                                    }
+                                {
+                                    preview_glb = Some(item.path.clone());
                                 }
                             } else {
                                 ui.label(

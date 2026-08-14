@@ -5,20 +5,17 @@ use serde::{Deserialize, Serialize};
 const EN_US: &str = include_str!("../../assets/locales/en-US.yaml");
 const ZH_CN: &str = include_str!("../../assets/locales/zh-CN.yaml");
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(
+    Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq,
+)]
 pub enum LanguagePreference {
     #[serde(rename = "auto")]
+    #[default]
     Auto,
     #[serde(rename = "en-US")]
     English,
     #[serde(rename = "zh-CN")]
     Chinese,
-}
-
-impl Default for LanguagePreference {
-    fn default() -> Self {
-        Self::Auto
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,7 +33,7 @@ impl LanguagePreference {
         }
     }
 
-    pub fn label<'a>(self, i18n: &'a I18n) -> &'a str {
+    pub fn label(self, i18n: &I18n) -> &str {
         match self {
             Self::Auto => i18n.tr("preferences.language_system_default"),
             Self::English => i18n.tr("preferences.language_english"),

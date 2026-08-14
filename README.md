@@ -111,7 +111,7 @@ The complete design, interfaces, migration boundaries, acceptance criteria, and 
 
 ## Current Status
 
-The repository still contains the old Blender converter and early preview implementation. They are retained only as migration references and do not represent the final architecture. The implementation stages will progressively remove the Blender bridge, legacy conversion settings, old scripts, and model-specific logic.
+The application now builds without the Blender bridge or legacy format scripts. The GLB Editor has a pure-Rust document layer with GLB validation, scene indexing, root transforms, animation keyframe trimming, and atomic export. BVH Studio has generic hierarchy parsing, frame trimming, versioned Mapping JSON loading, Rest Pose delta retargeting, and Character Package / Animation Clip GLB export. Texture replacement, skeleton overlays, key reduction, and broader fixture validation remain planned work.
 
 ## Development Verification
 

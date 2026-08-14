@@ -353,3 +353,18 @@ The project must build without warnings, all unit tests must pass, and generated
 - Source files are not overwritten by default; all outputs are saved to a user-selected path.
 - Reused `zl_mocap` code must have appropriate authorization and comply with its applicable license.
 - When a task is completed, remove its pending entry from the relevant `docs/` planning document instead of leaving a completed checkbox.
+
+## 12. Implementation Checkpoint
+
+The first implementation slice is now in place:
+
+- the executable no longer compiles or invokes the Blender bridge;
+- the GLB Editor has pure-Rust GLB validation, indexing, root transforms,
+  animation keyframe trimming, and atomic export;
+- BVH Studio has generic hierarchy parsing, frame trimming, versioned Mapping
+  JSON loading, Rest Pose delta retargeting, and Character Package / Animation
+  Clip GLB export;
+- the existing egui and three-d Canvas infrastructure remains the preview
+  foundation;
+- PBR replacement, skeleton overlays, key reduction, and broader fixture
+  validation remain the next implementation slice.
