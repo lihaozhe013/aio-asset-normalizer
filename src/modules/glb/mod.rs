@@ -16,6 +16,8 @@ mod resources;
 pub use self::resources::{PrimitiveTarget, TextureSlot};
 
 mod animation;
+mod animation_runtime;
+pub use animation_runtime::{AnimationClip, AnimationRuntime};
 
 #[derive(Debug)]
 pub enum GlbError {

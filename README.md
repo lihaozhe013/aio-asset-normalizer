@@ -5,7 +5,7 @@ A pure-Rust 3D asset standardization tool for indie game developers and independ
 The project is undergoing a complete redesign. It is moving away from a Blender-dependent multi-format converter and becoming a desktop tool focused exclusively on `.glb` assets. The new product will provide:
 
 - GLB editing, preview, and standardized export;
-- animation clip trimming and timeline editing;
+- animation clip playback, timeline controls, trimming, and export;
 - Mesh material and PBR texture replacement;
 - BVH playback, trimming, generic skeleton mapping, and GLB animation export;
 - reusable Mapping files for different motion-capture systems and character models.
@@ -26,6 +26,8 @@ The project is undergoing a complete redesign. It is moving away from a Blender-
 The main page edits existing GLB files instead of converting between formats.
 
 - Load, inspect, and preview scenes, nodes, Meshes, materials, Skins, skeletons, and animations.
+- Play standard GLB node and Skinned Mesh animations with pause, looping, speed, seeking, and frame stepping.
+- Support `STEP` and `LINEAR` animation sampling; unsupported CUBICSPLINE and Morph Target clips are reported explicitly.
 - Adjust model orientation with XYZ `±90°` shortcuts and precise Euler input.
 - Trim animation clips by start and end time and rebuild the timeline.
 - Replace Base Color, Normal, Metallic-Roughness, Occlusion, and Emissive textures.
@@ -111,9 +113,9 @@ The complete design, interfaces, migration boundaries, acceptance criteria, and 
 
 ## Current Status
 
-The application builds without the Blender bridge or legacy format scripts. The GLB Editor has a pure-Rust document layer with GLB validation, scene indexing, root transforms, interpolated animation trimming, PNG/JPEG PBR texture replacement, shared-material duplication, and atomic reparse-validated export. BVH Studio has generic hierarchy parsing, frame trimming, Mapping JSON validation and saving, reviewed name-match suggestions, Rest Pose delta retargeting, frame-stepped skeleton playback, optional redundant-key reduction, and Character Package / Animation Clip GLB export.
+The application builds without the Blender bridge or legacy format scripts. The GLB Editor has a pure-Rust document layer with GLB validation, scene indexing, root transforms, interpolated animation trimming, runtime playback for node and Skinned Mesh animations, CPU skinning, PNG/JPEG PBR texture replacement, shared-material duplication, and atomic reparse-validated export. BVH Studio has generic hierarchy parsing, frame trimming, Mapping JSON validation and saving, reviewed name-match suggestions, Rest Pose delta retargeting, frame-stepped skeleton playback, optional redundant-key reduction, and Character Package / Animation Clip GLB export.
 
-The next engineering slice is complete standardization baking for mesh and Skinned data, followed by richer fixture coverage and optional compressed-geometry support. Root-motion and heading controls remain optional BVH enhancements, while skeleton replacement is intentionally reserved for a later release.
+The next engineering slice is complete standardization baking for mesh and Skinned data, followed by richer fixture coverage and optional compressed-geometry support. Root-motion and heading controls remain optional BVH enhancements, while GPU skinning, Morph Target playback, CUBICSPLINE sampling, and skeleton replacement are intentionally reserved for later releases.
 
 ## Development Verification
 

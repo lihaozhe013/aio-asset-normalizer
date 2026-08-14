@@ -49,6 +49,11 @@ pub struct App {
     pub trim_animation: usize,
     pub trim_start: f32,
     pub trim_end: f32,
+    pub glb_animation_index: usize,
+    pub glb_animation_time: f32,
+    pub glb_animation_playing: bool,
+    pub glb_animation_loop: bool,
+    pub glb_animation_speed: f32,
     pub texture_mesh: usize,
     pub texture_primitive: usize,
     pub texture_slot: TextureSlot,
@@ -65,6 +70,7 @@ pub struct App {
     pub(crate) task_busy: bool,
     last_frame_time: Instant,
     pub(crate) bvh_playback_accumulator: f32,
+    pub(crate) glb_animation_accumulator: f32,
     needs_reload: bool,
     needs_bvh_skeleton_reload: bool,
     pub(crate) needs_save: bool,
@@ -116,6 +122,11 @@ impl App {
             trim_animation: 0,
             trim_start: 0.0,
             trim_end: 1.0,
+            glb_animation_index: 0,
+            glb_animation_time: 0.0,
+            glb_animation_playing: false,
+            glb_animation_loop: true,
+            glb_animation_speed: 1.0,
             texture_mesh: 0,
             texture_primitive: 0,
             texture_slot: TextureSlot::BaseColor,
@@ -132,6 +143,7 @@ impl App {
             task_busy: false,
             last_frame_time: Instant::now(),
             bvh_playback_accumulator: 0.0,
+            glb_animation_accumulator: 0.0,
             needs_reload: false,
             needs_bvh_skeleton_reload: false,
             needs_save: false,
@@ -182,9 +194,10 @@ impl App {
         if self.needs_reload {
             self.needs_reload = false;
             let Some(path) = self.glb_path.clone() else {
-                self.canvas.model = None;
+                self.canvas.clear_glb();
                 self.canvas.clear_bvh_skeleton();
                 self.glb = None;
+                self.reset_glb_animation_state();
                 return;
             };
             let document = match self.glb.take() {
@@ -220,6 +233,19 @@ impl App {
                         Ok(()) => {
                             self.glb = Some(document);
                             self.camera.reset();
+                            self.reset_glb_animation_state();
+                            if let Some(index) =
+                                self.first_playable_glb_animation()
+                            {
+                                self.glb_animation_index = index;
+                                if let Err(error) =
+                                    self.update_glb_animation_preview()
+                                {
+                                    self.log.append(&format!(
+                                        "[glb_editor] Animation preview failed: {error}"
+                                    ));
+                                }
+                            }
                         }
                         Err(error) => {
                             self.glb = Some(document);
@@ -288,6 +314,30 @@ impl App {
                 }
             }
         }
+        if self.page == Page::GlbEditor && self.glb_animation_playing {
+            let duration = self.glb_animation_duration();
+            if duration > 0.0 {
+                self.glb_animation_accumulator +=
+                    elapsed.as_secs_f32() * self.glb_animation_speed.max(0.01);
+                self.glb_animation_time += self.glb_animation_accumulator;
+                self.glb_animation_accumulator = 0.0;
+                if self.glb_animation_loop {
+                    self.glb_animation_time =
+                        self.glb_animation_time.rem_euclid(duration);
+                } else if self.glb_animation_time >= duration {
+                    self.glb_animation_time = duration;
+                    self.glb_animation_playing = false;
+                }
+                if let Err(error) = self.update_glb_animation_preview() {
+                    self.glb_animation_playing = false;
+                    self.log.append(&format!(
+                        "[glb_editor] Animation playback failed: {error}"
+                    ));
+                }
+            } else {
+                self.glb_animation_playing = false;
+            }
+        }
         if elapsed.as_secs_f32() > 0.5 {
             self.last_frame_time = now;
         }
@@ -310,7 +360,8 @@ impl App {
                 self.file_tree.clear();
                 self.glb = None;
                 self.glb_path = None;
-                self.canvas.model = None;
+                self.canvas.clear_glb();
+                self.reset_glb_animation_state();
                 self.needs_save = true;
             }
             MenuAction::ResetCamera => self.camera.reset(),
@@ -801,5 +852,113 @@ impl App {
             preferences::save(&self.collect_preferences());
         }
         rect
+    }
+
+    pub(crate) fn glb_animation_entries(
+        &self,
+    ) -> Vec<(String, f32, bool, String)> {
+        self.canvas
+            .animation_clips()
+            .iter()
+            .map(|clip| {
+                (
+                    clip.name.clone(),
+                    clip.duration,
+                    clip.is_playable(),
+                    clip.unsupported.join(", "),
+                )
+            })
+            .collect()
+    }
+
+    pub(crate) fn glb_animation_duration(&self) -> f32 {
+        self.canvas
+            .animation_clips()
+            .get(self.glb_animation_index)
+            .map(|clip| clip.duration)
+            .unwrap_or(0.0)
+    }
+
+    pub(crate) fn first_playable_glb_animation(&self) -> Option<usize> {
+        self.canvas
+            .animation_clips()
+            .iter()
+            .position(|clip| clip.is_playable())
+    }
+
+    pub(crate) fn select_glb_animation(&mut self, index: usize) {
+        if self
+            .canvas
+            .animation_clips()
+            .get(index)
+            .is_none_or(|clip| !clip.is_playable())
+        {
+            self.glb_animation_playing = false;
+            return;
+        }
+        self.glb_animation_index = index;
+        self.glb_animation_time = 0.0;
+        self.glb_animation_accumulator = 0.0;
+        self.glb_animation_playing = false;
+        if let Err(error) = self.update_glb_animation_preview() {
+            self.log.append(&format!(
+                "[glb_editor] Animation selection failed: {error}"
+            ));
+        }
+    }
+
+    pub(crate) fn set_glb_animation_time(&mut self, time: f32) {
+        let duration = self.glb_animation_duration();
+        self.glb_animation_time = time.clamp(0.0, duration.max(0.0));
+        self.glb_animation_accumulator = 0.0;
+        if let Err(error) = self.update_glb_animation_preview() {
+            self.log.append(&format!(
+                "[glb_editor] Animation seek failed: {error}"
+            ));
+        }
+    }
+
+    pub(crate) fn step_glb_animation(&mut self, direction: f32) {
+        let duration = self.glb_animation_duration();
+        if duration <= 0.0 {
+            return;
+        }
+        let time = self.glb_animation_time + direction * (1.0 / 30.0);
+        self.glb_animation_time = if self.glb_animation_loop {
+            time.rem_euclid(duration)
+        } else {
+            time.clamp(0.0, duration)
+        };
+        self.glb_animation_playing = false;
+        self.glb_animation_accumulator = 0.0;
+        if let Err(error) = self.update_glb_animation_preview() {
+            self.log.append(&format!(
+                "[glb_editor] Animation step failed: {error}"
+            ));
+        }
+    }
+
+    pub(crate) fn update_glb_animation_preview(
+        &mut self,
+    ) -> Result<(), String> {
+        if self
+            .canvas
+            .animation_clips()
+            .get(self.glb_animation_index)
+            .is_none()
+        {
+            return Ok(());
+        }
+        self.canvas.update_glb_animation(
+            self.glb_animation_index,
+            self.glb_animation_time,
+        )
+    }
+
+    fn reset_glb_animation_state(&mut self) {
+        self.glb_animation_index = 0;
+        self.glb_animation_time = 0.0;
+        self.glb_animation_playing = false;
+        self.glb_animation_accumulator = 0.0;
     }
 }

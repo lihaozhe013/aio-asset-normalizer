@@ -361,8 +361,9 @@ The current implementation slice is now in place:
 - the executable no longer compiles or invokes the Blender bridge;
 - the GLB Editor has pure-Rust GLB validation, scene inspection, root
   transforms, interpolated animation trimming with time rebasing, PNG/JPEG PBR
-  texture replacement, shared-material duplication, and atomic reparse-
-  validated export;
+  texture replacement, shared-material duplication, runtime node and Skinned
+  Mesh animation playback with CPU skinning, and atomic reparse-validated
+  export;
 - BVH Studio has generic hierarchy parsing, frame trimming, versioned Mapping
   JSON loading and saving, mapping validation reports, reviewed name-match
   suggestions, Rest Pose delta retargeting, frame-stepped skeleton playback,
@@ -372,4 +373,6 @@ The current implementation slice is now in place:
   foundation;
 - complete mesh/Skinned standardization baking, optional root-motion and
   heading controls, broader fixture validation, and optional compressed-
-  geometry support remain planned.
+  geometry support remain planned;
+- CUBICSPLINE, Morph Target playback, GPU skinning, and skeleton replacement
+  remain intentionally deferred.
