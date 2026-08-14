@@ -55,7 +55,7 @@ impl OrbitCamera {
         for event in events {
             match event {
                 Event::MousePress { button, .. } => match button {
-                    MouseButton::Right => {
+                    MouseButton::Left => {
                         self.rotating = true;
                     }
                     MouseButton::Middle => {
@@ -64,14 +64,14 @@ impl OrbitCamera {
                     _ => {}
                 },
                 Event::MouseRelease { button, .. } => match button {
-                    MouseButton::Right => self.rotating = false,
+                    MouseButton::Left => self.rotating = false,
                     MouseButton::Middle => self.panning = false,
                     _ => {}
                 },
                 Event::MouseMotion { delta, .. } => {
                     if self.rotating {
                         let sensitivity = 0.005;
-                        self.theta -= delta.0 * sensitivity;
+                        self.theta += delta.0 * sensitivity;
                         self.phi -= delta.1 * sensitivity;
                         self.phi =
                             self.phi.clamp(0.05, std::f32::consts::PI - 0.05);
@@ -140,5 +140,57 @@ impl OrbitCamera {
             0.1,
             100.0,
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn mouse_press(button: MouseButton) -> Event {
+        Event::MousePress {
+            button,
+            position: (0.0, 0.0).into(),
+            modifiers: Modifiers::default(),
+            handled: false,
+        }
+    }
+
+    #[test]
+    fn left_mouse_button_controls_rotation() {
+        let mut camera = OrbitCamera::new(Viewport::new_at_origo(640, 480));
+
+        camera.handle_events(&[mouse_press(MouseButton::Right)]);
+        assert!(!camera.rotating);
+
+        camera.handle_events(&[mouse_press(MouseButton::Left)]);
+        assert!(camera.rotating);
+
+        camera.handle_events(&[Event::MouseRelease {
+            button: MouseButton::Left,
+            position: (0.0, 0.0).into(),
+            modifiers: Modifiers::default(),
+            handled: false,
+        }]);
+        assert!(!camera.rotating);
+    }
+
+    #[test]
+    fn horizontal_drag_updates_orbit_direction() {
+        let mut camera = OrbitCamera::new(Viewport::new_at_origo(640, 480));
+        let initial_theta = camera.theta;
+
+        camera.handle_events(&[
+            mouse_press(MouseButton::Left),
+            Event::MouseMotion {
+                button: Some(MouseButton::Left),
+                delta: (10.0, 0.0),
+                position: (10.0, 0.0).into(),
+                modifiers: Modifiers::default(),
+                handled: false,
+            },
+        ]);
+
+        assert!(camera.theta > initial_theta);
     }
 }
