@@ -20,6 +20,9 @@ menu:
 page:
   glb_editor: "GLB 编辑器"
   bvh_studio: "BVH 工作室"
+bottom:
+  animation: "动画"
+  debug_log: "调试日志"
 glb:
   open_hint: "打开 GLB 文件以检查和编辑。"
   unsaved: "未保存文档"

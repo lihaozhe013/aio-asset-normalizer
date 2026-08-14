@@ -16,6 +16,7 @@ The project is undergoing a complete redesign. It is moving away from a Blender-
 - Require no Blender runtime, Blender API, or external conversion process.
 - Implement GLB loading, editing, animation processing, and export in Rust.
 - Reuse the existing `egui` + `three-d` window, 3D Canvas, orbit camera, axes, grid, and skeleton visualization foundations.
+- Use a shared bottom dock with switchable Animation and Debug Log tabs so the Canvas always owns its reserved viewport area.
 - Keep UI, GLB document processing, BVH algorithms, and rendering decoupled; run expensive work through background tasks and message passing.
 - Never overwrite source files by default. All exports use temporary files and atomic replacement.
 

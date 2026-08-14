@@ -23,6 +23,12 @@ use crate::modules::{
 };
 use three_d::*;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BottomPanelTab {
+    Animation,
+    DebugLog,
+}
+
 pub struct App {
     pub i18n: I18n,
     pub camera: OrbitCamera,
@@ -54,6 +60,7 @@ pub struct App {
     pub glb_animation_playing: bool,
     pub glb_animation_loop: bool,
     pub glb_animation_speed: f32,
+    pub(crate) bottom_panel_tab: BottomPanelTab,
     pub texture_mesh: usize,
     pub texture_primitive: usize,
     pub texture_slot: TextureSlot,
@@ -127,6 +134,7 @@ impl App {
             glb_animation_playing: false,
             glb_animation_loop: true,
             glb_animation_speed: 1.0,
+            bottom_panel_tab: BottomPanelTab::DebugLog,
             texture_mesh: 0,
             texture_primitive: 0,
             texture_slot: TextureSlot::BaseColor,
@@ -193,10 +201,12 @@ impl App {
     pub fn reload_model_if_needed(&mut self, context: &Context) {
         if self.needs_reload {
             self.needs_reload = false;
+            self.bottom_panel_tab = BottomPanelTab::DebugLog;
             let Some(path) = self.glb_path.clone() else {
                 self.canvas.clear_glb();
                 self.canvas.clear_bvh_skeleton();
                 self.glb = None;
+                self.bottom_panel_tab = BottomPanelTab::DebugLog;
                 self.reset_glb_animation_state();
                 return;
             };
@@ -234,6 +244,10 @@ impl App {
                             self.glb = Some(document);
                             self.camera.reset();
                             self.reset_glb_animation_state();
+                            if !self.canvas.animation_clips().is_empty() {
+                                self.bottom_panel_tab =
+                                    BottomPanelTab::Animation;
+                            }
                             if let Some(index) =
                                 self.first_playable_glb_animation()
                             {
@@ -249,6 +263,7 @@ impl App {
                         }
                         Err(error) => {
                             self.glb = Some(document);
+                            self.bottom_panel_tab = BottomPanelTab::DebugLog;
                             self.log.append(&format!(
                                 "[glb_editor] Preview failed: {error}"
                             ));
@@ -362,6 +377,7 @@ impl App {
                 self.glb_path = None;
                 self.canvas.clear_glb();
                 self.reset_glb_animation_state();
+                self.bottom_panel_tab = BottomPanelTab::DebugLog;
                 self.needs_save = true;
             }
             MenuAction::ResetCamera => self.camera.reset(),

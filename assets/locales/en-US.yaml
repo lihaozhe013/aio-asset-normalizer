@@ -20,6 +20,9 @@ menu:
 page:
   glb_editor: "GLB Editor"
   bvh_studio: "BVH Studio"
+bottom:
+  animation: "Animation"
+  debug_log: "Debug Log"
 glb:
   open_hint: "Open a GLB file to inspect and edit it."
   unsaved: "Unsaved document"

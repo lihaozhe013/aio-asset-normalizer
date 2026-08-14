@@ -42,7 +42,9 @@ The main page contains four regions:
 1. Left resource tree: the current GLB, Scene, Node, Mesh, Primitive, Skin, materials, and animation clips.
 2. Center 3D Canvas: the model, grid, axes, skeleton, and selected-object highlighting.
 3. Right Inspector: transforms, materials, textures, Skin, animation clips, and export settings.
-4. Bottom timeline: clip selection, playback, pause, frame stepping, speed, and trim range.
+4. Shared bottom dock: switchable Animation and Debug Log tabs. The Animation
+   tab contains clip selection, playback, pause, frame stepping, speed, and
+   trim controls.
 
 Initial interactions:
 
@@ -371,6 +373,8 @@ The current implementation slice is now in place:
   GLB export;
 - the existing egui and three-d Canvas infrastructure remains the preview
   foundation;
+- the bottom dock switches between GLB animation playback and Debug Log while
+  reserving the selected panel's area from the 3D Canvas;
 - complete mesh/Skinned standardization baking, optional root-motion and
   heading controls, broader fixture validation, and optional compressed-
   geometry support remain planned;
