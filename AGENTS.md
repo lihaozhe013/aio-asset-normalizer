@@ -1,79 +1,211 @@
-# AGENTS.md -- AI Agent Rules & Project Conventions
+# Repository Engineering Policy
 
-## Project Identity
+These rules are mandatory for every change in this repository. Keep this file
+focused on durable engineering policy. Feature plans, release notes, historical
+investigations, and manual test cases belong in dedicated documents under
+`docs/`.
 
-**aio-asset-normalizer** is a lightweight, cross-platform desktop tool for batch-processing and normalizing 3D assets (FBX, Blend, OBJ) into game-engine-ready `.glb` files. It uses a dual-pane layout: a 2D control panel (egui) on the left and a 3D preview viewport (three-d) on the right. Heavy mesh transforms are offloaded to Blender CLI running headlessly in a background worker thread.
+## 1. Language
 
-## Architecture: Separation of Concerns
+- All source-code comments, doc comments, commit messages, and newly created or
+  updated documentation MUST be written in English.
+- Chinese text MUST NOT be added to comments or engineering documentation. When
+  touching an existing non-English comment or documentation section, translate
+  the affected text to English as part of the same change.
+- Localized user-facing strings are exempt from this rule. Keep localization
+  content separate from engineering documentation whenever practical.
+- Names and prose MUST be clear enough to explain intent. Do not add comments
+  that merely restate the code.
 
-This project is deliberately decoupled. Every agent action must respect these boundaries:
+## 2. Project Scope and Product Boundaries
 
-| Layer | Crate / Module | Responsibility |
-|---|---|---|
-| Entry & UI | `src/main.rs`, `src/app.rs`, `src/modules/ui/` | egui panels, file lists, config forms, log viewer |
-| 3D Viewport | `src/modules/viewport/` | three-d rendering, orbit camera, axes/grid helpers |
-| Blender Bridge | `src/modules/blender/` | `std::process::Command` calls, `mpsc` task channels, Python script dispatch |
-| Asset I/O | `three-d-asset`, `gltf` crates | `.glb` loading / saving |
+- This repository is a cross-platform desktop tool for editing, previewing, and
+  standardizing glTF 2.0 Binary assets (`.glb`) for independent game
+  developers and creators.
+- The supported asset format is `.glb`. Do not add FBX, OBJ, Blend, or other
+  general-purpose format conversion paths unless the product scope is
+  explicitly changed.
+- Runtime functionality MUST NOT depend on Blender, the Blender API, a Blender
+  installation, or an external conversion process.
+- BVH functionality belongs to an independent workflow. It MUST remain
+  generic: no fixed company model, fixed skeleton size, fixed rest pose,
+  device protocol, IMU mapping, or hardcoded proprietary asset dependency.
+- BVH retargeting MUST use a versioned Mapping contract. Name matching may
+  produce suggestions, but it MUST NOT silently replace explicit mappings.
+- Prefer preserving source GLB resources and unknown extensions. Operations
+  that cannot be validated safely MUST fail with a useful error instead of
+  producing a potentially corrupted asset.
 
-- **Never** let UI code reach into Blender subprocess details.
-- **Never** let viewport rendering depend on egui panel state (pass data through the top-level app state instead).
-- **Prefer** message passing (`std::sync::mpsc`) over shared mutable state for background tasks.
-- Keep `main.rs` minimal; routing and state ownership belongs in `src/app.rs`.
+## 3. Architecture and Dependency Direction
 
-## Tool Preferences
+The application is intentionally split into layers. Keep dependencies flowing
+from UI and rendering toward application state and domain services, never in
+the opposite direction.
 
-- **Prefer `rg` / `fd`** -- Search files and content with `rg` (ripgrep) and `fd` (fd-find) first. They are far faster than `grep` / `find`. Fall back to `grep` / `find` only when `rg` / `fd` are unavailable.
-- **Prefer dedicated file tools** -- Use the Read, Write, Edit, Glob, and Grep tools rather than shell `cat`/`echo`/`sed`/`awk` for file operations.
-- Run **`cargo check`** (or `cargo clippy`) after every non-trivial change to catch errors early.
+- `src/main.rs` owns only process startup, the window, and the render loop.
+- `src/app.rs` owns top-level state, page routing, task polling, and coordination
+  between the editor, BVH workflow, and viewport.
+- UI modules own egui presentation and user intent. UI code MUST NOT parse GLB
+  binary data, write Accessors, or invoke worker implementation details.
+- Viewport modules own three-d objects, camera controls, helpers, and preview
+  snapshots. Viewport rendering MUST NOT depend directly on egui widget state.
+- GLB domain modules own document indexing, edits, Accessor/resource updates,
+  validation, and atomic export.
+- BVH domain modules own parsing, rest-pose data, forward kinematics, trimming,
+  Mapping validation, retargeting, and animation export.
+- Background workers receive immutable job inputs and communicate with the UI
+  through `std::sync::mpsc` or an equivalent message boundary.
+- `three-d-asset` is a preview/loading aid; it is not the source of truth for
+  GLB write-back. Preserve the editable JSON/BIN document separately.
+- Keep public APIs small and predictable. Avoid global mutable state, circular
+  module dependencies, and convenience modules that become dumping grounds.
 
-## Commit Rules
+## 4. Cross-Platform Requirements
 
-- **Commit only on request** -- Never `git commit`, `git push`, or create a PR unless explicitly asked.
-- Before committing, inspect `git status` and `git diff --stat`. Stage only the intended files; never stage generated artifacts (`target/`, `*.pdb`) or secrets.
-- Write concise, descriptive commit messages in English that match the repo's existing style.
-- **Use Conventional Commits** -- format commit messages as `type: description`, e.g. `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`.
+- New functionality MUST support every maintained platform unless the task
+  explicitly narrows its scope.
+- A Windows-only toolchain, PowerShell script, batch file, registry operation,
+  or Win32 command MUST NOT be the sole implementation of a build, test,
+  development, or maintenance workflow.
+- Prefer portable Rust code and established cross-platform crates. Isolate
+  unavoidable platform-specific behavior behind explicit `cfg` boundaries and
+  provide equivalent behavior for other maintained platforms.
+- For repository automation that cannot reasonably be implemented in Rust,
+  prefer a Python script using the standard library. Invoke Python tooling with
+  `uv run`. Do not create parallel shell, PowerShell, and batch implementations
+  when one portable script can serve all platforms.
+- Platform-specific packaging scripts are allowed only inside the relevant
+  packaging workflow. They MUST NOT become prerequisites for normal development
+  on other platforms.
+- Do not introduce environment variables for routine configuration when a
+  command-line option, configuration file, or stable application default is
+  sufficient. Any required environment variable MUST be documented and kept to
+  the narrowest possible scope.
+- Use `std::path::Path` and `PathBuf` for filesystem paths. Do not hardcode path
+  separators, drive letters, home directories, or platform-specific executable
+  suffixes in shared code.
+- Use cross-platform file dialogs, window APIs, image loading, and atomic file
+  replacement. Do not make a GUI acceptance path depend on one operating
+  system.
 
-## Code Conventions
+## 5. Logging and Debugging
 
-- **No emojis** in source files, comments, documentation, or commit messages.
-- **No unnecessary comments** -- code should be self-documenting. Add comments only when intent is genuinely non-obvious.
-- **Rust idioms**: use `cargo fmt`-standard formatting. Match the surrounding code's import style (`use three_d::*` currently used at crate root; prefer explicit imports in sub-modules). Use `anyhow` / `thiserror` for error propagation once the project adopts them.
-- **Naming**: modules and types follow the planned directory structure (`modules::ui::file_list`, `modules::viewport::canvas`, `modules::blender::bridge`). Keep public API surface small and predictable.
-- **Privacy**: never hardcode paths, tokens, or credentials. Accept them via config or environment variables.
-- **File size** -- No single file should exceed ~500 lines. When a function, struct impl, or UI component grows large, extract it into a dedicated submodule file. Entry-point files (`main.rs`, `app.rs`) and top-level module files (`mod.rs`) must stay lean: expose only the public API and defer all implementation details to child modules. These files call functions; they do not contain inline heavy logic.
+- Application logs MUST be written to `debug.log` by default. Running the
+  application MUST NOT require stdout or stderr redirection to capture logs.
+- Normal application logging MUST NOT write to the terminal. Startup must remain
+  resilient if the log file cannot be created.
+- `RUST_LOG` may be used as an optional log-level override, but the application
+  MUST provide a useful default without it.
+- Never log passwords, tokens, private keys, credentials, local secrets, or
+  complete user-provided paths when they may contain sensitive information.
+- Logs added for a feature or investigation MUST use a stable prefix such as
+  `[glb_editor]` or `[bvh_studio]` so they can be filtered reliably.
+- When handing off a debugging workflow, provide a ready-to-run command that
+  exercises the relevant flow and filters `debug.log` into a focused log file.
+  For example:
 
-## Project Layout (Planned)
+  ```bash
+  cargo run
+  rg "\[bvh_studio\]" debug.log > bvh-studio-debug.log
+  ```
 
-```
-src/
-  main.rs                  Entry point -- minimal, delegates to app.rs
-  app.rs                   Top-level egui state machine & layout dispatch
-  modules/
-    ui/
-      file_list.rs         File import & batch list panel
-      config_panel.rs      Scale / axis / cleanup configuration
-      log_viewer.rs        Background task stdout/stderr viewer
-    viewport/
-      canvas.rs            three-d render loop & viewport wrapper
-      camera.rs            Orbit camera controller
-      helpers.rs           Coordinate axes & ground grid builders
-    blender/
-      bridge.rs            Blender CLI invocation & lifecycle
-      task.rs              mpsc task definitions & progress reporting
-blender_scripts/
-  normalize_v1.py          V1: static mesh / material normalization
-  normalize_v2.py          V2: bone & animation bake (future)
-```
+- Generated `*.log` files MUST remain untracked and MUST NOT be included in
+  commits or release archives.
 
-When adding new functionality, place it in the appropriate module above rather than growing `main.rs`.
+## 6. GLB and BVH Data Safety
 
-## Verification
+- Treat GLB input as untrusted data. Validate headers, chunk lengths, JSON
+  references, Accessor ranges, component types, counts, and finite numeric
+  values before use.
+- Keep GLB JSON and BIN alignment compliant with the glTF 2.0 specification.
+- Re-parse every generated GLB through the project reader before reporting
+  success. For animation or Skin edits, sample representative frames and
+  validate world transforms, hierarchy, Skin references, and Mesh bounds.
+- Do not silently discard `extras`, unknown extensions, materials, textures,
+  animations, or scene objects that are outside the requested edit.
+- Detect unsupported compressed geometry and return a node/resource-specific
+  error when an operation would require decoding it.
+- BVH parsers MUST return structured errors with useful context. Do not use
+  `panic!`, `unwrap`, or `expect` for malformed user input or file content.
+- Mapping validation MUST reject missing roots, duplicate target nodes, invalid
+  Skin references, and ambiguous mappings before retargeting begins.
+- Use explicit coordinate-system and unit metadata. Never infer a destructive
+  conversion solely from a filename or an arbitrary model dimension.
 
-- After any code change, run `cargo check` (and `cargo test` once tests exist).
-- If `cargo check` emits warnings, fix them unless they are deliberately suppressed with a clear reason.
-- Before declaring a task done, confirm the project still compiles cleanly.
+## 7. Code Organization and File Size
 
-## Task Tracking
+- Preserve the existing structure and formatting unless a refactor is part of
+  the requested change.
+- Every source file over 1,000 lines MUST trigger an explicit design review
+  before more responsibilities are added. Evaluate cohesion, dependency
+  direction, state ownership, and whether behavior can move to focused modules.
+- Do not allow a file to cross the 1,000-line threshold without recording the
+  assessment in the change summary or commit body.
+- When modifying an existing file that already exceeds 1,000 lines, avoid
+  increasing its scope. If the affected behavior has a clear boundary, split it
+  during the change. If an immediate split would make the change riskier, state
+  the reason and identify the intended module boundary.
+- New modules MUST have one clear responsibility. Keep entry points, `mod.rs`
+  files, and application coordinators thin.
+- Prefer `cargo fmt`-standard Rust, explicit imports in submodules, and
+  `Result`-based error propagation with `thiserror`/`anyhow` when appropriate.
+- Do not add emojis or unnecessary comments to source, documentation, or commit
+  messages.
 
-- The project to-do list lives in `docs/TODO.md`.
-- When a task is completed, remove its checkbox line from `docs/TODO.md`. Do not mark it as done; delete it.
+## 8. Required Validation
+
+- Before every commit, run `cargo fmt --all`. This is mandatory even when the
+  change appears not to affect formatting.
+- After formatting, run the most relevant automated checks. `cargo test` is the
+  minimum default for Rust behavior changes; use `cargo check --all-targets`
+  when a full test run is not applicable.
+- For GLB or BVH changes, add or update focused unit tests and run the relevant
+  round-trip and validation fixtures.
+- Do not report a check as successful unless it was actually run. Clearly state
+  any check that could not be completed and why.
+- GUI behavior that cannot be validated reliably in the agent environment MUST
+  be handed off with concise, platform-neutral manual verification steps.
+- Do not make Windows-only manual verification the canonical acceptance path for
+  cross-platform behavior.
+- Before declaring work complete, check `git diff --check`, inspect the final
+  diff, and confirm generated artifacts are not included.
+
+## 9. Documentation and Task Tracking
+
+- `README.md` contains the product overview, supported scope, and developer
+  entry points. Keep detailed design decisions in `docs/`.
+- Feature plans, migration notes, release notes, historical investigations,
+  and manual test procedures belong in dedicated English documents under
+  `docs/`.
+- Do not recreate removed legacy documents or maintain a stale checklist of
+  completed tasks. When a task is complete, remove its pending entry from the
+  relevant planning document.
+- Documentation MUST describe actual behavior. Clearly label planned behavior,
+  unsupported input, experimental features, and platform-specific limitations.
+
+## 10. Commits
+
+- Every commit MUST use a complete Conventional Commits message:
+  `<type>(optional-scope): imperative summary`.
+- Use the narrowest accurate type, such as `feat`, `fix`, `refactor`, `docs`,
+  `test`, `build`, `ci`, or `chore`. Vague subjects such as `update files` or
+  `misc fixes` are forbidden.
+- Non-trivial commits MUST include a body explaining the motivation, behavior
+  change, and important compatibility or validation details.
+- Breaking changes MUST use `!` in the header or a `BREAKING CHANGE:` footer.
+- Do not commit, amend, push, or create a pull request unless the user
+  explicitly requests it.
+
+## 11. Safety and Repository Hygiene
+
+- Inspect `git status` before editing. Preserve unrelated user changes and do
+  not rewrite them.
+- Never commit generated logs, credentials, private keys, build artifacts,
+  local profile databases, or user asset outputs.
+- Destructive or irreversible commands require explicit user approval. Confirm
+  exact targets before deleting or overwriting files.
+- Use `rg` for text search, `fd` for file discovery, and `uv run` for Python
+  commands. Prefer `apply_patch` for source and documentation edits.
+- Do not create or switch Git branches unless the user explicitly requests it.
+- Keep changes focused. Do not mix unrelated cleanup, refactoring, and feature
+  work in one commit.

@@ -1,89 +1,124 @@
 # AIO Asset Normalizer
 
-A cross-platform desktop application for batch-normalizing 3D assets and exporting them as `.glb` files.
+A pure-Rust 3D asset standardization tool for indie game developers and independent creators.
 
-The application combines a Rust/egui control panel with a three-d preview viewport. Asset conversion is performed by Blender in background processes, keeping the UI responsive while supporting both static meshes and animated, skinned assets.
+The project is undergoing a complete redesign. It is moving away from a Blender-dependent multi-format converter and becoming a desktop tool focused exclusively on `.glb` assets. The new product will provide:
 
-## Features
+- GLB editing, preview, and standardized export;
+- animation clip trimming and timeline editing;
+- Mesh material and PBR texture replacement;
+- BVH playback, trimming, generic skeleton mapping, and GLB animation export;
+- reusable Mapping files for different motion-capture systems and character models.
 
-- Import individual assets or folders, and select multiple files for batch processing.
-- Support `.fbx`, `.blend`, `.obj`, `.gltf`, and `.glb` input files.
-- Normalize target scale and up-axis (`Y-Up` or `Z-Up`).
-- Remove unused materials, cameras, lights, and loose mesh geometry.
-- Choose between two Blender processing scripts:
-  - **V1** for static mesh and material normalization.
-  - **V2** for skinned meshes, leaf-bone preservation, and animation baking.
-- Export normalized assets as `.glb` files.
-- Preview exported GLB files with a 3D orbit camera, coordinate axes, and a ground grid.
-- Inspect skeletons, highlight bones, and preview embedded animation clips.
-- View Blender output and conversion progress in the application log.
-- English and Simplified Chinese UI translations.
+## Design Goals
 
-## Requirements
+- Support glTF 2.0 Binary (`.glb`) only. FBX, OBJ, Blend, and other source formats are out of scope.
+- Require no Blender runtime, Blender API, or external conversion process.
+- Implement GLB loading, editing, animation processing, and export in Rust.
+- Reuse the existing `egui` + `three-d` window, 3D Canvas, orbit camera, axes, grid, and skeleton visualization foundations.
+- Keep UI, GLB document processing, BVH algorithms, and rendering decoupled; run expensive work through background tasks and message passing.
+- Never overwrite source files by default. All exports use temporary files and atomic replacement.
 
-- Rust and Cargo
-- Blender installed and available on the system
+## Product Pages
 
-If Blender is not detected automatically, set its executable path in **Edit > Preferences**, or set the `BLENDER_PATH` environment variable.
+### GLB Editor
 
-## Build and run
+The main page edits existing GLB files instead of converting between formats.
+
+- Load, inspect, and preview scenes, nodes, Meshes, materials, Skins, skeletons, and animations.
+- Adjust model orientation with XYZ `±90°` shortcuts and precise Euler input.
+- Trim animation clips by start and end time and rebuild the timeline.
+- Replace Base Color, Normal, Metallic-Roughness, Occlusion, and Emissive textures.
+- Reserve extension points for future skeleton and Mesh replacement.
+- Export game-ready GLBs with consistent coordinates, units, grounding, and facing.
+
+### BVH Studio
+
+BVH processing is an independent page that takes a BVH file, a target GLB, and a Mapping file:
+
+- Play and inspect BVH motion frame by frame;
+- trim and save BVH files;
+- retarget BVH motion to any target Skinned GLB that satisfies the input contract;
+- export a Character Package containing a character and animation;
+- export an Animation Clip containing only the skeleton and animation;
+- use explicit Mapping files to support different motion-capture systems and character naming conventions.
+
+## Default Standardization Contract
+
+The default export contract is listed below. Grounding, centering, and unit scaling can be disabled or adjusted in the export options:
+
+- right-handed coordinates;
+- Y-Up;
+- model forward direction `-Z`;
+- meter-based output by default;
+- bounding box centered on the XZ plane;
+- lowest point placed at `Y=0`;
+- identity scene-root transform;
+- orientation, scale, Skin, inverse bind matrices, and root animation baked together.
+
+For compressed geometry such as Draco or Meshopt that cannot be safely decoded and rewritten, the tool must report the unsupported extension explicitly instead of silently producing a corrupted file.
+
+## BVH Mapping
+
+The Mapping file is the single source of truth for BVH retargeting. Automatic name matching only produces suggestions; the user must confirm them before export. The initial format is versioned JSON:
+
+```json
+{
+  "schema_version": 1,
+  "source": {
+    "up_axis": "Y",
+    "forward_axis": "-Z",
+    "unit_scale": 0.01,
+    "root_joint": "Hips"
+  },
+  "target": {
+    "skin": "Armature",
+    "root_node": "pelvis"
+  },
+  "bones": [
+    {
+      "source_joint": "Hips",
+      "target_node": "pelvis",
+      "rotation_offset_xyzw": [0.0, 0.0, 0.0, 1.0]
+    }
+  ]
+}
+```
+
+The initial target-model contract requires a conventional glTF Skin with valid `JOINTS_0`, `WEIGHTS_0`, and inverse bind matrices. Fixed company models, fixed skeleton sizes, fixed N-Pose assumptions, serial protocols, and IMU logic from the company motion-capture application do not belong in this generic tool.
+
+## Technology Stack
+
+| Layer | Technology |
+| --- | --- |
+| GUI | `egui` / `eframe` |
+| 3D viewport | `three-d` / `wgpu` |
+| GLB loading and validation | `gltf` |
+| GLB document editing | Preserve raw JSON + BIN; use `gltf-json` when appropriate |
+| Image processing | Rust `image` ecosystem |
+| Background tasks | `std::sync::mpsc` + worker threads |
+| File dialogs | `rfd` |
+
+The GLB read/write layer preserves the original JSON and BIN data and changes only affected resources wherever possible. This helps retain unknown extensions, `extras`, and the original resource layout. The `gltf` crate and GLB container APIs provide the foundation for loading, reparsing, and writing files.
+
+## Rebuild Stages
+
+1. **GLB Editor core**: document model, orientation/scale baking, animation trimming, PBR texture replacement, and standardized export.
+2. **BVH Studio**: robust BVH parsing, generic FK, Mapping editor, Rest Pose delta retargeting, Character Package export, and Animation Clip export.
+3. **Quality and release**: complete tests, diagnostics, documentation, and cross-platform packaging.
+
+The complete design, interfaces, migration boundaries, acceptance criteria, and test plan are documented in [`docs/REBUILD_PLAN.md`](docs/REBUILD_PLAN.md).
+
+## Current Status
+
+The repository still contains the old Blender converter and early preview implementation. They are retained only as migration references and do not represent the final architecture. The implementation stages will progressively remove the Blender bridge, legacy conversion settings, old scripts, and model-specific logic.
+
+## Development Verification
 
 ```bash
-cargo run
+cargo fmt --check
+cargo check
+cargo test
 ```
 
-To create a release build:
-
-```bash
-cargo build --release
-```
-
-## Basic workflow
-
-1. Open an asset folder or drag supported files into the file tree.
-2. Select the files to process.
-3. Configure scale, target orientation, cleanup options, and the processing script version.
-4. Start the conversion.
-5. Review the generated `_normalized.glb` files and inspect them in the preview viewport.
-
-The bundled Blender scripts can also be run directly:
-
-```bash
-blender -b -P blender_scripts/normalize_v1.py -- <input> <output.glb> <config.json>
-blender -b -P blender_scripts/normalize_v2.py -- <input> <output.glb> <config.json>
-```
-
-## Architecture
-
-```text
-Rust application
-├── egui UI             File management, configuration, preferences, and logs
-├── three-d viewport    GLB preview, camera, axes, grid, skeletons, and animation
-└── Blender bridge      Background process execution and task messages
-
-Blender scripts         Import, normalize, and export assets as GLB
-```
-
-The UI communicates with background conversion tasks through message channels. Blender-specific process handling remains in the Blender bridge, while viewport rendering is kept independent of UI panels.
-
-## Project structure
-
-```text
-src/
-├── app.rs
-├── main.rs
-└── modules/
-    ├── blender/          Blender process bridge and task definitions
-    ├── ui/               egui panels and file management
-    ├── viewport/         three-d rendering and camera controls
-    ├── animation.rs      GLB animation parsing and playback
-    ├── skeleton.rs       Skeleton parsing and bone data
-    └── preferences.rs    Persistent application preferences
-blender_scripts/
-├── normalize_v1.py       Static asset normalization
-└── normalize_v2.py       Skinned asset and animation normalization
-```
-
-## License
-
-This project is licensed under the MIT License.
+The project is licensed under the MIT License.
