@@ -7,7 +7,11 @@ fn build_axis_quad(
     thickness: f32,
     color: Srgba,
 ) -> Gm<Mesh, ColorMaterial> {
-    let dir = (to - from).normalize();
+    let direction = to - from;
+    if direction.magnitude() <= f32::EPSILON {
+        return build_origin_sphere(context);
+    }
+    let dir = direction.normalize();
     let up = if dir.y.abs() < 0.99 {
         vec3(0.0, 1.0, 0.0)
     } else {
@@ -29,6 +33,33 @@ fn build_axis_quad(
         ..Default::default()
     };
     Gm::new(Mesh::new(context, &cpu_mesh), ColorMaterial::default())
+}
+
+pub fn build_skeleton(
+    context: &Context,
+    positions: &[[f32; 3]],
+    parents: &[Option<usize>],
+) -> Vec<Gm<Mesh, ColorMaterial>> {
+    let color = Srgba::new(255, 190, 70, 255);
+    positions
+        .iter()
+        .enumerate()
+        .filter_map(|(index, position)| {
+            let parent = parents.get(index).and_then(|parent| *parent)?;
+            let parent_position = positions.get(parent)?;
+            Some(build_line_quad(
+                context,
+                vec3(
+                    parent_position[0],
+                    parent_position[1],
+                    parent_position[2],
+                ),
+                vec3(position[0], position[1], position[2]),
+                0.025,
+                color,
+            ))
+        })
+        .collect()
 }
 
 pub fn build_axes(context: &Context) -> Vec<Gm<Mesh, ColorMaterial>> {
@@ -66,7 +97,11 @@ fn build_line_quad(
     thickness: f32,
     color: Srgba,
 ) -> Gm<Mesh, ColorMaterial> {
-    let dir = (to - from).normalize();
+    let direction = to - from;
+    if direction.magnitude() <= f32::EPSILON {
+        return build_origin_sphere(context);
+    }
+    let dir = direction.normalize();
     let up = if dir.y.abs() < 0.99 {
         vec3(0.0, 1.0, 0.0)
     } else {

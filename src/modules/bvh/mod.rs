@@ -8,6 +8,16 @@ use serde::{Deserialize, Serialize};
 
 use super::glb::{AnimationChannelData, SkinData};
 
+mod mapping;
+pub use self::mapping::{
+    load_mapping, save_mapping, MappingSuggestion, MappingValidation,
+    SuggestionConfidence,
+};
+
+mod pose;
+
+mod key_reduction;
+
 #[derive(Debug, Clone)]
 pub struct BvhDocument {
     pub source_path: Option<PathBuf>,
@@ -223,12 +233,7 @@ impl BvhDocument {
         mapping: &MappingFile,
         target: &SkinData,
     ) -> Result<RetargetClip, BvhError> {
-        if mapping.schema_version != 1 {
-            return Err(BvhError::Mapping(format!(
-                "unsupported mapping schema version {}",
-                mapping.schema_version
-            )));
-        }
+        mapping.validate_contract()?;
         if self.frames.len() < 2 {
             return Err(BvhError::Mapping(
                 "retargeting requires at least two BVH frames".to_owned(),
@@ -289,7 +294,7 @@ impl BvhDocument {
             .collect::<Result<Vec<_>, _>>()?;
         let target_world = target_world_transforms(target)?;
         let source_rest = &source_frames[0];
-        let unit_scale = unit_scale(&mapping.source.unit)?;
+        let unit_scale = mapping::unit_scale(&mapping.source.unit)?;
         let mut mapped = Vec::new();
         let mut mapped_targets = HashSet::new();
         for bone in &mapping.bones {
@@ -323,6 +328,12 @@ impl BvhDocument {
             return Err(BvhError::Mapping(
                 "Mapping contains no usable bones".to_owned(),
             ));
+        }
+        let report = self.mapping_report(mapping, target);
+        if !report.is_valid() {
+            return Err(BvhError::Mapping(format!(
+                "mapping validation failed: {report:?}"
+            )));
         }
         let times = (0..self.frames.len())
             .map(|frame| frame as f32 * self.frame_time)
@@ -506,7 +517,12 @@ impl BvhDocument {
             output.push_str(&values.join(" "));
             output.push('\n');
         }
-        fs::write(path, output)?;
+        let temporary = path.with_extension("bvh.tmp");
+        fs::write(&temporary, output)?;
+        if let Err(error) = fs::rename(&temporary, path) {
+            let _ = fs::remove_file(&temporary);
+            return Err(error.into());
+        }
         Ok(())
     }
 }
@@ -753,17 +769,6 @@ fn resolve_target_world(
     Ok(world)
 }
 
-fn unit_scale(unit: &str) -> Result<f32, BvhError> {
-    match unit.to_ascii_lowercase().as_str() {
-        "m" | "meter" | "meters" => Ok(1.0),
-        "cm" | "centimeter" | "centimeters" => Ok(0.01),
-        "mm" | "millimeter" | "millimeters" => Ok(0.001),
-        other => Err(BvhError::Mapping(format!(
-            "unsupported source unit '{other}'"
-        ))),
-    }
-}
-
 fn axis_quaternion(axis: [f32; 3], radians: f32) -> [f32; 4] {
     let half = radians * 0.5;
     let (sin, cos) = half.sin_cos();
@@ -816,13 +821,6 @@ fn add(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
 
 fn multiply_vec3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
     [a[0] * b[0], a[1] * b[1], a[2] * b[2]]
-}
-
-pub fn load_mapping(path: &Path) -> Result<MappingFile, BvhError> {
-    let value = fs::read_to_string(path)?;
-    let mapping = serde_json::from_str(&value)
-        .map_err(|error| BvhError::Mapping(error.to_string()))?;
-    Ok(mapping)
 }
 
 fn identity_quaternion() -> [f32; 4] {

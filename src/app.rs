@@ -3,9 +3,13 @@ use std::sync::mpsc;
 use std::time::Instant;
 
 use crate::modules::{
-    bvh::{self, BvhDocument, MappingFile, RetargetPlan},
+    bvh::{
+        self, BvhDocument, MappingFile, MappingSuggestion, MappingValidation,
+        RetargetPlan,
+    },
     glb::{
-        AnimationClipData, EditOperation, GlbDocument, StandardizationProfile,
+        AnimationClipData, EditOperation, GlbDocument, PrimitiveTarget,
+        StandardizationProfile, TextureSlot,
     },
     i18n::I18n,
     preferences::{self, UserPreferences},
@@ -36,6 +40,8 @@ pub struct App {
     pub mapping: Option<MappingFile>,
     pub mapping_path: Option<PathBuf>,
     pub retarget_plan: Option<RetargetPlan>,
+    pub mapping_report: Option<MappingValidation>,
+    pub mapping_suggestions: Vec<MappingSuggestion>,
     pub rotation_axis: [f32; 3],
     pub rotation_degrees: f32,
     pub root_scale: f32,
@@ -43,13 +49,24 @@ pub struct App {
     pub trim_animation: usize,
     pub trim_start: f32,
     pub trim_end: f32,
+    pub texture_mesh: usize,
+    pub texture_primitive: usize,
+    pub texture_slot: TextureSlot,
+    pub texture_duplicate_shared: bool,
     pub bvh_trim_start: f32,
     pub bvh_trim_end: f32,
+    pub bvh_frame: usize,
+    pub bvh_playing: bool,
+    pub bvh_playback_speed: f32,
+    pub bvh_reduce_keys: bool,
+    pub bvh_key_tolerance: f32,
     pub(crate) show_about: bool,
     pub(crate) about_icon: Option<three_d::egui::TextureHandle>,
     pub(crate) task_busy: bool,
     last_frame_time: Instant,
+    pub(crate) bvh_playback_accumulator: f32,
     needs_reload: bool,
+    needs_bvh_skeleton_reload: bool,
     pub(crate) needs_save: bool,
     quit_requested: bool,
     task_rx: Option<mpsc::Receiver<ExportTaskResult>>,
@@ -90,6 +107,8 @@ impl App {
             mapping: None,
             mapping_path: None,
             retarget_plan: None,
+            mapping_report: None,
+            mapping_suggestions: Vec::new(),
             rotation_axis: [0.0, 1.0, 0.0],
             rotation_degrees: 0.0,
             root_scale: 1.0,
@@ -97,13 +116,24 @@ impl App {
             trim_animation: 0,
             trim_start: 0.0,
             trim_end: 1.0,
+            texture_mesh: 0,
+            texture_primitive: 0,
+            texture_slot: TextureSlot::BaseColor,
+            texture_duplicate_shared: true,
             bvh_trim_start: 0.0,
             bvh_trim_end: 1.0,
+            bvh_frame: 0,
+            bvh_playing: false,
+            bvh_playback_speed: 1.0,
+            bvh_reduce_keys: false,
+            bvh_key_tolerance: 0.001,
             show_about: false,
             about_icon: None,
             task_busy: false,
             last_frame_time: Instant::now(),
+            bvh_playback_accumulator: 0.0,
             needs_reload: false,
+            needs_bvh_skeleton_reload: false,
             needs_save: false,
             quit_requested: false,
             task_rx: None,
@@ -153,6 +183,7 @@ impl App {
             self.needs_reload = false;
             let Some(path) = self.glb_path.clone() else {
                 self.canvas.model = None;
+                self.canvas.clear_bvh_skeleton();
                 self.glb = None;
                 return;
             };
@@ -204,9 +235,59 @@ impl App {
             }
         }
 
+        if self.needs_bvh_skeleton_reload {
+            self.needs_bvh_skeleton_reload = false;
+            if let Some(document) = self.bvh.as_ref() {
+                let frame =
+                    self.bvh_frame.min(document.frames.len().saturating_sub(1));
+                match document.joint_positions(frame) {
+                    Ok(positions) => {
+                        let parents = document
+                            .joints
+                            .iter()
+                            .map(|joint| joint.parent)
+                            .collect::<Vec<_>>();
+                        self.canvas
+                            .set_bvh_skeleton(context, &positions, &parents);
+                    }
+                    Err(error) => self.log.append(&format!(
+                        "[bvh_studio] Skeleton preview failed: {error}"
+                    )),
+                }
+            } else {
+                self.canvas.clear_bvh_skeleton();
+            }
+        }
+
         let now = Instant::now();
         let elapsed = now.duration_since(self.last_frame_time);
         self.last_frame_time = now;
+        if self.bvh_playing {
+            let frame_time = self
+                .bvh
+                .as_ref()
+                .map(|document| document.frame_time)
+                .unwrap_or_default();
+            if frame_time > 0.0 {
+                self.bvh_playback_accumulator +=
+                    elapsed.as_secs_f32() * self.bvh_playback_speed.max(0.01);
+                if self.bvh_playback_accumulator >= frame_time {
+                    let steps = (self.bvh_playback_accumulator / frame_time)
+                        .floor() as usize;
+                    self.bvh_playback_accumulator -= steps as f32 * frame_time;
+                    let frame_count = self
+                        .bvh
+                        .as_ref()
+                        .map(|document| document.frames.len())
+                        .unwrap_or_default();
+                    if frame_count > 0 {
+                        self.set_bvh_frame(
+                            (self.bvh_frame + steps) % frame_count,
+                        );
+                    }
+                }
+            }
+        }
         if elapsed.as_secs_f32() > 0.5 {
             self.last_frame_time = now;
         }
@@ -217,6 +298,7 @@ impl App {
             MenuAction::ImportGlb => self.import_glb(),
             MenuAction::ImportBvh => self.import_bvh(),
             MenuAction::ImportMapping => self.import_mapping(),
+            MenuAction::ExportMapping => self.export_mapping(),
             MenuAction::Save => self.export_glb(),
             MenuAction::Export => match self.page {
                 Page::GlbEditor => self.export_glb(),
@@ -338,14 +420,66 @@ impl App {
         }
     }
 
+    pub(crate) fn replace_glb_texture(&mut self) {
+        let Some(document) = self.glb.as_mut() else {
+            self.log
+                .append("[glb_editor] Open a GLB before replacing a texture");
+            return;
+        };
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter("PNG or JPEG", &["png", "jpg", "jpeg"])
+            .pick_file()
+        else {
+            return;
+        };
+        match document.replace_texture(
+            PrimitiveTarget {
+                mesh: self.texture_mesh,
+                primitive: self.texture_primitive,
+            },
+            self.texture_slot,
+            &path,
+            self.texture_duplicate_shared,
+        ) {
+            Ok(()) => {
+                self.log.append(&format!(
+                    "[glb_editor] Replaced {} texture with {}",
+                    self.texture_slot.label(),
+                    path.display()
+                ));
+                self.needs_reload = true;
+            }
+            Err(error) => self.log.append(&format!("[glb_editor] {error}")),
+        }
+    }
+
     pub(crate) fn trim_bvh(&mut self) {
         let Some(document) = self.bvh.as_mut() else {
             self.log.append("[bvh_studio] Open a BVH before trimming");
             return;
         };
-        match document.trim(self.bvh_trim_start, self.bvh_trim_end) {
-            Ok(()) => self.log.append("[bvh_studio] Trimmed BVH frames"),
-            Err(error) => self.log.append(&format!("[bvh_studio] {error}")),
+        let trimmed =
+            match document.trim(self.bvh_trim_start, self.bvh_trim_end) {
+                Ok(()) => {
+                    self.log.append("[bvh_studio] Trimmed BVH frames");
+                    true
+                }
+                Err(error) => {
+                    self.log.append(&format!("[bvh_studio] {error}"));
+                    false
+                }
+            };
+        if trimmed {
+            self.bvh_frame = 0;
+            self.bvh_playback_accumulator = 0.0;
+            self.needs_bvh_skeleton_reload = true;
+        }
+    }
+
+    pub(crate) fn set_bvh_frame(&mut self, frame: usize) {
+        if self.bvh_frame != frame {
+            self.bvh_frame = frame;
+            self.needs_bvh_skeleton_reload = true;
         }
     }
 
@@ -397,6 +531,9 @@ impl App {
                 ));
                 self.bvh = Some(document);
                 self.bvh_path = Some(path);
+                self.bvh_frame = 0;
+                self.bvh_playing = false;
+                self.needs_bvh_skeleton_reload = true;
                 self.page = Page::BvhStudio;
                 self.refresh_retarget_plan();
             }
@@ -465,6 +602,36 @@ impl App {
             Err(error) => self
                 .log
                 .append(&format!("[glb_editor] Export failed: {error}")),
+        }
+    }
+
+    fn export_mapping(&mut self) {
+        let Some(mapping) = self.mapping.as_ref() else {
+            self.log.append("[bvh_studio] Nothing to export");
+            return;
+        };
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter("Mapping JSON", &["json"])
+            .set_file_name("mapping.json")
+            .save_file()
+        else {
+            return;
+        };
+        if path.exists() {
+            self.log.append(&format!(
+                "[bvh_studio] Refusing to overwrite existing file {}",
+                path.display()
+            ));
+            return;
+        }
+        match bvh::save_mapping(&path, mapping) {
+            Ok(()) => self.log.append(&format!(
+                "[bvh_studio] Exported mapping {}",
+                path.display()
+            )),
+            Err(error) => self.log.append(&format!(
+                "[bvh_studio] Mapping export failed: {error}"
+            )),
         }
     }
 
@@ -548,6 +715,8 @@ impl App {
         } else {
             "retargeted GLB".to_owned()
         };
+        let reduce_keys = self.bvh_reduce_keys;
+        let key_tolerance = self.bvh_key_tolerance;
         std::thread::spawn(move || {
             let result = (|| {
                 let skin =
@@ -555,6 +724,11 @@ impl App {
                 let clip = source
                     .retarget_to_skin(&mapping, &skin)
                     .map_err(|error| error.to_string())?;
+                let mut clip = clip;
+                if reduce_keys {
+                    clip.reduce_keys(key_tolerance)
+                        .map_err(|error| error.to_string())?;
+                }
                 let mut output = target;
                 output
                     .append_animation(&AnimationClipData {
@@ -575,6 +749,8 @@ impl App {
     }
 
     fn refresh_retarget_plan(&mut self) {
+        self.mapping_report = None;
+        self.mapping_suggestions.clear();
         let Some(document) = self.bvh.as_ref() else {
             self.retarget_plan = None;
             return;
@@ -587,18 +763,21 @@ impl App {
             self.retarget_plan = None;
             return;
         };
-        let node_names = target.node_names();
-        let skin_names = target.skin_names();
-        if !skin_names.iter().any(|name| name == &mapping.target.skin)
-            || !node_names.iter().any(|name| name == &mapping.target.root)
-        {
+        let Ok(skin) = target.skin_data() else {
             self.retarget_plan = None;
             self.log.append(
-                "[bvh_studio] Mapping target Skin or root node was not found",
+                "[bvh_studio] Target GLB does not expose a usable Skin",
             );
             return;
-        }
-        self.retarget_plan = document.plan_retarget(mapping).ok();
+        };
+        let report = document.mapping_report(mapping, &skin);
+        self.mapping_suggestions = document.suggest_mapping(&skin);
+        self.retarget_plan = if report.is_valid() {
+            document.plan_retarget(mapping).ok()
+        } else {
+            None
+        };
+        self.mapping_report = Some(report);
     }
 
     pub fn collect_preferences(&self) -> UserPreferences {

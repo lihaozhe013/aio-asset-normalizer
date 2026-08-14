@@ -168,12 +168,12 @@ The initial format is versioned JSON:
   "source": {
     "up_axis": "Y",
     "forward_axis": "-Z",
-    "unit_scale": 0.01,
-    "root_joint": "Hips"
+    "unit": "cm",
+    "root": "Hips"
   },
   "target": {
     "skin": "Armature",
-    "root_node": "pelvis"
+    "root": "pelvis"
   },
   "bones": [
     {
@@ -356,15 +356,20 @@ The project must build without warnings, all unit tests must pass, and generated
 
 ## 12. Implementation Checkpoint
 
-The first implementation slice is now in place:
+The current implementation slice is now in place:
 
 - the executable no longer compiles or invokes the Blender bridge;
-- the GLB Editor has pure-Rust GLB validation, indexing, root transforms,
-  animation keyframe trimming, and atomic export;
+- the GLB Editor has pure-Rust GLB validation, scene inspection, root
+  transforms, interpolated animation trimming with time rebasing, PNG/JPEG PBR
+  texture replacement, shared-material duplication, and atomic reparse-
+  validated export;
 - BVH Studio has generic hierarchy parsing, frame trimming, versioned Mapping
-  JSON loading, Rest Pose delta retargeting, and Character Package / Animation
-  Clip GLB export;
+  JSON loading and saving, mapping validation reports, reviewed name-match
+  suggestions, Rest Pose delta retargeting, frame-stepped skeleton playback,
+  optional redundant-key reduction, and Character Package / Animation Clip
+  GLB export;
 - the existing egui and three-d Canvas infrastructure remains the preview
   foundation;
-- PBR replacement, skeleton overlays, key reduction, and broader fixture
-  validation remain the next implementation slice.
+- complete mesh/Skinned standardization baking, optional root-motion and
+  heading controls, broader fixture validation, and optional compressed-
+  geometry support remain planned.

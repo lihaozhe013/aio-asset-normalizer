@@ -7,10 +7,15 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 
 mod transform;
 use self::transform::*;
+
+mod resources;
+pub use self::resources::{PrimitiveTarget, TextureSlot};
+
+mod animation;
 
 #[derive(Debug)]
 pub enum GlbError {
@@ -212,10 +217,6 @@ impl GlbDocument {
 
     pub fn animation_names(&self) -> Vec<String> {
         names(&self.json, "animations", "Animation")
-    }
-
-    pub fn skin_names(&self) -> Vec<String> {
-        names(&self.json, "skins", "Skin")
     }
 
     pub fn skin_data(&self) -> Result<SkinData, GlbError> {
@@ -470,6 +471,7 @@ impl GlbDocument {
 
     pub fn export_atomic(&self, path: &Path) -> Result<(), GlbError> {
         let bytes = self.to_bytes()?;
+        gltf::Gltf::from_slice(&bytes).map_err(GlbError::from)?;
         let parent = path.parent().unwrap_or_else(|| Path::new("."));
         fs::create_dir_all(parent)?;
         let temporary = path.with_extension("glb.tmp");
@@ -555,117 +557,7 @@ impl GlbDocument {
         start: f32,
         end: f32,
     ) -> Result<(), GlbError> {
-        if !start.is_finite() || !end.is_finite() || start < 0.0 || end <= start
-        {
-            return Err(GlbError::Invalid(
-                "Animation range must satisfy 0 <= start < end".to_owned(),
-            ));
-        }
-        let animations = self
-            .json
-            .get("animations")
-            .and_then(Value::as_array)
-            .ok_or_else(|| {
-                GlbError::Invalid("GLB has no animations".to_owned())
-            })?;
-        let animation = animations.get(animation_index).ok_or_else(|| {
-            GlbError::Invalid(format!(
-                "Animation {animation_index} does not exist"
-            ))
-        })?;
-        let samplers = animation
-            .get("samplers")
-            .and_then(Value::as_array)
-            .ok_or_else(|| {
-                GlbError::Invalid("Animation has no samplers".to_owned())
-            })?;
-        let mut ranges = Vec::with_capacity(samplers.len());
-        for sampler in samplers {
-            let input = sampler
-                .get("input")
-                .and_then(Value::as_u64)
-                .ok_or_else(|| {
-                    GlbError::Invalid(
-                        "Animation sampler has no input accessor".to_owned(),
-                    )
-                })? as usize;
-            ranges.push(self.accessor_time_range(input, start, end)?);
-        }
-        let sampler_ids: Vec<(usize, usize)> = samplers
-            .iter()
-            .map(|sampler| {
-                (
-                    sampler.get("input").and_then(Value::as_u64).unwrap()
-                        as usize,
-                    sampler.get("output").and_then(Value::as_u64).unwrap()
-                        as usize,
-                )
-            })
-            .collect();
-        let mut updates = Vec::with_capacity(sampler_ids.len());
-        for ((input, output), (first, last)) in
-            sampler_ids.into_iter().zip(ranges)
-        {
-            let input_accessor = self.accessor(input)?.clone();
-            let output_accessor = self.accessor(output)?.clone();
-            let input_view =
-                self.copy_accessor_range(&input_accessor, first, last)?;
-            let output_view =
-                self.copy_accessor_range(&output_accessor, first, last)?;
-            let new_input = self.append_accessor(
-                input_accessor,
-                input_view,
-                last - first + 1,
-            )?;
-            let new_output = self.append_accessor(
-                output_accessor,
-                output_view,
-                last - first + 1,
-            )?;
-            updates.push((new_input, new_output));
-        }
-        let animation = self
-            .json
-            .get_mut("animations")
-            .and_then(Value::as_array_mut)
-            .and_then(|items| items.get_mut(animation_index))
-            .unwrap();
-        let samplers = animation
-            .get_mut("samplers")
-            .and_then(Value::as_array_mut)
-            .unwrap();
-        for (sampler, (new_input, new_output)) in
-            samplers.iter_mut().zip(updates)
-        {
-            sampler["input"] = json!(new_input);
-            sampler["output"] = json!(new_output);
-        }
-        Ok(())
-    }
-
-    fn accessor_time_range(
-        &self,
-        accessor: usize,
-        start: f32,
-        end: f32,
-    ) -> Result<(usize, usize), GlbError> {
-        let values = self.read_accessor_f32(accessor)?;
-        let mut first = None;
-        let mut last = None;
-        for (index, value) in values.iter().enumerate() {
-            let time = value[0];
-            if time >= start && time <= end {
-                first.get_or_insert(index);
-                last = Some(index);
-            }
-        }
-        match (first, last) {
-            (Some(first), Some(last)) if first < last => Ok((first, last)),
-            _ => Err(GlbError::Invalid(
-                "Animation range does not contain at least two keyframes"
-                    .to_owned(),
-            )),
-        }
+        self.trim_animation_interpolated(animation_index, start, end)
     }
 
     fn accessor(&self, index: usize) -> Result<&Value, GlbError> {
@@ -766,39 +658,6 @@ impl GlbDocument {
             })
     }
 
-    fn copy_accessor_range(
-        &mut self,
-        accessor: &Value,
-        first: usize,
-        last: usize,
-    ) -> Result<Vec<u8>, GlbError> {
-        let components = match accessor.get("type").and_then(Value::as_str) {
-            Some("SCALAR") => 1,
-            Some("VEC2") => 2,
-            Some("VEC3") => 3,
-            Some("VEC4") => 4,
-            _ => {
-                return Err(GlbError::Unsupported(
-                    "Animation output accessor type is unsupported".to_owned(),
-                ))
-            }
-        };
-        let component_size =
-            match accessor.get("componentType").and_then(Value::as_u64) {
-                Some(5126) => 4,
-                Some(5123) | Some(5125) => 2,
-                _ => {
-                    return Err(GlbError::Unsupported(
-                        "Animation component type is unsupported".to_owned(),
-                    ))
-                }
-            };
-        let bytes =
-            self.accessor_bytes(accessor, components * component_size)?;
-        let element_size = components * component_size;
-        Ok(bytes[first * element_size..(last + 1) * element_size].to_vec())
-    }
-
     fn append_float_accessor(
         &mut self,
         values: &[Vec<f32>],
@@ -877,62 +736,6 @@ impl GlbDocument {
             buffer["byteLength"] = json!(bin.len());
         }
         Ok(accessor_index)
-    }
-
-    fn append_accessor(
-        &mut self,
-        template: Value,
-        data: Vec<u8>,
-        count: usize,
-    ) -> Result<usize, GlbError> {
-        let bin = self.bin.get_or_insert_with(Vec::new);
-        while !bin.len().is_multiple_of(4) {
-            bin.push(0);
-        }
-        let offset = bin.len();
-        bin.extend_from_slice(&data);
-        while !bin.len().is_multiple_of(4) {
-            bin.push(0);
-        }
-        let views = self
-            .json
-            .get_mut("bufferViews")
-            .and_then(Value::as_array_mut)
-            .ok_or_else(|| {
-                GlbError::Invalid("GLB has no bufferViews array".to_owned())
-            })?;
-        let mut view = Map::new();
-        view.insert("buffer".to_owned(), json!(0));
-        view.insert("byteOffset".to_owned(), json!(offset));
-        view.insert("byteLength".to_owned(), json!(data.len()));
-        let view_index = views.len();
-        views.push(Value::Object(view));
-        let accessors = self
-            .json
-            .get_mut("accessors")
-            .and_then(Value::as_array_mut)
-            .ok_or_else(|| {
-                GlbError::Invalid("GLB has no accessors array".to_owned())
-            })?;
-        let mut accessor = template;
-        accessor["bufferView"] = json!(view_index);
-        accessor["byteOffset"] = json!(0);
-        accessor["count"] = json!(count);
-        if let Some(object) = accessor.as_object_mut() {
-            object.remove("min");
-            object.remove("max");
-        }
-        let index = accessors.len();
-        accessors.push(accessor);
-        if let Some(buffer) = self
-            .json
-            .get_mut("buffers")
-            .and_then(Value::as_array_mut)
-            .and_then(|items| items.get_mut(0))
-        {
-            buffer["byteLength"] = json!(bin.len());
-        }
-        Ok(index)
     }
 }
 

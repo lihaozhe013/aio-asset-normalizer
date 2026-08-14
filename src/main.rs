@@ -94,6 +94,17 @@ fn main() {
             );
         }
 
+        if app.page == modules::ui::menu_bar::Page::BvhStudio {
+            for bone in &app.canvas.skeleton {
+                clear_rt = clear_rt.render_partially(
+                    viewport.into(),
+                    &app.camera.camera,
+                    bone,
+                    &[],
+                );
+            }
+        }
+
         clear_rt.write(|| gui.render()).unwrap();
 
         FrameOutput {

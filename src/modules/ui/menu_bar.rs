@@ -12,6 +12,7 @@ pub enum MenuAction {
     ImportGlb,
     ImportBvh,
     ImportMapping,
+    ExportMapping,
     Save,
     Export,
     ExportBvhGlb,
@@ -52,6 +53,10 @@ pub fn render(
                     }
                     if ui.button(i18n.tr("menu.import_mapping")).clicked() {
                         actions.push(MenuAction::ImportMapping);
+                        ui.close();
+                    }
+                    if ui.button(i18n.tr("menu.export_mapping")).clicked() {
+                        actions.push(MenuAction::ExportMapping);
                         ui.close();
                     }
                     ui.separator();

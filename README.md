@@ -68,12 +68,12 @@ The Mapping file is the single source of truth for BVH retargeting. Automatic na
   "source": {
     "up_axis": "Y",
     "forward_axis": "-Z",
-    "unit_scale": 0.01,
-    "root_joint": "Hips"
+    "unit": "cm",
+    "root": "Hips"
   },
   "target": {
     "skin": "Armature",
-    "root_node": "pelvis"
+    "root": "pelvis"
   },
   "bones": [
     {
@@ -91,7 +91,7 @@ The initial target-model contract requires a conventional glTF Skin with valid `
 
 | Layer | Technology |
 | --- | --- |
-| GUI | `egui` / `eframe` |
+| GUI | `egui` through `three-d` |
 | 3D viewport | `three-d` / `wgpu` |
 | GLB loading and validation | `gltf` |
 | GLB document editing | Preserve raw JSON + BIN; use `gltf-json` when appropriate |
@@ -111,7 +111,9 @@ The complete design, interfaces, migration boundaries, acceptance criteria, and 
 
 ## Current Status
 
-The application now builds without the Blender bridge or legacy format scripts. The GLB Editor has a pure-Rust document layer with GLB validation, scene indexing, root transforms, animation keyframe trimming, and atomic export. BVH Studio has generic hierarchy parsing, frame trimming, versioned Mapping JSON loading, Rest Pose delta retargeting, and Character Package / Animation Clip GLB export. Texture replacement, skeleton overlays, key reduction, and broader fixture validation remain planned work.
+The application builds without the Blender bridge or legacy format scripts. The GLB Editor has a pure-Rust document layer with GLB validation, scene indexing, root transforms, interpolated animation trimming, PNG/JPEG PBR texture replacement, shared-material duplication, and atomic reparse-validated export. BVH Studio has generic hierarchy parsing, frame trimming, Mapping JSON validation and saving, reviewed name-match suggestions, Rest Pose delta retargeting, frame-stepped skeleton playback, optional redundant-key reduction, and Character Package / Animation Clip GLB export.
+
+The next engineering slice is complete standardization baking for mesh and Skinned data, followed by richer fixture coverage and optional compressed-geometry support. Root-motion and heading controls remain optional BVH enhancements, while skeleton replacement is intentionally reserved for a later release.
 
 ## Development Verification
 

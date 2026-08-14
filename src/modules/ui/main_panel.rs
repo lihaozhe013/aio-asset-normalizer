@@ -1,4 +1,6 @@
 use crate::app::App;
+use crate::modules::bvh::SuggestionConfidence;
+use crate::modules::glb::TextureSlot;
 use crate::modules::ui::{
     fonts,
     menu_bar::{self, MenuAction, Page},
@@ -235,8 +237,34 @@ fn render_glb_inspector(app: &mut App, ui: &mut three_d::egui::Ui) {
 
     let replacement_label = app.i18n.tr("glb.replacements").to_owned();
     ui.collapsing(replacement_label, |ui| {
-        ui.add_enabled(false, Button::new(app.i18n.tr("glb.replace_mesh")));
-        ui.add_enabled(false, Button::new(app.i18n.tr("glb.replace_texture")));
+        ui.label(app.i18n.tr("glb.texture_target"));
+        ui.horizontal(|ui| {
+            ui.label(app.i18n.tr("glb.texture_mesh"));
+            ui.add(
+                DragValue::new(&mut app.texture_mesh)
+                    .range(0..=summary.meshes.saturating_sub(1)),
+            );
+            ui.label(app.i18n.tr("glb.texture_primitive"));
+            ui.add(DragValue::new(&mut app.texture_primitive).range(0..=64));
+        });
+        ComboBox::from_label(app.i18n.tr("glb.texture_slot"))
+            .selected_text(app.texture_slot.label())
+            .show_ui(ui, |ui| {
+                for slot in TextureSlot::ALL {
+                    ui.selectable_value(
+                        &mut app.texture_slot,
+                        slot,
+                        slot.label(),
+                    );
+                }
+            });
+        ui.checkbox(
+            &mut app.texture_duplicate_shared,
+            app.i18n.tr("glb.texture_duplicate_shared"),
+        );
+        if ui.button(app.i18n.tr("glb.replace_texture")).clicked() {
+            app.replace_glb_texture();
+        }
         ui.add_enabled(false, Button::new(app.i18n.tr("glb.replace_skeleton")));
         ui.label(app.i18n.tr("glb.replacements_hint"));
     });
@@ -289,6 +317,55 @@ fn render_bvh_inspector(app: &mut App, ui: &mut three_d::egui::Ui) {
             }
         });
         ui.separator();
+        let mut requested_frame = None;
+        ui.horizontal(|ui| {
+            ui.label(app.i18n.tr("bvh.frame"));
+            let mut frame = app.bvh_frame;
+            if ui
+                .add(
+                    DragValue::new(&mut frame)
+                        .range(0..=document.frames.len().saturating_sub(1)),
+                )
+                .changed()
+            {
+                requested_frame = Some(frame);
+            }
+            ui.label(format!("/ {}", document.frames.len().saturating_sub(1)));
+        });
+        if let Some(frame) = requested_frame {
+            app.set_bvh_frame(frame);
+        }
+        ui.horizontal(|ui| {
+            if ui
+                .button(if app.bvh_playing {
+                    app.i18n.tr("bvh.pause")
+                } else {
+                    app.i18n.tr("bvh.play")
+                })
+                .clicked()
+            {
+                app.bvh_playing = !app.bvh_playing;
+                app.bvh_playback_accumulator = 0.0;
+            }
+            ui.label(app.i18n.tr("bvh.speed"));
+            ui.add(
+                DragValue::new(&mut app.bvh_playback_speed)
+                    .speed(0.05)
+                    .range(0.05..=8.0)
+                    .suffix("x"),
+            );
+        });
+        ui.checkbox(&mut app.bvh_reduce_keys, app.i18n.tr("bvh.reduce_keys"));
+        if app.bvh_reduce_keys {
+            ui.horizontal(|ui| {
+                ui.label(app.i18n.tr("bvh.key_tolerance"));
+                ui.add(
+                    DragValue::new(&mut app.bvh_key_tolerance)
+                        .speed(0.0001)
+                        .range(0.000001..=1.0),
+                );
+            });
+        }
         ui.label(app.i18n.tr("bvh.trim"));
         ui.horizontal(|ui| {
             ui.label(app.i18n.tr("glb.start"));
@@ -353,6 +430,67 @@ fn render_bvh_inspector(app: &mut App, ui: &mut three_d::egui::Ui) {
                 plan.unmapped_source_joints.join(", ")
             ));
         }
+    }
+    if let (Some(document), Some(report)) =
+        (app.bvh.as_ref(), app.mapping_report.as_ref())
+    {
+        ui.separator();
+        ui.label(app.i18n.tr("bvh.mapping_report"));
+        ui.label(format!(
+            "{}: {:.1}%",
+            app.i18n.tr("bvh.coverage"),
+            report.coverage_percent(document.joints.len())
+        ));
+        if report.is_valid() {
+            ui.colored_label(
+                Color32::LIGHT_GREEN,
+                app.i18n.tr("bvh.mapping_valid"),
+            );
+        } else {
+            ui.colored_label(
+                Color32::YELLOW,
+                app.i18n.tr("bvh.mapping_invalid"),
+            );
+        }
+        for (label, values) in [
+            (
+                app.i18n.tr("bvh.unknown_source"),
+                &report.unknown_source_joints,
+            ),
+            (
+                app.i18n.tr("bvh.unknown_target"),
+                &report.unknown_target_nodes,
+            ),
+            (
+                app.i18n.tr("bvh.duplicate_target"),
+                &report.duplicate_target_nodes,
+            ),
+        ] {
+            if !values.is_empty() {
+                ui.label(format!("{label}: {}", values.join(", ")));
+            }
+        }
+        if let Some(error) = report.contract_error.as_deref() {
+            ui.label(error);
+        }
+    }
+    if !app.mapping_suggestions.is_empty() {
+        ui.collapsing(app.i18n.tr("bvh.suggestions"), |ui| {
+            for suggestion in app.mapping_suggestions.iter().take(12) {
+                let confidence = match suggestion.confidence {
+                    SuggestionConfidence::Exact => {
+                        app.i18n.tr("bvh.suggestion_exact")
+                    }
+                    SuggestionConfidence::Normalized => {
+                        app.i18n.tr("bvh.suggestion_normalized")
+                    }
+                };
+                ui.label(format!(
+                    "{} → {} ({confidence})",
+                    suggestion.source_joint, suggestion.target_node
+                ));
+            }
+        });
     }
 }
 

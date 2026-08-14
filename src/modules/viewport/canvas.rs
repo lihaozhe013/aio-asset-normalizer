@@ -7,6 +7,7 @@ pub struct ViewportCanvas {
     pub axes: Vec<Gm<Mesh, ColorMaterial>>,
     pub grid: Vec<Gm<Mesh, ColorMaterial>>,
     pub origin_sphere: Gm<Mesh, ColorMaterial>,
+    pub skeleton: Vec<Gm<Mesh, ColorMaterial>>,
     pub model: Option<Model<PhysicalMaterial>>,
     pub show_axes: bool,
     pub show_grid: bool,
@@ -21,6 +22,7 @@ impl ViewportCanvas {
             axes: helpers::build_axes(context),
             grid: helpers::build_grid(context),
             origin_sphere: helpers::build_origin_sphere(context),
+            skeleton: Vec::new(),
             model: None,
             show_axes: true,
             show_grid: true,
@@ -74,6 +76,19 @@ impl ViewportCanvas {
 
     pub fn model_lights(&self) -> [&dyn Light; 2] {
         [&self.ambient_light, &self.directional_light]
+    }
+
+    pub fn set_bvh_skeleton(
+        &mut self,
+        context: &Context,
+        positions: &[[f32; 3]],
+        parents: &[Option<usize>],
+    ) {
+        self.skeleton = helpers::build_skeleton(context, positions, parents);
+    }
+
+    pub fn clear_bvh_skeleton(&mut self) {
+        self.skeleton.clear();
     }
 
     pub fn apply_view_prefs(&mut self, prefs: &ViewPreferences) {
