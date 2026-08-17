@@ -519,7 +519,9 @@ impl BvhDocument {
         }
         let temporary = path.with_extension("bvh.tmp");
         fs::write(&temporary, output)?;
-        if let Err(error) = fs::rename(&temporary, path) {
+        if let Err(error) =
+            crate::modules::atomic_file::replace(&temporary, path)
+        {
             let _ = fs::remove_file(&temporary);
             return Err(error.into());
         }

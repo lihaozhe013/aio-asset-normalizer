@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::Instant;
@@ -738,11 +739,9 @@ impl App {
         else {
             return;
         };
-        if path.exists() {
-            self.log.append(&format!(
-                "[glb_editor] Refusing to overwrite existing file {}",
-                path.display()
-            ));
+        if is_source_path(&path, self.glb_path.as_deref()) {
+            self.log
+                .append("[glb_editor] Refusing to overwrite the source GLB");
             return;
         }
         match document.export_atomic(&path) {
@@ -767,11 +766,10 @@ impl App {
         else {
             return;
         };
-        if path.exists() {
-            self.log.append(&format!(
-                "[bvh_studio] Refusing to overwrite existing file {}",
-                path.display()
-            ));
+        if is_source_path(&path, self.mapping_path.as_deref()) {
+            self.log.append(
+                "[bvh_studio] Refusing to overwrite the source mapping file",
+            );
             return;
         }
         match bvh::save_mapping(&path, mapping) {
@@ -797,11 +795,9 @@ impl App {
         else {
             return;
         };
-        if path.exists() {
-            self.log.append(&format!(
-                "[bvh_studio] Refusing to overwrite existing file {}",
-                path.display()
-            ));
+        if is_source_path(&path, self.bvh_path.as_deref()) {
+            self.log
+                .append("[bvh_studio] Refusing to overwrite the source BVH");
             return;
         }
         match document.write(&path) {
@@ -845,11 +841,10 @@ impl App {
         else {
             return;
         };
-        if path.exists() {
-            self.log.append(&format!(
-                "[bvh_studio] Refusing to overwrite existing file {}",
-                path.display()
-            ));
+        if is_source_path(&path, self.bvh_target_path.as_deref()) {
+            self.log.append(
+                "[bvh_studio] Refusing to overwrite the target source GLB",
+            );
             return;
         }
         let (sender, receiver) = mpsc::channel();
@@ -928,5 +923,24 @@ impl App {
             None
         };
         self.mapping_report = Some(report);
+    }
+}
+
+fn is_source_path(path: &Path, source: Option<&Path>) -> bool {
+    source.is_some_and(|source| same_path(path, source))
+}
+
+fn same_path(left: &Path, right: &Path) -> bool {
+    let left = fs::canonicalize(left).unwrap_or_else(|_| left.to_path_buf());
+    let right = fs::canonicalize(right).unwrap_or_else(|_| right.to_path_buf());
+
+    #[cfg(windows)]
+    {
+        left.to_string_lossy()
+            .eq_ignore_ascii_case(&right.to_string_lossy())
+    }
+    #[cfg(not(windows))]
+    {
+        left == right
     }
 }

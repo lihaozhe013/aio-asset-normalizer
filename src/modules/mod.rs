@@ -1,3 +1,4 @@
+pub(crate) mod atomic_file;
 pub mod bvh;
 pub mod glb;
 pub mod i18n;

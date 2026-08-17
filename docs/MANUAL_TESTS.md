@@ -52,3 +52,12 @@ rg "\[glb_editor\]" debug.log > glb-animation-debug.log
 ```
 
 Generated log files are local artifacts and must remain untracked.
+
+## Export Overwrite Behavior
+
+1. Open a GLB, BVH, or Mapping JSON and export it to a new output path.
+2. Export again to the same output path and confirm the existing non-source
+   output is replaced successfully.
+3. Confirm the exported file can be opened again and no `.tmp` file remains.
+4. Select the original input file as the export destination and confirm the
+   application refuses to overwrite the source file.
