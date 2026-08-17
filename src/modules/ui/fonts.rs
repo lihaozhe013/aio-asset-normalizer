@@ -15,5 +15,9 @@ pub fn configure(ctx: &Context) {
         list.clear();
         list.push("noto_sans_sc".to_owned());
     }
+
+    // Register Phosphor icon font (appended after CJK text font)
+    egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
+
     ctx.set_fonts(fonts);
 }

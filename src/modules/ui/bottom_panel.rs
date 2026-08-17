@@ -53,6 +53,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
 
 fn render_animation_timeline(app: &mut App, ui: &mut three_d::egui::Ui) {
     use three_d::egui::*;
+    use egui_phosphor::regular::{PAUSE, PLAY, SKIP_BACK, SKIP_FORWARD};
 
     let entries = app.glb_animation_entries();
     if entries.is_empty() {
@@ -66,6 +67,8 @@ fn render_animation_timeline(app: &mut App, ui: &mut three_d::egui::Ui) {
         .get(selected_index)
         .map(|entry| entry.0.as_str())
         .unwrap_or("Animation");
+
+    // Row 1: label + clip selector + loop + speed + time
     ui.horizontal(|ui| {
         ui.label(RichText::new(app.i18n.tr("glb.timeline")).strong());
         let mut requested_index = selected_index;
@@ -99,22 +102,6 @@ fn render_animation_timeline(app: &mut App, ui: &mut three_d::egui::Ui) {
                 return;
             }
 
-            if ui
-                .button(if app.glb_animation_playing {
-                    app.i18n.tr("glb.pause")
-                } else {
-                    app.i18n.tr("glb.play")
-                })
-                .clicked()
-            {
-                app.glb_animation_playing = !app.glb_animation_playing;
-            }
-            if ui.button(app.i18n.tr("glb.step_back")).clicked() {
-                app.step_glb_animation(-1.0);
-            }
-            if ui.button(app.i18n.tr("glb.step_forward")).clicked() {
-                app.step_glb_animation(1.0);
-            }
             ui.checkbox(&mut app.glb_animation_loop, app.i18n.tr("glb.loop"));
             ui.label(app.i18n.tr("glb.speed"));
             ui.add(
@@ -129,20 +116,50 @@ fn render_animation_timeline(app: &mut App, ui: &mut three_d::egui::Ui) {
         }
     });
 
+    // Row 2: transport icons + progress bar
     if let Some((_, duration, playable, _)) = entries.get(selected_index) {
         if *playable {
-            let mut time = app.glb_animation_time;
-            let slider_width = ui.available_width();
-            if ui
-                .add_sized(
-                    [slider_width, 24.0],
-                    Slider::new(&mut time, 0.0..=*duration)
-                        .text(app.i18n.tr("glb.time")),
-                )
-                .changed()
-            {
-                app.set_glb_animation_time(time);
-            }
+            ui.horizontal(|ui| {
+                let icon_size = 18.0;
+
+                // Play / Pause
+                let play_icon = if app.glb_animation_playing { PAUSE } else { PLAY };
+                if ui
+                    .button(RichText::new(play_icon).size(icon_size))
+                    .clicked()
+                {
+                    app.glb_animation_playing = !app.glb_animation_playing;
+                }
+
+                // Step back
+                if ui
+                    .button(RichText::new(SKIP_BACK).size(icon_size))
+                    .clicked()
+                {
+                    app.step_glb_animation(-1.0);
+                }
+
+                // Step forward
+                if ui
+                    .button(RichText::new(SKIP_FORWARD).size(icon_size))
+                    .clicked()
+                {
+                    app.step_glb_animation(1.0);
+                }
+
+                // Progress bar (fills remaining width)
+                let slider_width = ui.available_width();
+                let mut time = app.glb_animation_time;
+                if ui
+                    .add_sized(
+                        [slider_width, 24.0],
+                        Slider::new(&mut time, 0.0..=*duration),
+                    )
+                    .changed()
+                {
+                    app.set_glb_animation_time(time);
+                }
+            });
         }
     }
 }

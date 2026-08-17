@@ -21,6 +21,7 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png"]
 winit = "0.28"
 
 three-d-asset = { version = "0.10", features = ["gltf", "image"] }
+egui-phosphor = "0.12"
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
