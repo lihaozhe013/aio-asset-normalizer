@@ -79,6 +79,7 @@ pub struct App {
     pub(crate) bvh_playback_accumulator: f32,
     pub(crate) glb_animation_accumulator: f32,
     needs_reload: bool,
+    pending_auto_play: bool,
     needs_bvh_skeleton_reload: bool,
     pub(crate) needs_save: bool,
     quit_requested: bool,
@@ -153,6 +154,7 @@ impl App {
             bvh_playback_accumulator: 0.0,
             glb_animation_accumulator: 0.0,
             needs_reload: false,
+            pending_auto_play: false,
             needs_bvh_skeleton_reload: false,
             needs_save: false,
             quit_requested: false,
@@ -168,6 +170,7 @@ impl App {
         self.page = Page::GlbEditor;
         self.glb_path = Some(path.to_path_buf());
         self.needs_reload = true;
+        self.pending_auto_play = true;
     }
 
     pub fn poll_tasks(&mut self) {
@@ -260,9 +263,16 @@ impl App {
                                     ));
                                 }
                             }
+                            if self.pending_auto_play
+                                && !self.canvas.animation_clips().is_empty()
+                            {
+                                self.glb_animation_playing = true;
+                            }
+                            self.pending_auto_play = false;
                         }
                         Err(error) => {
                             self.glb = Some(document);
+                            self.pending_auto_play = false;
                             self.bottom_panel_tab = BottomPanelTab::DebugLog;
                             self.log.append(&format!(
                                 "[glb_editor] Preview failed: {error}"
@@ -270,9 +280,11 @@ impl App {
                         }
                     }
                 }
-                Err(error) => self
-                    .log
-                    .append(&format!("[glb_editor] Load failed: {error}")),
+                Err(error) => {
+                    self.pending_auto_play = false;
+                    self.log
+                        .append(&format!("[glb_editor] Load failed: {error}"));
+                }
             }
         }
 

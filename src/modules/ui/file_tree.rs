@@ -441,22 +441,22 @@ impl FileTree {
                             if Self::is_supported(&item.path) {
                                 let mut checked =
                                     self.selected.contains(&item.path);
-                                if ui
-                                    .checkbox(&mut checked, &item.name)
-                                    .changed()
-                                {
+                                if ui.checkbox(&mut checked, "").changed() {
                                     if checked {
                                         self.selected.insert(item.path.clone());
                                     } else {
                                         self.selected.remove(&item.path);
                                     }
                                 }
-                                if Self::is_glb(&item.path)
-                                    && ui
-                                        .small_button(i18n.tr("button.preview"))
+                                if Self::is_glb(&item.path) {
+                                    if ui
+                                        .selectable_label(false, &item.name)
                                         .clicked()
-                                {
-                                    preview_glb = Some(item.path.clone());
+                                    {
+                                        preview_glb = Some(item.path.clone());
+                                    }
+                                } else {
+                                    ui.label(&item.name);
                                 }
                             } else {
                                 ui.label(
