@@ -587,10 +587,20 @@ fn render_about_dialog(app: &mut App, ctx: &three_d::egui::Context) {
         .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
         .show(ctx, |ui| {
             ui.vertical_centered(|ui| {
-                ui.add(
-                    Image::from_texture(&icon)
-                        .fit_to_exact_size(vec2(72.0, 72.0)),
-                );
+                Frame::NONE
+                    .fill(Color32::from_rgb(248, 240, 230))
+                    .stroke(Stroke::new(
+                        1.0_f32,
+                        Color32::from_rgb(224, 198, 176),
+                    ))
+                    .corner_radius(CornerRadius::same(12))
+                    .inner_margin(Margin::same(8))
+                    .show(ui, |ui| {
+                        ui.add(
+                            Image::from_texture(&icon)
+                                .fit_to_exact_size(vec2(72.0, 72.0)),
+                        );
+                    });
                 ui.heading("AIO Asset Normalizer");
                 ui.label(format!("v{}", env!("CARGO_PKG_VERSION")));
                 ui.separator();
