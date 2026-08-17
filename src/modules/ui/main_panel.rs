@@ -63,7 +63,12 @@ pub fn render_ui(
 
     bottom_panel::render(app, ui);
 
-    let content_rect = ui.available_rect_before_wrap();
+    let content_rect = CentralPanel::no_frame()
+        .show_inside(ui, |ui| {
+            let (_, rect) = ui.allocate_space(ui.available_size());
+            rect
+        })
+        .inner;
     render_about_dialog(app, ui.ctx());
     content_rect
 }
@@ -176,8 +181,8 @@ fn render_glb_inspector(app: &mut App, ui: &mut three_d::egui::Ui) {
                 }
             });
         }
-        if ui.button(app.i18n.tr("glb.apply_rotation")).clicked() {
-            app.apply_rotation();
+        if ui.button(app.i18n.tr("glb.reset_rotation")).clicked() {
+            app.reset_root_orientation();
         }
     });
 
@@ -195,8 +200,8 @@ fn render_glb_inspector(app: &mut App, ui: &mut three_d::egui::Ui) {
             {
                 app.mark_root_preview_dirty();
             }
-            if ui.button(app.i18n.tr("glb.apply")).clicked() {
-                app.apply_scale();
+            if ui.button(app.i18n.tr("glb.reset_scale")).clicked() {
+                app.reset_root_scale();
             }
         });
         for (label, index) in [("X", 0), ("Y", 1), ("Z", 2)] {
@@ -213,11 +218,8 @@ fn render_glb_inspector(app: &mut App, ui: &mut three_d::egui::Ui) {
                 }
             });
         }
-        if ui.button(app.i18n.tr("glb.apply_translation")).clicked() {
-            app.apply_translation();
-        }
-        if ui.button(app.i18n.tr("glb.reset_preview")).clicked() {
-            app.reset_root_preview();
+        if ui.button(app.i18n.tr("glb.reset_translation")).clicked() {
+            app.reset_root_translation();
         }
     });
     if let Some(error) = app.root_preview_error() {
@@ -258,18 +260,16 @@ fn render_glb_inspector(app: &mut App, ui: &mut three_d::egui::Ui) {
                             .speed(0.05)
                             .suffix("x"),
                     );
-                    let can_apply = *playable
-                        && (app.glb_animation_rate - 1.0).abs() > f32::EPSILON;
+                    let can_reset =
+                        (app.glb_animation_rate - 1.0).abs() > f32::EPSILON;
                     if ui
                         .add_enabled(
-                            can_apply,
-                            Button::new(
-                                app.i18n.tr("glb.apply_animation_rate"),
-                            ),
+                            can_reset,
+                            Button::new(app.i18n.tr("glb.reset_rate")),
                         )
                         .clicked()
                     {
-                        app.apply_glb_animation_rate();
+                        app.reset_glb_animation_rate();
                     }
                 });
                 ui.label(app.i18n.tr("glb.animation_rate_hint"));

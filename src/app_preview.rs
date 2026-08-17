@@ -20,6 +20,21 @@ impl App {
         self.root_preview_dirty = true;
     }
 
+    pub(crate) fn reset_root_orientation(&mut self) {
+        self.orientation_euler_degrees = [0.0, 0.0, 0.0];
+        self.mark_root_preview_dirty();
+    }
+
+    pub(crate) fn reset_root_scale(&mut self) {
+        self.root_scale = 1.0;
+        self.mark_root_preview_dirty();
+    }
+
+    pub(crate) fn reset_root_translation(&mut self) {
+        self.root_translation = [0.0, 0.0, 0.0];
+        self.mark_root_preview_dirty();
+    }
+
     fn root_transform_preview(&self) -> RootTransformPreview {
         RootTransformPreview {
             euler_degrees: self.orientation_euler_degrees,

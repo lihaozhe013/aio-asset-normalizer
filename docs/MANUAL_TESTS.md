@@ -15,10 +15,10 @@
 6. Change the animation rate in the right Inspector, press Play, and confirm
    the preview uses the new rate without marking the GLB document dirty. Drag
    the timeline, pause, and use both frame-step buttons.
-7. Click Apply rate in the right Inspector, export the GLB, reopen the export,
-   and confirm the selected animation duration is shorter at `2.0x` or longer
-   at `0.5x`, while its poses remain unchanged. Confirm changing the rate
-   without clicking Apply rate does not affect the exported GLB.
+7. Export with a pending rate, reopen the export, and confirm the selected
+   animation duration is shorter at `2.0x` or longer at `0.5x`, while its poses
+   remain unchanged. Export again with a different pending rate and confirm the
+   current document and preview controls remain available for further edits.
 8. Switch to the `Debug Log` tab and confirm log controls are visible while
    animation playback state is preserved. Switch back to `Animation`.
 9. Open a GLB with no animations and confirm only the `Debug Log` tab is shown.
@@ -27,20 +27,40 @@
 11. Resize the bottom dock and the application window. Confirm the Canvas
     boundary moves with the dock and never renders underneath it.
 
+## Inspector and Canvas Input Boundaries
+
+1. Open a GLB in the GLB Editor and resize the left resource tree, right
+   Inspector, and bottom dock. Confirm the Canvas occupies only the remaining
+   central rectangle and never renders underneath any panel.
+2. Drag a numeric value in the Inspector, including orientation, scale,
+   translation, and animation rate. Scroll over the Inspector as well. Confirm
+   the Inspector value changes while the camera does not rotate, pan, or zoom.
+3. Drag in the central Canvas area with the left mouse button and confirm the
+   camera rotates. Use the middle mouse button to pan and the mouse wheel to
+   zoom.
+4. Start a Canvas drag, move the pointer into the Inspector, release the mouse,
+   then drag in the Inspector again. Confirm the camera stops and does not
+   remain stuck in a rotating or panning state.
+
 ## GLB Transform Preview
 
 1. Open a static `.glb` and change a Manual Orientation X, Y, or Z angle.
    Confirm the model updates immediately while the floor grid and axes remain
    fixed.
 2. Change Root Transform scale and translation. Confirm both values update the
-   model immediately without changing the GLB document until Apply is pressed.
-3. Press Reset Preview and confirm the model returns to the committed document
-   state while the current camera view is preserved.
-4. Press Apply for rotation, scale, or translation individually. Confirm only
-   the applied input resets to its neutral value, other pending preview inputs
+   model immediately without changing the committed GLB document.
+3. Export with pending orientation, scale, and translation values. Reopen the
+   export and confirm all three settings are present, while the source document
+   remains unchanged in the editor.
+4. Reset rotation, scale, or translation individually. Confirm only that
+   component returns to its neutral value, the other pending preview inputs
    remain visible, and the camera does not reset.
 5. Repeat the checks while playing an animation and while scrubbing the
    timeline. Confirm the preview transform remains applied to every pose.
+
+6. Adjust animation rate together with root transforms, export, and reopen the
+   file. Confirm the exported animation timing and root transform match the
+   preview. Use Reset rate and confirm it does not reset the root transform.
 
 ## Focused Debug Logging
 

@@ -173,6 +173,7 @@ impl App {
         self.page = Page::GlbEditor;
         self.glb_path = Some(path.to_path_buf());
         self.reset_root_preview();
+        self.reset_glb_animation_rate();
         self.request_glb_reload(GlbReloadKind::OpenModel);
         self.pending_auto_play = true;
     }
@@ -401,6 +402,7 @@ impl App {
                 self.canvas.clear_glb();
                 self.reset_root_preview();
                 self.reset_glb_animation_state();
+                self.reset_glb_animation_rate();
                 self.bottom_panel_tab = BottomPanelTab::DebugLog;
                 self.needs_save = true;
             }
@@ -425,67 +427,6 @@ impl App {
                 preferences::save(&self.collect_preferences());
                 self.quit_requested = true;
             }
-        }
-    }
-
-    pub(crate) fn apply_rotation(&mut self) {
-        let Some(document) = self.glb.as_ref() else {
-            self.log.append("[glb_editor] Open a GLB before editing");
-            return;
-        };
-        let operation = EditOperation::RotateRoots {
-            euler_degrees: self.orientation_euler_degrees,
-        };
-        let mut updated = document.clone();
-        match updated.apply(operation) {
-            Ok(()) => {
-                self.glb = Some(updated);
-                self.orientation_euler_degrees = [0.0, 0.0, 0.0];
-                self.mark_root_preview_dirty();
-                self.log.append("[glb_editor] Applied root rotation");
-                self.request_glb_reload(GlbReloadKind::EditedModel);
-            }
-            Err(error) => self.log.append(&format!("[glb_editor] {error}")),
-        }
-    }
-
-    pub(crate) fn apply_scale(&mut self) {
-        let Some(document) = self.glb.as_ref() else {
-            self.log.append("[glb_editor] Open a GLB before editing");
-            return;
-        };
-        let mut updated = document.clone();
-        match updated.apply(EditOperation::ScaleRoots {
-            factor: self.root_scale,
-        }) {
-            Ok(()) => {
-                self.glb = Some(updated);
-                self.root_scale = 1.0;
-                self.mark_root_preview_dirty();
-                self.log.append("[glb_editor] Applied root scale");
-                self.request_glb_reload(GlbReloadKind::EditedModel);
-            }
-            Err(error) => self.log.append(&format!("[glb_editor] {error}")),
-        }
-    }
-
-    pub(crate) fn apply_translation(&mut self) {
-        let Some(document) = self.glb.as_ref() else {
-            self.log.append("[glb_editor] Open a GLB before editing");
-            return;
-        };
-        let mut updated = document.clone();
-        match updated.apply(EditOperation::TranslateRoots {
-            offset: self.root_translation,
-        }) {
-            Ok(()) => {
-                self.glb = Some(updated);
-                self.root_translation = [0.0, 0.0, 0.0];
-                self.mark_root_preview_dirty();
-                self.log.append("[glb_editor] Applied root translation");
-                self.request_glb_reload(GlbReloadKind::EditedModel);
-            }
-            Err(error) => self.log.append(&format!("[glb_editor] {error}")),
         }
     }
 
@@ -516,55 +457,6 @@ impl App {
         }) {
             Ok(()) => {
                 self.log.append("[glb_editor] Trimmed animation keyframes");
-                self.request_glb_reload(GlbReloadKind::EditedModel);
-            }
-            Err(error) => self.log.append(&format!("[glb_editor] {error}")),
-        }
-    }
-
-    pub(crate) fn apply_glb_animation_rate(&mut self) {
-        let Some(document) = self.glb.as_ref() else {
-            self.log.append(
-                "[glb_editor] Open a GLB before applying animation rate",
-            );
-            return;
-        };
-        let animation = self.glb_animation_index;
-        let Some(clip) = self.canvas.animation_clips().get(animation) else {
-            self.log
-                .append("[glb_editor] Select a playable animation first");
-            return;
-        };
-        if !clip.is_playable() {
-            self.log.append(&format!(
-                "[glb_editor] Cannot apply rate to unavailable animation {animation}"
-            ));
-            return;
-        }
-        let rate = self.glb_animation_rate;
-        if !rate.is_finite() || rate <= 0.0 {
-            self.log
-                .append("[glb_editor] Animation rate must be finite and greater than zero");
-            return;
-        }
-        if (rate - 1.0).abs() <= f32::EPSILON {
-            self.log
-                .append("[glb_editor] Animation rate is already 1.0x");
-            return;
-        }
-
-        let mut updated = document.clone();
-        match updated
-            .apply(EditOperation::ScaleAnimationRate { animation, rate })
-        {
-            Ok(()) => {
-                self.glb = Some(updated);
-                self.glb_animation_rate = 1.0;
-                self.glb_animation_playing = false;
-                self.glb_animation_accumulator = 0.0;
-                self.log.append(&format!(
-                    "[glb_editor] Applied animation rate {rate:.3}x to animation {animation}"
-                ));
                 self.request_glb_reload(GlbReloadKind::EditedModel);
             }
             Err(error) => self.log.append(&format!("[glb_editor] {error}")),
@@ -719,10 +611,10 @@ impl App {
     }
 
     fn export_glb(&mut self) {
-        let Some(document) = self.glb.as_ref() else {
+        if self.glb.is_none() {
             self.log.append("[glb_editor] Nothing to export");
             return;
-        };
+        }
         let Some(path) = rfd::FileDialog::new()
             .add_filter("GLB", &["glb"])
             .set_file_name(
@@ -744,6 +636,14 @@ impl App {
                 .append("[glb_editor] Refusing to overwrite the source GLB");
             return;
         }
+        let document = match self.build_glb_export_snapshot() {
+            Ok(document) => document,
+            Err(error) => {
+                self.log
+                    .append(&format!("[glb_editor] Export failed: {error}"));
+                return;
+            }
+        };
         match document.export_atomic(&path) {
             Ok(()) => self
                 .log

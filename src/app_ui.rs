@@ -132,4 +132,8 @@ impl App {
         self.glb_animation_playing = false;
         self.glb_animation_accumulator = 0.0;
     }
+
+    pub(crate) fn reset_glb_animation_rate(&mut self) {
+        self.glb_animation_rate = 1.0;
+    }
 }

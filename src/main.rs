@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+mod app_export;
 mod app_preview;
 mod app_ui;
 mod modules;
@@ -20,8 +21,6 @@ fn main() {
     let mut app = App::new(&context, window.viewport(), &prefs);
 
     window.render_loop(move |mut frame_input| {
-        app.camera.handle_events(&frame_input.events);
-
         let mut content_rect: Option<egui::Rect> = None;
 
         gui.update(
@@ -35,8 +34,6 @@ fn main() {
             },
         );
 
-        app.reload_model_if_needed(&context);
-
         let dpr = frame_input.device_pixel_ratio;
         let viewport = content_rect
             .map(|rect| {
@@ -48,6 +45,10 @@ fn main() {
                 width: 1,
                 height: 1,
             });
+
+        app.camera.handle_events(&frame_input.events, viewport);
+
+        app.reload_model_if_needed(&context);
 
         app.camera.set_viewport(viewport);
 
@@ -149,7 +150,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn viewport_reserves_top_and_bottom_ui_regions() {
+    fn viewport_reserves_all_ui_regions() {
         let rect = three_d::egui::Rect::from_min_max(
             three_d::egui::pos2(250.0, 32.0),
             three_d::egui::pos2(900.0, 650.0),
@@ -169,6 +170,7 @@ mod tests {
                 height: 618,
             }
         );
+        assert_eq!(viewport.x + viewport.width as i32, 900);
     }
 
     #[test]
