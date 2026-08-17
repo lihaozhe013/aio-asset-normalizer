@@ -6,6 +6,90 @@ fn matrix_multiplication_preserves_identity() {
 }
 
 #[test]
+fn root_preview_matrix_composes_translation_scale_and_rotation() {
+    let matrix = RootTransformPreview {
+        euler_degrees: [0.0, 90.0, 0.0],
+        scale: 2.0,
+        translation: [3.0, 4.0, 5.0],
+    }
+    .to_matrix()
+    .unwrap();
+
+    assert!((matrix[0][3] - 3.0).abs() < 1e-5);
+    assert!((matrix[1][3] - 4.0).abs() < 1e-5);
+    assert!((matrix[2][3] - 5.0).abs() < 1e-5);
+    assert!(matrix[0][0].abs() < 1e-5);
+    assert!((matrix[0][2] - 2.0).abs() < 1e-5);
+    assert!((matrix[2][0] + 2.0).abs() < 1e-5);
+}
+
+#[test]
+fn euler_preview_rotates_each_axis_independently() {
+    let x = RootTransformPreview {
+        euler_degrees: [90.0, 0.0, 0.0],
+        ..RootTransformPreview::default()
+    }
+    .to_matrix()
+    .unwrap();
+    assert!((x[1][2] + 1.0).abs() < 1e-5);
+    assert!((x[2][1] - 1.0).abs() < 1e-5);
+
+    let y = RootTransformPreview {
+        euler_degrees: [0.0, 90.0, 0.0],
+        ..RootTransformPreview::default()
+    }
+    .to_matrix()
+    .unwrap();
+    assert!((y[0][2] - 1.0).abs() < 1e-5);
+    assert!((y[2][0] + 1.0).abs() < 1e-5);
+
+    let z = RootTransformPreview {
+        euler_degrees: [0.0, 0.0, 90.0],
+        ..RootTransformPreview::default()
+    }
+    .to_matrix()
+    .unwrap();
+    assert!((z[0][1] + 1.0).abs() < 1e-5);
+    assert!((z[1][0] - 1.0).abs() < 1e-5);
+}
+
+#[test]
+fn euler_preview_uses_z_y_x_composition_order() {
+    let matrix = RootTransformPreview {
+        euler_degrees: [90.0, 90.0, 0.0],
+        ..RootTransformPreview::default()
+    }
+    .to_matrix()
+    .unwrap();
+
+    assert!(matrix[0][0].abs() < 1e-5);
+    assert!((matrix[0][1] - 1.0).abs() < 1e-5);
+    assert!((matrix[1][2] + 1.0).abs() < 1e-5);
+    assert!((matrix[2][0] + 1.0).abs() < 1e-5);
+}
+
+#[test]
+fn root_preview_matrix_rejects_invalid_values() {
+    let invalid_scale = RootTransformPreview {
+        scale: 0.0,
+        ..RootTransformPreview::default()
+    };
+    assert!(invalid_scale.to_matrix().is_err());
+
+    let invalid_translation = RootTransformPreview {
+        translation: [f32::NAN, 0.0, 0.0],
+        ..RootTransformPreview::default()
+    };
+    assert!(invalid_translation.to_matrix().is_err());
+
+    let invalid_euler = RootTransformPreview {
+        euler_degrees: [f32::NAN, 0.0, 0.0],
+        ..RootTransformPreview::default()
+    };
+    assert!(invalid_euler.to_matrix().is_err());
+}
+
+#[test]
 fn rejects_non_glb_extension() {
     let error = GlbDocument::load(Path::new("model.fbx")).unwrap_err();
     assert!(error.to_string().contains("Only .glb"));
@@ -26,8 +110,7 @@ fn root_rotation_writes_column_major_glb_matrix() {
     };
     document
         .apply(EditOperation::RotateRoots {
-            axis: [0.0, 1.0, 0.0],
-            degrees: 90.0,
+            euler_degrees: [0.0, 90.0, 0.0],
         })
         .unwrap();
     let bytes = document.to_bytes().unwrap();
@@ -36,6 +119,41 @@ fn root_rotation_writes_column_major_glb_matrix() {
     let matrix = json["nodes"][0]["matrix"].as_array().unwrap();
     assert!((matrix[12].as_f64().unwrap() - 0.0).abs() < 1e-5);
     assert!((matrix[14].as_f64().unwrap() + 1.0).abs() < 1e-5);
+    gltf::Gltf::from_slice(&bytes).unwrap();
+}
+
+#[test]
+fn root_rotation_updates_every_scene_root() {
+    let mut document = GlbDocument {
+        source_path: None,
+        json: json!({
+            "asset": {"version": "2.0"},
+            "scene": 0,
+            "scenes": [{"nodes": [0, 1]}],
+            "nodes": [
+                {"translation": [1.0, 0.0, 0.0]},
+                {"translation": [0.0, 0.0, 1.0]}
+            ]
+        }),
+        bin: None,
+        dirty: false,
+    };
+    document
+        .apply(EditOperation::RotateRoots {
+            euler_degrees: [0.0, 90.0, 0.0],
+        })
+        .unwrap();
+
+    let bytes = document.to_bytes().unwrap();
+    let glb = gltf::binary::Glb::from_slice(&bytes).unwrap();
+    let json: Value = serde_json::from_slice(&glb.json).unwrap();
+    let first = json["nodes"][0]["matrix"].as_array().unwrap();
+    let second = json["nodes"][1]["matrix"].as_array().unwrap();
+    assert!((first[12].as_f64().unwrap() - 0.0).abs() < 1e-5);
+    assert!((first[14].as_f64().unwrap() + 1.0).abs() < 1e-5);
+    assert!((second[12].as_f64().unwrap() - 1.0).abs() < 1e-5);
+    assert!((second[14].as_f64().unwrap() - 0.0).abs() < 1e-5);
+    gltf::Gltf::from_slice(&bytes).unwrap();
 }
 
 #[test]

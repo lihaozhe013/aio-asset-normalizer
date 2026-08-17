@@ -138,8 +138,7 @@ pub struct GlbDocument {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EditOperation {
     RotateRoots {
-        axis: [f32; 3],
-        degrees: f32,
+        euler_degrees: [f32; 3],
     },
     ScaleRoots {
         factor: f32,
@@ -152,6 +151,46 @@ pub enum EditOperation {
         start: f32,
         end: f32,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RootTransformPreview {
+    pub euler_degrees: [f32; 3],
+    pub scale: f32,
+    pub translation: [f32; 3],
+}
+
+impl Default for RootTransformPreview {
+    fn default() -> Self {
+        Self {
+            euler_degrees: [0.0, 0.0, 0.0],
+            scale: 1.0,
+            translation: [0.0, 0.0, 0.0],
+        }
+    }
+}
+
+impl RootTransformPreview {
+    pub fn to_matrix(self) -> Result<[[f32; 4]; 4], GlbError> {
+        if self.translation.iter().any(|value| !value.is_finite()) {
+            return Err(GlbError::Invalid(
+                "Preview translation must be finite".to_owned(),
+            ));
+        }
+        if !self.scale.is_finite() || self.scale <= 0.0 {
+            return Err(GlbError::Invalid(
+                "Preview scale must be finite and greater than zero".to_owned(),
+            ));
+        }
+        let rotation = euler_rotation_matrix(self.euler_degrees)?;
+        Ok(multiply(
+            translation_matrix(self.translation),
+            multiply(
+                scale_matrix([self.scale, self.scale, self.scale]),
+                rotation,
+            ),
+        ))
+    }
 }
 
 impl GlbDocument {
@@ -406,8 +445,8 @@ impl GlbDocument {
 
     pub fn apply(&mut self, operation: EditOperation) -> Result<(), GlbError> {
         match operation {
-            EditOperation::RotateRoots { axis, degrees } => {
-                let rotation = rotation_matrix(axis, degrees.to_radians())?;
+            EditOperation::RotateRoots { euler_degrees } => {
+                let rotation = euler_rotation_matrix(euler_degrees)?;
                 self.map_root_nodes(|node| {
                     let current = node_matrix(node)?;
                     set_matrix(node, multiply(rotation, current));
@@ -761,6 +800,18 @@ fn names(json: &Value, key: &str, fallback: &str) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+fn euler_rotation_matrix(degrees: [f32; 3]) -> Result<[[f32; 4]; 4], GlbError> {
+    if degrees.iter().any(|value| !value.is_finite()) {
+        return Err(GlbError::Invalid(
+            "Euler rotation angles must be finite".to_owned(),
+        ));
+    }
+    let rotation_x = rotation_matrix([1.0, 0.0, 0.0], degrees[0].to_radians())?;
+    let rotation_y = rotation_matrix([0.0, 1.0, 0.0], degrees[1].to_radians())?;
+    let rotation_z = rotation_matrix([0.0, 0.0, 1.0], degrees[2].to_radians())?;
+    Ok(multiply(rotation_z, multiply(rotation_y, rotation_x)))
 }
 
 fn rotation_matrix(

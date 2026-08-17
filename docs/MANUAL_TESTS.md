@@ -23,6 +23,21 @@
 10. Resize the bottom dock and the application window. Confirm the Canvas
     boundary moves with the dock and never renders underneath it.
 
+## GLB Transform Preview
+
+1. Open a static `.glb` and change a Manual Orientation X, Y, or Z angle.
+   Confirm the model updates immediately while the floor grid and axes remain
+   fixed.
+2. Change Root Transform scale and translation. Confirm both values update the
+   model immediately without changing the GLB document until Apply is pressed.
+3. Press Reset Preview and confirm the model returns to the committed document
+   state while the current camera view is preserved.
+4. Press Apply for rotation, scale, or translation individually. Confirm only
+   the applied input resets to its neutral value, other pending preview inputs
+   remain visible, and the camera does not reset.
+5. Repeat the checks while playing an animation and while scrubbing the
+   timeline. Confirm the preview transform remains applied to every pose.
+
 ## Focused Debug Logging
 
 Run the application and filter GLB editor messages into a focused log file:

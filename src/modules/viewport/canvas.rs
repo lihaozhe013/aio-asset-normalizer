@@ -11,6 +11,9 @@ pub struct ViewportCanvas {
     pub skeleton: Vec<Gm<Mesh, ColorMaterial>>,
     pub model: Option<Model<PhysicalMaterial>>,
     glb_animation: Option<AnimationRuntime>,
+    model_base_transforms: Vec<Mat4>,
+    animated_node_world: Option<Vec<Mat4>>,
+    root_preview_transform: Mat4,
     pub show_axes: bool,
     pub show_grid: bool,
     pub show_origin: bool,
@@ -27,6 +30,9 @@ impl ViewportCanvas {
             skeleton: Vec::new(),
             model: None,
             glb_animation: None,
+            model_base_transforms: Vec::new(),
+            animated_node_world: None,
+            root_preview_transform: Mat4::identity(),
             show_axes: true,
             show_grid: true,
             show_origin: true,
@@ -73,7 +79,11 @@ impl ViewportCanvas {
         let model =
             Model::new(context, &cpu_model).map_err(|e| e.to_string())?;
 
+        self.model_base_transforms =
+            model.iter().map(|part| part.transformation()).collect();
         self.model = Some(model);
+        self.animated_node_world = None;
+        self.root_preview_transform = Mat4::identity();
         let runtime =
             AnimationRuntime::load(path).map_err(|error| error.to_string())?;
         let render_primitive_count = self
@@ -102,6 +112,17 @@ impl ViewportCanvas {
     pub fn clear_glb(&mut self) {
         self.model = None;
         self.glb_animation = None;
+        self.model_base_transforms.clear();
+        self.animated_node_world = None;
+        self.root_preview_transform = Mat4::identity();
+    }
+
+    pub fn set_root_preview_transform(
+        &mut self,
+        transform: Mat4,
+    ) -> Result<(), String> {
+        self.root_preview_transform = transform;
+        self.apply_model_transforms()
     }
 
     pub fn animation_clips(&self) -> &[AnimationClip] {
@@ -131,6 +152,14 @@ impl ViewportCanvas {
                     .to_owned(),
             );
         }
+        let animated_node_world = pose
+            .node_world
+            .iter()
+            .copied()
+            .map(matrix_to_mat4)
+            .collect::<Vec<_>>();
+        self.animated_node_world = Some(animated_node_world.clone());
+        let root_preview_transform = self.root_preview_transform;
         for (part, (primitive, positions, normals, tangents)) in
             model.iter_mut().zip(
                 runtime
@@ -145,10 +174,10 @@ impl ViewportCanvas {
             )
         {
             let node_world =
-                pose.node_world.get(primitive.node).ok_or_else(|| {
+                animated_node_world.get(primitive.node).ok_or_else(|| {
                     "Animation references a missing node".to_owned()
                 })?;
-            part.set_transformation(matrix_to_mat4(*node_world));
+            part.set_transformation(root_preview_transform * *node_world);
             // Indexed meshes expose the element count as `vertex_count`; partial
             // writes update the original vertex buffer without duplicating data.
             if let Some(positions) = positions {
@@ -175,6 +204,40 @@ impl ViewportCanvas {
                 part.set_tangents_partially(0, &values)
                     .map_err(|error| error.to_string())?;
             }
+        }
+        Ok(())
+    }
+
+    fn apply_model_transforms(&mut self) -> Result<(), String> {
+        let transforms = if let Some(animated_node_world) =
+            self.animated_node_world.as_ref()
+        {
+            let runtime = self.glb_animation.as_ref().ok_or_else(|| {
+                "Animated preview runtime is missing".to_owned()
+            })?;
+            runtime
+                .primitives
+                .iter()
+                .map(|primitive| {
+                    animated_node_world.get(primitive.node).copied().ok_or_else(
+                        || "Animation references a missing node".to_owned(),
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()?
+        } else {
+            self.model_base_transforms.clone()
+        };
+        let Some(model) = self.model.as_mut() else {
+            return Ok(());
+        };
+        if model.len() != transforms.len() {
+            return Err(
+                "Preview transform and renderer primitive counts differ"
+                    .to_owned(),
+            );
+        }
+        for (part, transform) in model.iter_mut().zip(transforms) {
+            part.set_transformation(self.root_preview_transform * transform);
         }
         Ok(())
     }

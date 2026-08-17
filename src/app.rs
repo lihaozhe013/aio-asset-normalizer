@@ -16,11 +16,11 @@ use crate::modules::{
     ui::{
         file_tree::FileTree,
         log_viewer::LogViewer,
-        main_panel,
         menu_bar::{MenuAction, Page},
     },
     viewport::{camera::OrbitCamera, canvas::ViewportCanvas},
 };
+use crate::reload::{merge_glb_reload_kind, GlbReloadKind};
 use three_d::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -48,10 +48,11 @@ pub struct App {
     pub retarget_plan: Option<RetargetPlan>,
     pub mapping_report: Option<MappingValidation>,
     pub mapping_suggestions: Vec<MappingSuggestion>,
-    pub rotation_axis: [f32; 3],
-    pub rotation_degrees: f32,
+    pub orientation_euler_degrees: [f32; 3],
     pub root_scale: f32,
     pub root_translation: [f32; 3],
+    pub(crate) root_preview_dirty: bool,
+    pub(crate) root_preview_error: Option<String>,
     pub trim_animation: usize,
     pub trim_start: f32,
     pub trim_end: f32,
@@ -78,7 +79,7 @@ pub struct App {
     last_frame_time: Instant,
     pub(crate) bvh_playback_accumulator: f32,
     pub(crate) glb_animation_accumulator: f32,
-    needs_reload: bool,
+    reload_request: Option<GlbReloadKind>,
     pending_auto_play: bool,
     needs_bvh_skeleton_reload: bool,
     pub(crate) needs_save: bool,
@@ -123,10 +124,11 @@ impl App {
             retarget_plan: None,
             mapping_report: None,
             mapping_suggestions: Vec::new(),
-            rotation_axis: [0.0, 1.0, 0.0],
-            rotation_degrees: 0.0,
+            orientation_euler_degrees: [0.0, 0.0, 0.0],
             root_scale: 1.0,
             root_translation: [0.0, 0.0, 0.0],
+            root_preview_dirty: false,
+            root_preview_error: None,
             trim_animation: 0,
             trim_start: 0.0,
             trim_end: 1.0,
@@ -153,7 +155,7 @@ impl App {
             last_frame_time: Instant::now(),
             bvh_playback_accumulator: 0.0,
             glb_animation_accumulator: 0.0,
-            needs_reload: false,
+            reload_request: None,
             pending_auto_play: false,
             needs_bvh_skeleton_reload: false,
             needs_save: false,
@@ -169,8 +171,14 @@ impl App {
     pub fn preview_glb(&mut self, path: &Path) {
         self.page = Page::GlbEditor;
         self.glb_path = Some(path.to_path_buf());
-        self.needs_reload = true;
+        self.reset_root_preview();
+        self.request_glb_reload(GlbReloadKind::OpenModel);
         self.pending_auto_play = true;
+    }
+
+    fn request_glb_reload(&mut self, requested: GlbReloadKind) {
+        self.reload_request =
+            Some(merge_glb_reload_kind(self.reload_request, requested));
     }
 
     pub fn poll_tasks(&mut self) {
@@ -202,8 +210,7 @@ impl App {
     }
 
     pub fn reload_model_if_needed(&mut self, context: &Context) {
-        if self.needs_reload {
-            self.needs_reload = false;
+        if let Some(reload_kind) = self.reload_request.take() {
             self.bottom_panel_tab = BottomPanelTab::DebugLog;
             let Some(path) = self.glb_path.clone() else {
                 self.canvas.clear_glb();
@@ -245,7 +252,9 @@ impl App {
                     match self.canvas.load_glb(context, &preview_path) {
                         Ok(()) => {
                             self.glb = Some(document);
-                            self.camera.reset();
+                            if reload_kind == GlbReloadKind::OpenModel {
+                                self.camera.reset();
+                            }
                             self.reset_glb_animation_state();
                             if !self.canvas.animation_clips().is_empty() {
                                 self.bottom_panel_tab =
@@ -365,6 +374,7 @@ impl App {
                 self.glb_animation_playing = false;
             }
         }
+        self.update_root_preview_if_needed();
         if elapsed.as_secs_f32() > 0.5 {
             self.last_frame_time = now;
         }
@@ -388,6 +398,7 @@ impl App {
                 self.glb = None;
                 self.glb_path = None;
                 self.canvas.clear_glb();
+                self.reset_root_preview();
                 self.reset_glb_animation_state();
                 self.bottom_panel_tab = BottomPanelTab::DebugLog;
                 self.needs_save = true;
@@ -417,50 +428,61 @@ impl App {
     }
 
     pub(crate) fn apply_rotation(&mut self) {
-        let Some(document) = self.glb.as_mut() else {
+        let Some(document) = self.glb.as_ref() else {
             self.log.append("[glb_editor] Open a GLB before editing");
             return;
         };
         let operation = EditOperation::RotateRoots {
-            axis: self.rotation_axis,
-            degrees: self.rotation_degrees,
+            euler_degrees: self.orientation_euler_degrees,
         };
-        match document.apply(operation) {
+        let mut updated = document.clone();
+        match updated.apply(operation) {
             Ok(()) => {
+                self.glb = Some(updated);
+                self.orientation_euler_degrees = [0.0, 0.0, 0.0];
+                self.mark_root_preview_dirty();
                 self.log.append("[glb_editor] Applied root rotation");
-                self.needs_reload = true;
+                self.request_glb_reload(GlbReloadKind::EditedModel);
             }
             Err(error) => self.log.append(&format!("[glb_editor] {error}")),
         }
     }
 
     pub(crate) fn apply_scale(&mut self) {
-        let Some(document) = self.glb.as_mut() else {
+        let Some(document) = self.glb.as_ref() else {
             self.log.append("[glb_editor] Open a GLB before editing");
             return;
         };
-        match document.apply(EditOperation::ScaleRoots {
+        let mut updated = document.clone();
+        match updated.apply(EditOperation::ScaleRoots {
             factor: self.root_scale,
         }) {
             Ok(()) => {
+                self.glb = Some(updated);
+                self.root_scale = 1.0;
+                self.mark_root_preview_dirty();
                 self.log.append("[glb_editor] Applied root scale");
-                self.needs_reload = true;
+                self.request_glb_reload(GlbReloadKind::EditedModel);
             }
             Err(error) => self.log.append(&format!("[glb_editor] {error}")),
         }
     }
 
     pub(crate) fn apply_translation(&mut self) {
-        let Some(document) = self.glb.as_mut() else {
+        let Some(document) = self.glb.as_ref() else {
             self.log.append("[glb_editor] Open a GLB before editing");
             return;
         };
-        match document.apply(EditOperation::TranslateRoots {
+        let mut updated = document.clone();
+        match updated.apply(EditOperation::TranslateRoots {
             offset: self.root_translation,
         }) {
             Ok(()) => {
+                self.glb = Some(updated);
+                self.root_translation = [0.0, 0.0, 0.0];
+                self.mark_root_preview_dirty();
                 self.log.append("[glb_editor] Applied root translation");
-                self.needs_reload = true;
+                self.request_glb_reload(GlbReloadKind::EditedModel);
             }
             Err(error) => self.log.append(&format!("[glb_editor] {error}")),
         }
@@ -493,7 +515,7 @@ impl App {
         }) {
             Ok(()) => {
                 self.log.append("[glb_editor] Trimmed animation keyframes");
-                self.needs_reload = true;
+                self.request_glb_reload(GlbReloadKind::EditedModel);
             }
             Err(error) => self.log.append(&format!("[glb_editor] {error}")),
         }
@@ -526,7 +548,7 @@ impl App {
                     self.texture_slot.label(),
                     path.display()
                 ));
-                self.needs_reload = true;
+                self.request_glb_reload(GlbReloadKind::EditedModel);
             }
             Err(error) => self.log.append(&format!("[glb_editor] {error}")),
         }
@@ -857,136 +879,5 @@ impl App {
             None
         };
         self.mapping_report = Some(report);
-    }
-
-    pub fn collect_preferences(&self) -> UserPreferences {
-        UserPreferences {
-            version: 1,
-            language: self.i18n.preference(),
-            view: self.canvas.to_view_prefs(),
-            file_tree: self.file_tree.to_prefs(),
-            log_viewer: self.log.to_prefs(),
-        }
-    }
-
-    pub fn render_ui(
-        &mut self,
-        ui: &mut three_d::egui::Ui,
-        window_width: u32,
-    ) -> three_d::egui::Rect {
-        let rect = main_panel::render_ui(self, ui, window_width);
-        if self.needs_save && !self.quit_requested {
-            self.needs_save = false;
-            preferences::save(&self.collect_preferences());
-        }
-        rect
-    }
-
-    pub(crate) fn glb_animation_entries(
-        &self,
-    ) -> Vec<(String, f32, bool, String)> {
-        self.canvas
-            .animation_clips()
-            .iter()
-            .map(|clip| {
-                (
-                    clip.name.clone(),
-                    clip.duration,
-                    clip.is_playable(),
-                    clip.unsupported.join(", "),
-                )
-            })
-            .collect()
-    }
-
-    pub(crate) fn glb_animation_duration(&self) -> f32 {
-        self.canvas
-            .animation_clips()
-            .get(self.glb_animation_index)
-            .map(|clip| clip.duration)
-            .unwrap_or(0.0)
-    }
-
-    pub(crate) fn first_playable_glb_animation(&self) -> Option<usize> {
-        self.canvas
-            .animation_clips()
-            .iter()
-            .position(|clip| clip.is_playable())
-    }
-
-    pub(crate) fn select_glb_animation(&mut self, index: usize) {
-        if self
-            .canvas
-            .animation_clips()
-            .get(index)
-            .is_none_or(|clip| !clip.is_playable())
-        {
-            self.glb_animation_playing = false;
-            return;
-        }
-        self.glb_animation_index = index;
-        self.glb_animation_time = 0.0;
-        self.glb_animation_accumulator = 0.0;
-        self.glb_animation_playing = false;
-        if let Err(error) = self.update_glb_animation_preview() {
-            self.log.append(&format!(
-                "[glb_editor] Animation selection failed: {error}"
-            ));
-        }
-    }
-
-    pub(crate) fn set_glb_animation_time(&mut self, time: f32) {
-        let duration = self.glb_animation_duration();
-        self.glb_animation_time = time.clamp(0.0, duration.max(0.0));
-        self.glb_animation_accumulator = 0.0;
-        if let Err(error) = self.update_glb_animation_preview() {
-            self.log.append(&format!(
-                "[glb_editor] Animation seek failed: {error}"
-            ));
-        }
-    }
-
-    pub(crate) fn step_glb_animation(&mut self, direction: f32) {
-        let duration = self.glb_animation_duration();
-        if duration <= 0.0 {
-            return;
-        }
-        let time = self.glb_animation_time + direction * (1.0 / 30.0);
-        self.glb_animation_time = if self.glb_animation_loop {
-            time.rem_euclid(duration)
-        } else {
-            time.clamp(0.0, duration)
-        };
-        self.glb_animation_playing = false;
-        self.glb_animation_accumulator = 0.0;
-        if let Err(error) = self.update_glb_animation_preview() {
-            self.log.append(&format!(
-                "[glb_editor] Animation step failed: {error}"
-            ));
-        }
-    }
-
-    pub(crate) fn update_glb_animation_preview(
-        &mut self,
-    ) -> Result<(), String> {
-        if self
-            .canvas
-            .animation_clips()
-            .get(self.glb_animation_index)
-            .is_none()
-        {
-            return Ok(());
-        }
-        self.canvas.update_glb_animation(
-            self.glb_animation_index,
-            self.glb_animation_time,
-        )
-    }
-
-    fn reset_glb_animation_state(&mut self) {
-        self.glb_animation_index = 0;
-        self.glb_animation_time = 0.0;
-        self.glb_animation_playing = false;
-        self.glb_animation_accumulator = 0.0;
     }
 }

@@ -1,7 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+mod app_preview;
+mod app_ui;
 mod modules;
+mod reload;
 mod window;
 
 use app::App;

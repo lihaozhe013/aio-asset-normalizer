@@ -158,19 +158,24 @@ fn render_glb_inspector(app: &mut App, ui: &mut three_d::egui::Ui) {
     let orientation_label = app.i18n.tr("glb.orientation").to_owned();
     ui.collapsing(orientation_label, |ui| {
         ui.label(app.i18n.tr("glb.orientation_hint"));
+        ui.label(app.i18n.tr("glb.preview_hint"));
         for (label, index) in [("X", 0), ("Y", 1), ("Z", 2)] {
             ui.horizontal(|ui| {
                 ui.label(label);
-                ui.add(
-                    DragValue::new(&mut app.rotation_axis[index]).speed(0.1),
-                );
+                if ui
+                    .add(
+                        DragValue::new(
+                            &mut app.orientation_euler_degrees[index],
+                        )
+                        .speed(1.0)
+                        .suffix("°"),
+                    )
+                    .changed()
+                {
+                    app.mark_root_preview_dirty();
+                }
             });
         }
-        ui.add(
-            DragValue::new(&mut app.rotation_degrees)
-                .speed(1.0)
-                .suffix("°"),
-        );
         if ui.button(app.i18n.tr("glb.apply_rotation")).clicked() {
             app.apply_rotation();
         }
@@ -180,11 +185,16 @@ fn render_glb_inspector(app: &mut App, ui: &mut three_d::egui::Ui) {
     ui.collapsing(transform_label, |ui| {
         ui.horizontal(|ui| {
             ui.label(app.i18n.tr("glb.scale"));
-            ui.add(
-                DragValue::new(&mut app.root_scale)
-                    .speed(0.01)
-                    .range(0.001..=1000.0),
-            );
+            if ui
+                .add(
+                    DragValue::new(&mut app.root_scale)
+                        .speed(0.01)
+                        .range(0.001..=1000.0),
+                )
+                .changed()
+            {
+                app.mark_root_preview_dirty();
+            }
             if ui.button(app.i18n.tr("glb.apply")).clicked() {
                 app.apply_scale();
             }
@@ -192,16 +202,27 @@ fn render_glb_inspector(app: &mut App, ui: &mut three_d::egui::Ui) {
         for (label, index) in [("X", 0), ("Y", 1), ("Z", 2)] {
             ui.horizontal(|ui| {
                 ui.label(format!("Δ{label}"));
-                ui.add(
-                    DragValue::new(&mut app.root_translation[index])
-                        .speed(0.01),
-                );
+                if ui
+                    .add(
+                        DragValue::new(&mut app.root_translation[index])
+                            .speed(0.01),
+                    )
+                    .changed()
+                {
+                    app.mark_root_preview_dirty();
+                }
             });
         }
         if ui.button(app.i18n.tr("glb.apply_translation")).clicked() {
             app.apply_translation();
         }
+        if ui.button(app.i18n.tr("glb.reset_preview")).clicked() {
+            app.reset_root_preview();
+        }
     });
+    if let Some(error) = app.root_preview_error() {
+        ui.colored_label(Color32::YELLOW, error);
+    }
 
     let animation_label = app.i18n.tr("glb.animation").to_owned();
     ui.collapsing(animation_label, |ui| {
