@@ -52,8 +52,8 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
 }
 
 fn render_animation_timeline(app: &mut App, ui: &mut three_d::egui::Ui) {
-    use three_d::egui::*;
     use egui_phosphor::regular::{PAUSE, PLAY, SKIP_BACK, SKIP_FORWARD};
+    use three_d::egui::*;
 
     let entries = app.glb_animation_entries();
     if entries.is_empty() {
@@ -68,7 +68,7 @@ fn render_animation_timeline(app: &mut App, ui: &mut three_d::egui::Ui) {
         .map(|entry| entry.0.as_str())
         .unwrap_or("Animation");
 
-    // Row 1: label + clip selector + loop + speed + time
+    // Row 1: label + clip selector + loop + time
     ui.horizontal(|ui| {
         ui.label(RichText::new(app.i18n.tr("glb.timeline")).strong());
         let mut requested_index = selected_index;
@@ -103,12 +103,6 @@ fn render_animation_timeline(app: &mut App, ui: &mut three_d::egui::Ui) {
             }
 
             ui.checkbox(&mut app.glb_animation_loop, app.i18n.tr("glb.loop"));
-            ui.label(app.i18n.tr("glb.speed"));
-            ui.add(
-                DragValue::new(&mut app.glb_animation_speed)
-                    .range(0.05..=8.0)
-                    .speed(0.05),
-            );
             ui.label(format!(
                 "{:.3}s / {:.3}s",
                 app.glb_animation_time, duration
@@ -123,7 +117,11 @@ fn render_animation_timeline(app: &mut App, ui: &mut three_d::egui::Ui) {
                 let icon_size = 18.0;
 
                 // Play / Pause
-                let play_icon = if app.glb_animation_playing { PAUSE } else { PLAY };
+                let play_icon = if app.glb_animation_playing {
+                    PAUSE
+                } else {
+                    PLAY
+                };
                 if ui
                     .button(RichText::new(play_icon).size(icon_size))
                     .clicked()

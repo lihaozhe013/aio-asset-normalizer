@@ -12,15 +12,19 @@
    Canvas and loops at the clip duration.
 5. Toggle Loop off, play to the end, and confirm playback stops on the final
    pose.
-6. Change the speed, drag the timeline, pause, and use both frame-step
-   buttons. Confirm every action updates the preview without marking the GLB
-   document dirty.
-7. Switch to the `Debug Log` tab and confirm log controls are visible while
+6. Change the animation rate in the right Inspector, press Play, and confirm
+   the preview uses the new rate without marking the GLB document dirty. Drag
+   the timeline, pause, and use both frame-step buttons.
+7. Click Apply rate in the right Inspector, export the GLB, reopen the export,
+   and confirm the selected animation duration is shorter at `2.0x` or longer
+   at `0.5x`, while its poses remain unchanged. Confirm changing the rate
+   without clicking Apply rate does not affect the exported GLB.
+8. Switch to the `Debug Log` tab and confirm log controls are visible while
    animation playback state is preserved. Switch back to `Animation`.
-8. Open a GLB with no animations and confirm only the `Debug Log` tab is shown.
-9. Open a GLB with an unsupported CUBICSPLINE or Morph Target clip and confirm
+9. Open a GLB with no animations and confirm only the `Debug Log` tab is shown.
+10. Open a GLB with an unsupported CUBICSPLINE or Morph Target clip and confirm
    the clip is listed as unavailable with an explanatory message.
-10. Resize the bottom dock and the application window. Confirm the Canvas
+11. Resize the bottom dock and the application window. Confirm the Canvas
     boundary moves with the dock and never renders underneath it.
 
 ## GLB Transform Preview

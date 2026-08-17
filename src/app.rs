@@ -60,7 +60,7 @@ pub struct App {
     pub glb_animation_time: f32,
     pub glb_animation_playing: bool,
     pub glb_animation_loop: bool,
-    pub glb_animation_speed: f32,
+    pub glb_animation_rate: f32,
     pub(crate) bottom_panel_tab: BottomPanelTab,
     pub texture_mesh: usize,
     pub texture_primitive: usize,
@@ -136,7 +136,7 @@ impl App {
             glb_animation_time: 0.0,
             glb_animation_playing: false,
             glb_animation_loop: true,
-            glb_animation_speed: 1.0,
+            glb_animation_rate: 1.0,
             bottom_panel_tab: BottomPanelTab::DebugLog,
             texture_mesh: 0,
             texture_primitive: 0,
@@ -354,7 +354,7 @@ impl App {
             let duration = self.glb_animation_duration();
             if duration > 0.0 {
                 self.glb_animation_accumulator +=
-                    elapsed.as_secs_f32() * self.glb_animation_speed.max(0.01);
+                    elapsed.as_secs_f32() * self.glb_animation_rate.max(0.01);
                 self.glb_animation_time += self.glb_animation_accumulator;
                 self.glb_animation_accumulator = 0.0;
                 if self.glb_animation_loop {
@@ -515,6 +515,55 @@ impl App {
         }) {
             Ok(()) => {
                 self.log.append("[glb_editor] Trimmed animation keyframes");
+                self.request_glb_reload(GlbReloadKind::EditedModel);
+            }
+            Err(error) => self.log.append(&format!("[glb_editor] {error}")),
+        }
+    }
+
+    pub(crate) fn apply_glb_animation_rate(&mut self) {
+        let Some(document) = self.glb.as_ref() else {
+            self.log.append(
+                "[glb_editor] Open a GLB before applying animation rate",
+            );
+            return;
+        };
+        let animation = self.glb_animation_index;
+        let Some(clip) = self.canvas.animation_clips().get(animation) else {
+            self.log
+                .append("[glb_editor] Select a playable animation first");
+            return;
+        };
+        if !clip.is_playable() {
+            self.log.append(&format!(
+                "[glb_editor] Cannot apply rate to unavailable animation {animation}"
+            ));
+            return;
+        }
+        let rate = self.glb_animation_rate;
+        if !rate.is_finite() || rate <= 0.0 {
+            self.log
+                .append("[glb_editor] Animation rate must be finite and greater than zero");
+            return;
+        }
+        if (rate - 1.0).abs() <= f32::EPSILON {
+            self.log
+                .append("[glb_editor] Animation rate is already 1.0x");
+            return;
+        }
+
+        let mut updated = document.clone();
+        match updated
+            .apply(EditOperation::ScaleAnimationRate { animation, rate })
+        {
+            Ok(()) => {
+                self.glb = Some(updated);
+                self.glb_animation_rate = 1.0;
+                self.glb_animation_playing = false;
+                self.glb_animation_accumulator = 0.0;
+                self.log.append(&format!(
+                    "[glb_editor] Applied animation rate {rate:.3}x to animation {animation}"
+                ));
                 self.request_glb_reload(GlbReloadKind::EditedModel);
             }
             Err(error) => self.log.append(&format!("[glb_editor] {error}")),

@@ -1,5 +1,167 @@
 use super::*;
 
+fn animation_rate_document() -> GlbDocument {
+    let mut bin = Vec::new();
+    for value in [0.0_f32, 1.0, 2.0] {
+        bin.extend_from_slice(&value.to_le_bytes());
+    }
+    for value in [[0.0_f32, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]] {
+        for component in value {
+            bin.extend_from_slice(&component.to_le_bytes());
+        }
+    }
+    for value in [[1.0_f32, 1.0, 1.0]; 3] {
+        for component in value {
+            bin.extend_from_slice(&component.to_le_bytes());
+        }
+    }
+
+    GlbDocument {
+        source_path: None,
+        json: json!({
+            "asset": {"version": "2.0"},
+            "scene": 0,
+            "scenes": [{"nodes": [0]}],
+            "nodes": [{"name": "Root"}],
+            "buffers": [{"byteLength": bin.len()}],
+            "bufferViews": [
+                {"buffer": 0, "byteOffset": 0, "byteLength": 12},
+                {"buffer": 0, "byteOffset": 12, "byteLength": 36},
+                {"buffer": 0, "byteOffset": 48, "byteLength": 36}
+            ],
+            "accessors": [
+                {"bufferView": 0, "componentType": 5126, "count": 3, "type": "SCALAR", "min": [0.0], "max": [2.0]},
+                {"bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3"},
+                {"bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC3"}
+            ],
+            "animations": [
+                {
+                    "name": "Target",
+                    "samplers": [
+                        {"input": 0, "output": 1, "interpolation": "LINEAR"},
+                        {"input": 0, "output": 2, "interpolation": "LINEAR"}
+                    ],
+                    "channels": [
+                        {"sampler": 0, "target": {"node": 0, "path": "translation"}},
+                        {"sampler": 1, "target": {"node": 0, "path": "scale"}}
+                    ]
+                },
+                {
+                    "name": "Untouched",
+                    "samplers": [
+                        {"input": 0, "output": 1, "interpolation": "LINEAR"}
+                    ],
+                    "channels": [
+                        {"sampler": 0, "target": {"node": 0, "path": "translation"}}
+                    ]
+                }
+            ]
+        }),
+        bin: Some(bin),
+        dirty: false,
+    }
+}
+
+#[test]
+fn animation_rate_scales_shared_inputs_and_preserves_outputs() {
+    let mut document = animation_rate_document();
+    let original_outputs = document.bin.as_ref().unwrap()[12..].to_vec();
+
+    document
+        .apply(EditOperation::ScaleAnimationRate {
+            animation: 0,
+            rate: 2.0,
+        })
+        .unwrap();
+
+    let first_input = document.json["animations"][0]["samplers"][0]["input"]
+        .as_u64()
+        .unwrap();
+    let second_input = document.json["animations"][0]["samplers"][1]["input"]
+        .as_u64()
+        .unwrap();
+    let untouched_input = document.json["animations"][1]["samplers"][0]
+        ["input"]
+        .as_u64()
+        .unwrap();
+
+    assert_eq!(first_input, second_input);
+    assert_ne!(first_input, untouched_input);
+    assert_eq!(untouched_input, 0);
+    assert_eq!(
+        document.read_accessor_f32(first_input as usize).unwrap(),
+        vec![vec![0.0], vec![0.5], vec![1.0],]
+    );
+    assert_eq!(
+        &document.bin.as_ref().unwrap()[12..12 + original_outputs.len()],
+        original_outputs
+    );
+
+    let bytes = document.to_bytes().unwrap();
+    gltf::Gltf::from_slice(&bytes).unwrap();
+
+    let path = std::env::temp_dir().join(format!(
+        "aio-asset-normalizer-animation-rate-{}.glb",
+        std::process::id()
+    ));
+    std::fs::write(&path, bytes).unwrap();
+    let runtime = AnimationRuntime::load(&path).unwrap();
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(runtime.clips[0].duration, 1.0);
+    assert_eq!(runtime.clips[1].duration, 2.0);
+}
+
+#[test]
+fn animation_rate_slows_animation_without_changing_keyframes() {
+    let mut document = animation_rate_document();
+    let original_outputs = document.bin.as_ref().unwrap()[12..].to_vec();
+
+    document
+        .apply(EditOperation::ScaleAnimationRate {
+            animation: 0,
+            rate: 0.5,
+        })
+        .unwrap();
+
+    let input = document.json["animations"][0]["samplers"][0]["input"]
+        .as_u64()
+        .unwrap();
+    assert_eq!(
+        document.read_accessor_f32(input as usize).unwrap(),
+        vec![vec![0.0], vec![2.0], vec![4.0],]
+    );
+    assert_eq!(
+        &document.bin.as_ref().unwrap()[12..12 + original_outputs.len()],
+        original_outputs
+    );
+}
+
+#[test]
+fn animation_rate_rejects_invalid_values_and_keeps_one_x_unchanged() {
+    for rate in [0.0, -1.0, f32::NAN, f32::INFINITY] {
+        let mut document = animation_rate_document();
+        let original_json = document.json.clone();
+        let original_bin = document.bin.clone();
+        assert!(document
+            .apply(EditOperation::ScaleAnimationRate { animation: 0, rate })
+            .is_err());
+        assert_eq!(document.json, original_json);
+        assert_eq!(document.bin, original_bin);
+    }
+
+    let mut document = animation_rate_document();
+    let original_json = document.json.clone();
+    let original_bin = document.bin.clone();
+    document
+        .apply(EditOperation::ScaleAnimationRate {
+            animation: 0,
+            rate: 1.0,
+        })
+        .unwrap();
+    assert_eq!(document.json, original_json);
+    assert_eq!(document.bin, original_bin);
+}
+
 #[test]
 fn matrix_multiplication_preserves_identity() {
     assert_eq!(multiply(identity(), identity()), identity());

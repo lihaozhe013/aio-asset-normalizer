@@ -1,8 +1,149 @@
+use std::collections::BTreeMap;
+
 use serde_json::{json, Value};
 
 use super::{GlbDocument, GlbError};
 
 impl GlbDocument {
+    pub(super) fn scale_animation_rate(
+        &mut self,
+        animation_index: usize,
+        rate: f32,
+    ) -> Result<(), GlbError> {
+        if !rate.is_finite() || rate <= 0.0 {
+            return Err(GlbError::Invalid(
+                "Animation rate must be finite and greater than zero"
+                    .to_owned(),
+            ));
+        }
+        if (rate - 1.0).abs() <= f32::EPSILON {
+            return Ok(());
+        }
+
+        let animation = self
+            .json
+            .get("animations")
+            .and_then(Value::as_array)
+            .and_then(|animations| animations.get(animation_index))
+            .cloned()
+            .ok_or_else(|| {
+                GlbError::Invalid(format!(
+                    "Animation {animation_index} does not exist"
+                ))
+            })?;
+        let samplers = animation
+            .get("samplers")
+            .and_then(Value::as_array)
+            .ok_or_else(|| {
+                GlbError::Invalid(format!(
+                    "Animation {animation_index} has no samplers"
+                ))
+            })?;
+
+        let mut scaled_times = BTreeMap::new();
+        for (sampler_index, sampler) in samplers.iter().enumerate() {
+            let input_index = sampler
+                .get("input")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| {
+                    GlbError::Invalid(format!(
+                        "Animation {animation_index} sampler {sampler_index} has no input accessor"
+                    ))
+                })? as usize;
+            if scaled_times.contains_key(&input_index) {
+                continue;
+            }
+            let input = self
+                .read_accessor_f32(input_index)
+                .map_err(|error| {
+                    contextual_animation_error(
+                        animation_index,
+                        sampler_index,
+                        input_index,
+                        error,
+                    )
+                })?
+                .into_iter()
+                .map(|value| value[0])
+                .collect::<Vec<_>>();
+            validate_timeline(&input).map_err(|error| {
+                contextual_animation_error(
+                    animation_index,
+                    sampler_index,
+                    input_index,
+                    error,
+                )
+            })?;
+            let scaled = input
+                .iter()
+                .map(|time| {
+                    let scaled = *time / rate;
+                    if scaled.is_finite() {
+                        Ok(scaled)
+                    } else {
+                        Err(GlbError::Invalid(
+                            "Scaled animation time is not finite".to_owned(),
+                        ))
+                    }
+                })
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|error| {
+                    contextual_animation_error(
+                        animation_index,
+                        sampler_index,
+                        input_index,
+                        error,
+                    )
+                })?;
+            scaled_times.insert(input_index, scaled);
+        }
+
+        let mut updated_inputs = BTreeMap::new();
+        for (input_index, times) in scaled_times {
+            let accessor = self.append_float_accessor(
+                &times.iter().map(|time| vec![*time]).collect::<Vec<_>>(),
+                "SCALAR",
+            )?;
+            updated_inputs.insert(input_index, accessor);
+        }
+
+        let animation = self
+            .json
+            .get_mut("animations")
+            .and_then(Value::as_array_mut)
+            .and_then(|animations| animations.get_mut(animation_index))
+            .ok_or_else(|| {
+                GlbError::Invalid(format!(
+                    "Animation {animation_index} disappeared during rate scaling"
+                ))
+            })?;
+        let samplers = animation
+            .get_mut("samplers")
+            .and_then(Value::as_array_mut)
+            .ok_or_else(|| {
+                GlbError::Invalid(format!(
+                    "Animation {animation_index} has no samplers"
+                ))
+            })?;
+        for sampler in samplers {
+            let input_index = sampler
+                .get("input")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| {
+                    GlbError::Invalid(format!(
+                        "Animation {animation_index} sampler has no input accessor"
+                    ))
+                })? as usize;
+            let updated_input = updated_inputs.get(&input_index).ok_or_else(|| {
+                GlbError::Invalid(format!(
+                    "Animation {animation_index} input accessor {input_index} was not scaled"
+                ))
+            })?;
+            sampler["input"] = json!(updated_input);
+        }
+        Ok(())
+    }
+
     pub(super) fn trim_animation_interpolated(
         &mut self,
         animation_index: usize,
@@ -148,6 +289,26 @@ impl GlbDocument {
             sampler["output"] = json!(output);
         }
         Ok(())
+    }
+}
+
+fn contextual_animation_error(
+    animation_index: usize,
+    sampler_index: usize,
+    input_index: usize,
+    error: GlbError,
+) -> GlbError {
+    let context = format!(
+        "Animation {animation_index} sampler {sampler_index} input accessor {input_index}"
+    );
+    match error {
+        GlbError::Io(error) => GlbError::Io(error),
+        GlbError::Invalid(message) => {
+            GlbError::Invalid(format!("{context}: {message}"))
+        }
+        GlbError::Unsupported(message) => {
+            GlbError::Unsupported(format!("{context}: {message}"))
+        }
     }
 }
 

@@ -151,6 +151,10 @@ pub enum EditOperation {
         start: f32,
         end: f32,
     },
+    ScaleAnimationRate {
+        animation: usize,
+        rate: f32,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -480,6 +484,9 @@ impl GlbDocument {
                 start,
                 end,
             } => self.trim_animation(animation, start, end)?,
+            EditOperation::ScaleAnimationRate { animation, rate } => {
+                self.scale_animation_rate(animation, rate)?
+            }
         }
         self.dirty = true;
         Ok(())

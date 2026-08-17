@@ -230,6 +230,55 @@ fn render_glb_inspector(app: &mut App, ui: &mut three_d::egui::Ui) {
             ui.label(app.i18n.tr("glb.no_animations"));
         } else {
             ui.label(app.i18n.tr("glb.timeline_hint"));
+            let entries = app.glb_animation_entries();
+            let selected_index =
+                app.glb_animation_index.min(entries.len().saturating_sub(1));
+            if let Some((name, duration, playable, unsupported)) =
+                entries.get(selected_index)
+            {
+                ui.horizontal(|ui| {
+                    ui.label(app.i18n.tr("glb.active_animation"));
+                    ui.label(name);
+                });
+                if !playable {
+                    ui.colored_label(
+                        Color32::YELLOW,
+                        format!(
+                            "{}: {}",
+                            app.i18n.tr("glb.unsupported"),
+                            unsupported
+                        ),
+                    );
+                }
+                ui.horizontal(|ui| {
+                    ui.label(app.i18n.tr("glb.animation_rate"));
+                    ui.add(
+                        DragValue::new(&mut app.glb_animation_rate)
+                            .range(0.05..=8.0)
+                            .speed(0.05)
+                            .suffix("x"),
+                    );
+                    let can_apply = *playable
+                        && (app.glb_animation_rate - 1.0).abs() > f32::EPSILON;
+                    if ui
+                        .add_enabled(
+                            can_apply,
+                            Button::new(
+                                app.i18n.tr("glb.apply_animation_rate"),
+                            ),
+                        )
+                        .clicked()
+                    {
+                        app.apply_glb_animation_rate();
+                    }
+                });
+                ui.label(app.i18n.tr("glb.animation_rate_hint"));
+                ui.label(format!(
+                    "{}: {:.3}s",
+                    app.i18n.tr("glb.duration"),
+                    duration
+                ));
+            }
             ui.horizontal(|ui| {
                 ui.label(app.i18n.tr("glb.animation_index"));
                 ui.add(
