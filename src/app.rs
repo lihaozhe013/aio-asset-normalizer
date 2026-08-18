@@ -10,7 +10,7 @@ use crate::modules::{
     },
     glb::{
         AnimationClipData, EditOperation, GlbDocument, PrimitiveTarget,
-        StandardizationProfile, TextureSlot,
+        SmartLoopOptions, StandardizationProfile, TextureSlot,
     },
     i18n::I18n,
     preferences::{self, UserPreferences},
@@ -54,6 +54,7 @@ pub struct App {
     pub root_translation: [f32; 3],
     pub(crate) root_preview_dirty: bool,
     pub(crate) root_preview_error: Option<String>,
+    pub trim_enabled: bool,
     pub trim_animation: usize,
     pub trim_start: f32,
     pub trim_end: f32,
@@ -62,6 +63,8 @@ pub struct App {
     pub glb_animation_playing: bool,
     pub glb_animation_loop: bool,
     pub glb_animation_rate: f32,
+    pub smart_loop_enabled: bool,
+    pub smart_loop_transition: f32,
     pub(crate) bottom_panel_tab: BottomPanelTab,
     pub texture_mesh: usize,
     pub texture_primitive: usize,
@@ -82,6 +85,7 @@ pub struct App {
     pub(crate) glb_animation_accumulator: f32,
     reload_request: Option<GlbReloadKind>,
     pending_auto_play: bool,
+    pending_animation_selection: Option<usize>,
     needs_bvh_skeleton_reload: bool,
     pub(crate) needs_save: bool,
     quit_requested: bool,
@@ -130,6 +134,7 @@ impl App {
             root_translation: [0.0, 0.0, 0.0],
             root_preview_dirty: false,
             root_preview_error: None,
+            trim_enabled: false,
             trim_animation: 0,
             trim_start: 0.0,
             trim_end: 1.0,
@@ -138,6 +143,8 @@ impl App {
             glb_animation_playing: false,
             glb_animation_loop: true,
             glb_animation_rate: 1.0,
+            smart_loop_enabled: false,
+            smart_loop_transition: 0.15,
             bottom_panel_tab: BottomPanelTab::DebugLog,
             texture_mesh: 0,
             texture_primitive: 0,
@@ -158,6 +165,7 @@ impl App {
             glb_animation_accumulator: 0.0,
             reload_request: None,
             pending_auto_play: false,
+            pending_animation_selection: None,
             needs_bvh_skeleton_reload: false,
             needs_save: false,
             quit_requested: false,
@@ -172,8 +180,15 @@ impl App {
     pub fn preview_glb(&mut self, path: &Path) {
         self.page = Page::GlbEditor;
         self.glb_path = Some(path.to_path_buf());
+        self.pending_animation_selection = None;
         self.reset_root_preview();
         self.reset_glb_animation_rate();
+        self.smart_loop_enabled = false;
+        self.smart_loop_transition = 0.15;
+        self.trim_enabled = false;
+        self.trim_animation = 0;
+        self.trim_start = 0.0;
+        self.trim_end = 1.0;
         self.request_glb_reload(GlbReloadKind::OpenModel);
         self.pending_auto_play = true;
     }
@@ -236,10 +251,57 @@ impl App {
                         "[glb_editor] Loaded {}",
                         path.display()
                     ));
-                    let preview_path = if document.dirty {
+                    let preview_document = if self.trim_enabled
+                        || self.smart_loop_enabled
+                    {
+                        let mut preview = document.clone();
+                        let result = (|| {
+                            if self.trim_enabled {
+                                preview
+                                    .apply(EditOperation::TrimAnimation {
+                                        animation: self.trim_animation,
+                                        start: self.trim_start,
+                                        end: self.trim_end,
+                                    })
+                                    .map_err(|error| error.to_string())?;
+                            }
+                            if self.smart_loop_enabled {
+                                let report = preview
+                                    .smart_loop_animation(
+                                        self.glb_animation_index,
+                                        SmartLoopOptions {
+                                            transition_seconds: self
+                                                .smart_loop_transition,
+                                        },
+                                    )
+                                    .map_err(|error| error.to_string())?;
+                                if !report.already_looped {
+                                    self.log.append(&format!(
+                                        "[glb_editor] Smart LOOP preview added {:.3}s and {} keyframes",
+                                        report.new_duration
+                                            - report.original_duration,
+                                        report.added_keyframes
+                                    ));
+                                }
+                            }
+                            Ok::<_, String>(preview)
+                        })();
+                        match result {
+                            Ok(preview) => preview,
+                            Err(error) => {
+                                self.log.append(&format!(
+                                    "[glb_editor] Animation preview setting unavailable: {error}"
+                                ));
+                                document.clone()
+                            }
+                        }
+                    } else {
+                        document.clone()
+                    };
+                    let preview_path = if preview_document.dirty {
                         let path = std::env::temp_dir()
                             .join("aio-asset-normalizer-preview.glb");
-                        match document.export_atomic(&path) {
+                        match preview_document.export_atomic(&path) {
                             Ok(()) => path,
                             Err(error) => {
                                 self.log.append(&format!(
@@ -262,9 +324,19 @@ impl App {
                                 self.bottom_panel_tab =
                                     BottomPanelTab::Animation;
                             }
-                            if let Some(index) =
-                                self.first_playable_glb_animation()
-                            {
+                            let selected = self
+                                .pending_animation_selection
+                                .take()
+                                .filter(|index| {
+                                    self.canvas
+                                        .animation_clips()
+                                        .get(*index)
+                                        .is_some_and(|clip| clip.is_playable())
+                                })
+                                .or_else(|| {
+                                    self.first_playable_glb_animation()
+                                });
+                            if let Some(index) = selected {
                                 self.glb_animation_index = index;
                                 if let Err(error) =
                                     self.update_glb_animation_preview()
@@ -403,6 +475,12 @@ impl App {
                 self.reset_root_preview();
                 self.reset_glb_animation_state();
                 self.reset_glb_animation_rate();
+                self.smart_loop_enabled = false;
+                self.smart_loop_transition = 0.15;
+                self.trim_enabled = false;
+                self.trim_animation = 0;
+                self.trim_start = 0.0;
+                self.trim_end = 1.0;
                 self.bottom_panel_tab = BottomPanelTab::DebugLog;
                 self.needs_save = true;
             }
@@ -444,23 +522,14 @@ impl App {
         }
     }
 
-    pub(crate) fn trim_glb_animation(&mut self) {
-        let Some(document) = self.glb.as_mut() else {
-            self.log
-                .append("[glb_editor] Open a GLB before trimming animation");
-            return;
-        };
-        match document.apply(EditOperation::TrimAnimation {
-            animation: self.trim_animation,
-            start: self.trim_start,
-            end: self.trim_end,
-        }) {
-            Ok(()) => {
-                self.log.append("[glb_editor] Trimmed animation keyframes");
-                self.request_glb_reload(GlbReloadKind::EditedModel);
-            }
-            Err(error) => self.log.append(&format!("[glb_editor] {error}")),
-        }
+    pub(crate) fn trim_setting_changed(&mut self) {
+        self.pending_animation_selection = Some(self.glb_animation_index);
+        self.request_glb_reload(GlbReloadKind::EditedModel);
+    }
+
+    pub(crate) fn smart_loop_setting_changed(&mut self) {
+        self.pending_animation_selection = Some(self.glb_animation_index);
+        self.request_glb_reload(GlbReloadKind::EditedModel);
     }
 
     pub(crate) fn replace_glb_texture(&mut self) {

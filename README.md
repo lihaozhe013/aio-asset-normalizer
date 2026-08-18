@@ -30,7 +30,12 @@ The main page edits existing GLB files instead of converting between formats.
 - Play standard GLB node and Skinned Mesh animations with pause, looping, speed, seeking, and frame stepping.
 - Support `STEP` and `LINEAR` animation sampling; unsupported CUBICSPLINE and Morph Target clips are reported explicitly.
 - Adjust model orientation with XYZ `±90°` shortcuts and precise Euler input.
-- Trim animation clips by start and end time and rebuild the timeline.
+- Configure animation trim by start and end time with a live preview; trim is
+  applied to the export copy only when enabled.
+- Apply Smart LOOP processing to close small capture drift with a configurable
+  0.01-2.00 second transition with millisecond-level adjustment. Significant Root Motion is rejected instead of
+  being silently converted to an in-place clip. Smart LOOP currently accepts
+  LINEAR translation, rotation, and scale channels on a single Skin.
 - Replace Base Color, Normal, Metallic-Roughness, Occlusion, and Emissive textures.
 - Reserve extension points for future skeleton and Mesh replacement.
 - Export game-ready GLBs with consistent coordinates, units, grounding, and facing.

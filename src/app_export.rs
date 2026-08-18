@@ -1,12 +1,16 @@
 use crate::app::App;
-use crate::modules::glb::{EditOperation, GlbDocument, RootTransformPreview};
+use crate::modules::glb::{
+    EditOperation, GlbDocument, RootTransformPreview, SmartLoopOptions,
+};
 
 fn apply_glb_export_preview(
     document: &mut GlbDocument,
     orientation_euler_degrees: [f32; 3],
     root_scale: f32,
     root_translation: [f32; 3],
+    trim: Option<(usize, f32, f32)>,
     animation_rate: Option<(usize, f32)>,
+    smart_loop: Option<(usize, f32)>,
 ) -> Result<(), String> {
     RootTransformPreview {
         euler_degrees: orientation_euler_degrees,
@@ -16,6 +20,15 @@ fn apply_glb_export_preview(
     .to_matrix()
     .map_err(|error| error.to_string())?;
 
+    if let Some((animation, start, end)) = trim {
+        document
+            .apply(EditOperation::TrimAnimation {
+                animation,
+                start,
+                end,
+            })
+            .map_err(|error| error.to_string())?;
+    }
     if orientation_euler_degrees
         .iter()
         .any(|value| value.abs() > f32::EPSILON)
@@ -51,6 +64,14 @@ fn apply_glb_export_preview(
                 .apply(EditOperation::ScaleAnimationRate { animation, rate })
                 .map_err(|error| error.to_string())?;
         }
+    }
+    if let Some((animation, transition_seconds)) = smart_loop {
+        document
+            .smart_loop_animation(
+                animation,
+                SmartLoopOptions { transition_seconds },
+            )
+            .map_err(|error| error.to_string())?;
     }
 
     Ok(())
@@ -89,6 +110,16 @@ impl App {
         } else {
             None
         };
+        let trim = if self.trim_enabled {
+            Some((self.trim_animation, self.trim_start, self.trim_end))
+        } else {
+            None
+        };
+        let smart_loop = if self.smart_loop_enabled {
+            Some((self.glb_animation_index, self.smart_loop_transition))
+        } else {
+            None
+        };
 
         let mut snapshot = document.clone();
         apply_glb_export_preview(
@@ -96,7 +127,9 @@ impl App {
             self.orientation_euler_degrees,
             self.root_scale,
             self.root_translation,
+            trim,
             animation_rate,
+            smart_loop,
         )?;
         Ok(snapshot)
     }
@@ -182,7 +215,9 @@ mod tests {
             [0.0, 0.0, 90.0],
             2.0,
             [3.0, 4.0, 5.0],
+            None,
             Some((0, 2.0)),
+            None,
         )
         .unwrap();
 
@@ -226,6 +261,8 @@ mod tests {
             [0.0, 0.0, 0.0],
             f32::NAN,
             [0.0, 0.0, 0.0],
+            None,
+            None,
             None,
         )
         .is_err());

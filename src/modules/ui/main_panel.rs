@@ -279,21 +279,64 @@ fn render_glb_inspector(app: &mut App, ui: &mut three_d::egui::Ui) {
                     duration
                 ));
             }
+            let mut trim_changed = ui
+                .checkbox(
+                    &mut app.trim_enabled,
+                    app.i18n.tr("glb.trim_enabled"),
+                )
+                .changed();
             ui.horizontal(|ui| {
                 ui.label(app.i18n.tr("glb.animation_index"));
-                ui.add(
-                    DragValue::new(&mut app.trim_animation)
-                        .range(0..=summary.animations.saturating_sub(1)),
-                );
+                trim_changed |= ui
+                    .add_enabled(
+                        app.trim_enabled,
+                        DragValue::new(&mut app.trim_animation)
+                            .range(0..=summary.animations.saturating_sub(1)),
+                    )
+                    .changed();
             });
             ui.horizontal(|ui| {
                 ui.label(app.i18n.tr("glb.start"));
-                ui.add(DragValue::new(&mut app.trim_start).speed(0.01));
+                trim_changed |= ui
+                    .add_enabled(
+                        app.trim_enabled,
+                        DragValue::new(&mut app.trim_start).speed(0.001),
+                    )
+                    .changed();
                 ui.label(app.i18n.tr("glb.end"));
-                ui.add(DragValue::new(&mut app.trim_end).speed(0.01));
+                trim_changed |= ui
+                    .add_enabled(
+                        app.trim_enabled,
+                        DragValue::new(&mut app.trim_end).speed(0.001),
+                    )
+                    .changed();
             });
-            if ui.button(app.i18n.tr("glb.trim_animation")).clicked() {
-                app.trim_glb_animation();
+            if trim_changed {
+                app.trim_setting_changed();
+            }
+            ui.separator();
+            let mut smart_loop_changed = ui
+                .checkbox(
+                    &mut app.smart_loop_enabled,
+                    app.i18n.tr("glb.smart_loop"),
+                )
+                .changed();
+            ui.horizontal(|ui| {
+                ui.label(app.i18n.tr("glb.smart_loop_transition"));
+                smart_loop_changed |= ui
+                    .add_enabled(
+                        app.smart_loop_enabled,
+                        DragValue::new(&mut app.smart_loop_transition)
+                            .range(0.01..=2.0)
+                            .speed(0.001)
+                            .fixed_decimals(3)
+                            .suffix("s"),
+                    )
+                    .changed();
+            });
+            ui.label(app.i18n.tr("glb.smart_loop_hint"));
+            if smart_loop_changed {
+                app.smart_loop_setting_changed();
             }
         }
     });

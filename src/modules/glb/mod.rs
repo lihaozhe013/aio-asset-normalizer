@@ -17,7 +17,10 @@ pub use self::resources::{PrimitiveTarget, TextureSlot};
 
 mod animation;
 mod animation_runtime;
+mod smart_loop;
 pub use animation_runtime::{AnimationClip, AnimationRuntime};
+#[allow(unused_imports)]
+pub use smart_loop::{SmartLoopOptions, SmartLoopReport};
 
 #[derive(Debug)]
 pub enum GlbError {
