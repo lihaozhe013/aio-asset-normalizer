@@ -207,11 +207,14 @@ impl App {
                 self.task_busy = false;
                 self.task_rx = None;
                 match result.result {
-                    Ok(()) => self.log.append(&format!(
-                        "[bvh_studio] Exported {} {}",
-                        result.kind,
-                        result.path.display()
-                    )),
+                    Ok(()) => {
+                        self.file_tree.refresh();
+                        self.log.append(&format!(
+                            "[bvh_studio] Exported {} {}",
+                            result.kind,
+                            result.path.display()
+                        ));
+                    }
                     Err(error) => self.log.append(&format!(
                         "[bvh_studio] Export failed: {error}"
                     )),
@@ -714,9 +717,13 @@ impl App {
             }
         };
         match document.export_atomic(&path) {
-            Ok(()) => self
-                .log
-                .append(&format!("[glb_editor] Exported {}", path.display())),
+            Ok(()) => {
+                self.file_tree.refresh();
+                self.log.append(&format!(
+                    "[glb_editor] Exported {}",
+                    path.display()
+                ));
+            }
             Err(error) => self
                 .log
                 .append(&format!("[glb_editor] Export failed: {error}")),
@@ -742,10 +749,13 @@ impl App {
             return;
         }
         match bvh::save_mapping(&path, mapping) {
-            Ok(()) => self.log.append(&format!(
-                "[bvh_studio] Exported mapping {}",
-                path.display()
-            )),
+            Ok(()) => {
+                self.file_tree.refresh();
+                self.log.append(&format!(
+                    "[bvh_studio] Exported mapping {}",
+                    path.display()
+                ));
+            }
             Err(error) => self.log.append(&format!(
                 "[bvh_studio] Mapping export failed: {error}"
             )),
@@ -770,9 +780,13 @@ impl App {
             return;
         }
         match document.write(&path) {
-            Ok(()) => self
-                .log
-                .append(&format!("[bvh_studio] Exported {}", path.display())),
+            Ok(()) => {
+                self.file_tree.refresh();
+                self.log.append(&format!(
+                    "[bvh_studio] Exported {}",
+                    path.display()
+                ));
+            }
             Err(error) => self
                 .log
                 .append(&format!("[bvh_studio] Export failed: {error}")),
