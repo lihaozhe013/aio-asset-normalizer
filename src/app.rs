@@ -606,18 +606,7 @@ impl App {
             return;
         };
         if self.page == Page::BvhStudio {
-            match GlbDocument::load(&path) {
-                Ok(document) => {
-                    self.log.append(&format!(
-                        "[bvh_studio] Loaded target GLB {}",
-                        path.display()
-                    ));
-                    self.bvh_target_glb = Some(document);
-                    self.bvh_target_path = Some(path);
-                    self.refresh_retarget_plan();
-                }
-                Err(error) => self.log.append(&format!("[bvh_studio] {error}")),
-            }
+            self.load_bvh_target(&path);
             return;
         }
         if let Some(parent) = path.parent() {
@@ -625,6 +614,21 @@ impl App {
             self.file_tree.select_file(&path);
         }
         self.preview_glb(&path);
+    }
+
+    pub(crate) fn load_bvh_target(&mut self, path: &Path) {
+        match GlbDocument::load(path) {
+            Ok(document) => {
+                self.log.append(&format!(
+                    "[bvh_studio] Loaded target GLB {}",
+                    path.display()
+                ));
+                self.bvh_target_glb = Some(document);
+                self.bvh_target_path = Some(path.to_path_buf());
+                self.refresh_retarget_plan();
+            }
+            Err(error) => self.log.append(&format!("[bvh_studio] {error}")),
+        }
     }
 
     fn import_bvh(&mut self) {

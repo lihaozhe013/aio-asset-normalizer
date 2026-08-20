@@ -33,22 +33,22 @@ pub fn render_ui(
     }
     render_page_tabs(app, ui);
 
-    if app.page == Page::GlbEditor {
-        Panel::left("glb_files")
-            .resizable(true)
-            .default_size(250.0)
-            .min_size(170.0)
-            .show_inside(ui, |ui| {
-                let (changed, preview_path) =
-                    app.file_tree.render(ui, &app.i18n);
-                if changed || app.file_tree.take_root_changed() {
-                    app.needs_save = true;
+    Panel::left("glb_files")
+        .resizable(true)
+        .default_size(250.0)
+        .min_size(170.0)
+        .show_inside(ui, |ui| {
+            let (changed, preview_path) = app.file_tree.render(ui, &app.i18n);
+            if changed || app.file_tree.take_root_changed() {
+                app.needs_save = true;
+            }
+            if let Some(path) = preview_path {
+                match app.page {
+                    Page::GlbEditor => app.preview_glb(&path),
+                    Page::BvhStudio => app.load_bvh_target(&path),
                 }
-                if let Some(path) = preview_path {
-                    app.preview_glb(&path);
-                }
-            });
-    }
+            }
+        });
 
     Panel::right("inspector")
         .resizable(true)
@@ -75,28 +75,32 @@ pub fn render_ui(
 
 fn render_page_tabs(app: &mut App, ui: &mut three_d::egui::Ui) {
     use three_d::egui::*;
-    ui.horizontal(|ui| {
-        ui.label(RichText::new("AIO Asset Normalizer").strong());
-        ui.separator();
-        if ui
-            .selectable_label(
-                app.page == Page::GlbEditor,
-                app.i18n.tr("page.glb_editor"),
-            )
-            .clicked()
-        {
-            app.page = Page::GlbEditor;
-        }
-        if ui
-            .selectable_label(
-                app.page == Page::BvhStudio,
-                app.i18n.tr("page.bvh_studio"),
-            )
-            .clicked()
-        {
-            app.page = Page::BvhStudio;
-        }
-    });
+    Frame::NONE
+        .inner_margin(Margin::symmetric(8, 2))
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("AIO Asset Normalizer").strong());
+                ui.separator();
+                if ui
+                    .selectable_label(
+                        app.page == Page::GlbEditor,
+                        app.i18n.tr("page.glb_editor"),
+                    )
+                    .clicked()
+                {
+                    app.page = Page::GlbEditor;
+                }
+                if ui
+                    .selectable_label(
+                        app.page == Page::BvhStudio,
+                        app.i18n.tr("page.bvh_studio"),
+                    )
+                    .clicked()
+                {
+                    app.page = Page::BvhStudio;
+                }
+            });
+        });
     ui.separator();
 }
 
@@ -630,20 +634,26 @@ fn render_about_dialog(app: &mut App, ctx: &three_d::egui::Context) {
         .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
         .show(ctx, |ui| {
             ui.vertical_centered(|ui| {
-                Frame::NONE
-                    .fill(Color32::from_rgb(248, 240, 230))
-                    .stroke(Stroke::new(
-                        1.0_f32,
-                        Color32::from_rgb(224, 198, 176),
-                    ))
-                    .corner_radius(CornerRadius::same(12))
-                    .inner_margin(Margin::same(8))
-                    .show(ui, |ui| {
-                        ui.add(
-                            Image::from_texture(&icon)
-                                .fit_to_exact_size(vec2(72.0, 72.0)),
-                        );
-                    });
+                let frame_size = vec2(88.0, 88.0);
+                let available = ui.available_width();
+                let left_pad = ((available - frame_size.x) / 2.0).max(0.0);
+                ui.horizontal(|ui| {
+                    ui.add_space(left_pad);
+                    Frame::NONE
+                        .fill(Color32::from_rgb(248, 240, 230))
+                        .stroke(Stroke::new(
+                            1.0_f32,
+                            Color32::from_rgb(224, 198, 176),
+                        ))
+                        .corner_radius(CornerRadius::same(12))
+                        .inner_margin(Margin::same(8))
+                        .show(ui, |ui| {
+                            ui.add(
+                                Image::from_texture(&icon)
+                                    .fit_to_exact_size(vec2(72.0, 72.0)),
+                            );
+                        });
+                });
                 ui.heading("AIO Asset Normalizer");
                 ui.label(format!("v{}", env!("CARGO_PKG_VERSION")));
                 ui.separator();
