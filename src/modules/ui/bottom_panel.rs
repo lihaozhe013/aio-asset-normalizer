@@ -15,6 +15,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
         .default_size(160.0)
         .min_size(100.0)
         .show_inside(ui, |ui| {
+            ui.add_space(4.0);
             ui.horizontal(|ui| {
                 if has_animation
                     && ui
