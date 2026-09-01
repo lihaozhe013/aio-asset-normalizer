@@ -18,6 +18,7 @@ use crate::modules::{
     i18n::I18n,
     preferences::{self, UserPreferences},
     ui::{
+        bvh_file_tree::BvhFileTree,
         file_tree::FileTree,
         log_viewer::LogViewer,
         menu_bar::{MenuAction, Page},
@@ -39,6 +40,7 @@ pub struct App {
     pub canvas: ViewportCanvas,
     pub(crate) fonts_configured: bool,
     pub file_tree: FileTree,
+    pub bvh_file_tree: BvhFileTree,
     pub log: LogViewer,
     pub page: Page,
     pub glb: Option<GlbDocument>,
@@ -126,6 +128,10 @@ impl App {
         canvas.apply_view_prefs(&prefs.view);
         let mut file_tree = FileTree::new();
         file_tree.apply_prefs(&prefs.file_tree);
+        let mut bvh_file_tree = BvhFileTree::new();
+        if let Some(root) = file_tree.root().cloned() {
+            bvh_file_tree.open_folder(root);
+        }
         let mut log = LogViewer::new();
         log.apply_prefs(&prefs.log_viewer);
         Self {
@@ -134,6 +140,7 @@ impl App {
             canvas,
             fonts_configured: false,
             file_tree,
+            bvh_file_tree,
             log,
             page: Page::GlbEditor,
             glb: None,
@@ -244,6 +251,7 @@ impl App {
                 match result.result {
                     Ok(()) => {
                         self.file_tree.refresh();
+                        self.bvh_file_tree.refresh();
                         let prefix = task_log_prefix(&result.kind);
                         self.log.append(&format!(
                             "{prefix} Exported {} {}",
@@ -612,6 +620,7 @@ impl App {
             MenuAction::ExportBvhAnimationClip => self.export_bvh_glb(true),
             MenuAction::ClearFileList => {
                 self.file_tree.clear();
+                self.bvh_file_tree.clear();
                 self.glb = None;
                 self.glb_path = None;
                 self.canvas.clear_glb();
@@ -829,6 +838,7 @@ impl App {
         match document.export_atomic(&path) {
             Ok(()) => {
                 self.file_tree.refresh();
+                self.bvh_file_tree.refresh();
                 self.log.append(&format!(
                     "[glb_editor] Exported {}",
                     path.display()
@@ -865,6 +875,7 @@ impl App {
         match bvh::save_mapping(&path, mapping) {
             Ok(()) => {
                 self.file_tree.refresh();
+                self.bvh_file_tree.refresh();
                 self.log.append(&format!(
                     "[bvh_studio] Exported mapping {}",
                     path.display()
@@ -896,6 +907,7 @@ impl App {
         match document.write(&path) {
             Ok(()) => {
                 self.file_tree.refresh();
+                self.bvh_file_tree.refresh();
                 self.log.append(&format!(
                     "[bvh_studio] Exported {}",
                     path.display()

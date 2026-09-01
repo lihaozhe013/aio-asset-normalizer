@@ -85,7 +85,6 @@ glb:
   standardize: "Validate default contract"
 bvh:
   open_hint: "Open a BVH file to inspect and trim motion."
-  source_bvh: "Source BVH"
   joints: "Joints"
   frames: "Frames"
   frame_time: "Frame time"

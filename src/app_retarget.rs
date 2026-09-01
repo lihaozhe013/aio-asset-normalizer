@@ -544,6 +544,7 @@ impl App {
         match retarget::save_mapping(&path, mapping) {
             Ok(()) => {
                 self.file_tree.refresh();
+                self.bvh_file_tree.refresh();
                 self.log.append(&format!(
                     "[retarget] Exported Mapping v2 {}",
                     path.display()

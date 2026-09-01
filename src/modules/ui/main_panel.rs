@@ -18,7 +18,10 @@ pub fn render_ui(
         app.fonts_configured = true;
     }
 
-    app.file_tree.handle_dropped_files(ui.ctx());
+    match app.page {
+        Page::GlbEditor => app.file_tree.handle_dropped_files(ui.ctx()),
+        Page::BvhStudio => app.bvh_file_tree.handle_dropped_files(ui.ctx()),
+    }
     app.poll_tasks();
     let actions = menu_bar::render(
         ui,
@@ -33,22 +36,36 @@ pub fn render_ui(
     }
     render_page_tabs(app, ui);
 
-    Panel::left("glb_files")
-        .resizable(true)
-        .default_size(250.0)
-        .min_size(170.0)
-        .show_inside(ui, |ui| {
-            let (changed, preview_path) = app.file_tree.render(ui, &app.i18n);
-            if changed || app.file_tree.take_root_changed() {
-                app.needs_save = true;
-            }
-            if let Some(path) = preview_path {
-                match app.page {
-                    Page::GlbEditor => app.preview_glb(&path),
-                    Page::BvhStudio => app.load_bvh_target(&path),
-                }
-            }
-        });
+    match app.page {
+        Page::GlbEditor => {
+            Panel::left("glb_files")
+                .resizable(true)
+                .default_size(250.0)
+                .min_size(170.0)
+                .show_inside(ui, |ui| {
+                    let (changed, preview_path) =
+                        app.file_tree.render(ui, &app.i18n);
+                    if changed || app.file_tree.take_root_changed() {
+                        app.needs_save = true;
+                    }
+                    if let Some(path) = preview_path {
+                        app.preview_glb(&path);
+                    }
+                });
+        }
+        Page::BvhStudio => {
+            Panel::left("bvh_files")
+                .resizable(true)
+                .default_size(250.0)
+                .min_size(170.0)
+                .show_inside(ui, |ui| {
+                    if let Some(path) = app.bvh_file_tree.render(ui, &app.i18n)
+                    {
+                        app.load_bvh_path(&path);
+                    }
+                });
+        }
+    }
 
     Panel::right("inspector")
         .resizable(true)
@@ -517,15 +534,6 @@ fn render_named_items(
 fn render_bvh_inspector(app: &mut App, ui: &mut three_d::egui::Ui) {
     use three_d::egui::*;
     ui.heading(app.i18n.tr("page.bvh_studio"));
-    ui.horizontal(|ui| {
-        ui.label(app.i18n.tr("bvh.source_bvh"));
-        if ui.button(app.i18n.tr("menu.import_bvh")).clicked() {
-            app.import_bvh();
-        }
-    });
-    if let Some(path) = &app.bvh_path {
-        ui.label(path.display().to_string());
-    }
     ui.horizontal(|ui| {
         ui.checkbox(
             &mut app.canvas.show_source_skeleton,

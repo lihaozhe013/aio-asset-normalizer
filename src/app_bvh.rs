@@ -32,7 +32,11 @@ impl App {
         else {
             return;
         };
-        match BvhDocument::load(&path) {
+        self.load_bvh_path(&path);
+    }
+
+    pub(crate) fn load_bvh_path(&mut self, path: &Path) {
+        match BvhDocument::load(path) {
             Ok(document) => {
                 self.bvh_trim_end =
                     document.duration().max(document.frame_time);
@@ -43,7 +47,7 @@ impl App {
                     document.frames.len()
                 ));
                 self.bvh = Some(document);
-                self.bvh_path = Some(path);
+                self.bvh_path = Some(path.to_path_buf());
                 self.bvh_frame = 0;
                 self.bvh_playing = false;
                 self.needs_bvh_skeleton_reload = true;
@@ -51,6 +55,16 @@ impl App {
                 self.refresh_retarget_plan();
                 self.refresh_v2_retarget_mapping();
                 self.needs_bvh_target_reload = true;
+                if let Some(parent) = path.parent() {
+                    if self
+                        .bvh_file_tree
+                        .root()
+                        .is_none_or(|root| root != parent)
+                    {
+                        self.bvh_file_tree.open_folder(parent.to_path_buf());
+                    }
+                }
+                self.bvh_file_tree.select_file(path);
             }
             Err(error) => self.log.append(&format!("[bvh_studio] {error}")),
         }

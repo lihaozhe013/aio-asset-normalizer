@@ -1,4 +1,5 @@
 pub mod bottom_panel;
+pub mod bvh_file_tree;
 pub mod file_tree;
 pub mod fonts;
 pub mod log_viewer;
