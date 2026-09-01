@@ -518,6 +518,15 @@ fn render_bvh_inspector(app: &mut App, ui: &mut three_d::egui::Ui) {
     use three_d::egui::*;
     ui.heading(app.i18n.tr("page.bvh_studio"));
     ui.horizontal(|ui| {
+        ui.label(app.i18n.tr("bvh.source_bvh"));
+        if ui.button(app.i18n.tr("menu.import_bvh")).clicked() {
+            app.import_bvh();
+        }
+    });
+    if let Some(path) = &app.bvh_path {
+        ui.label(path.display().to_string());
+    }
+    ui.horizontal(|ui| {
         ui.checkbox(
             &mut app.canvas.show_source_skeleton,
             "Source BVH skeleton",

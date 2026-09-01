@@ -85,6 +85,7 @@ glb:
   standardize: "验证默认标准"
 bvh:
   open_hint: "打开 BVH 文件以检查和裁剪动作。"
+  source_bvh: "源 BVH"
   joints: "关节"
   frames: "帧"
   frame_time: "帧时间"
