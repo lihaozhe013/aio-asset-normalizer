@@ -5,3 +5,4 @@ pub mod fonts;
 pub mod log_viewer;
 pub mod main_panel;
 pub mod menu_bar;
+pub mod skeleton_panel;

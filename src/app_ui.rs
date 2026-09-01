@@ -124,7 +124,21 @@ impl App {
         self.canvas.update_glb_animation(
             self.glb_animation_index,
             self.glb_animation_time,
-        )
+        )?;
+        if self.glb_retarget_preview_active {
+            if let Some(target) = self.glb_retarget_target.as_ref() {
+                if let Ok(skin) =
+                    target.skin_data_at(self.retarget_target_skin_index)
+                {
+                    self.canvas.update_target_skeleton_animation_cached(
+                        0,
+                        self.glb_animation_time,
+                        &skin.joints,
+                    )?;
+                }
+            }
+        }
+        Ok(())
     }
 
     pub(crate) fn reset_glb_animation_state(&mut self) {

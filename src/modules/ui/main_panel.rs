@@ -1,6 +1,7 @@
 use crate::app::App;
 use crate::modules::bvh::SuggestionConfidence;
 use crate::modules::glb::TextureSlot;
+use crate::modules::ui::skeleton_panel;
 use crate::modules::ui::{
     bottom_panel, fonts,
     menu_bar::{self, MenuAction, Page},
@@ -122,6 +123,7 @@ fn render_page_tabs(app: &mut App, ui: &mut three_d::egui::Ui) {
                     .clicked()
                 {
                     app.page = Page::BvhStudio;
+                    app.canvas.show_origin = false;
                     if app.glb_retarget_preview_active {
                         app.exit_glb_retarget_preview();
                     }
@@ -141,6 +143,7 @@ fn render_glb_inspector(app: &mut App, ui: &mut three_d::egui::Ui) {
         if ui.button("Exit retarget preview").clicked() {
             app.exit_glb_retarget_preview();
         }
+        skeleton_panel::render(app, ui, false);
     }
     let Some(document) = app.glb.as_ref() else {
         ui.label(app.i18n.tr("glb.open_hint"));
@@ -544,6 +547,7 @@ fn render_bvh_inspector(app: &mut App, ui: &mut three_d::egui::Ui) {
             "Target Skin skeleton",
         );
     });
+    skeleton_panel::render(app, ui, true);
     if let Some(document) = app.bvh.as_ref() {
         Grid::new("bvh_summary").num_columns(2).show(ui, |ui| {
             for (label, value) in [
@@ -703,6 +707,40 @@ fn render_bvh_inspector(app: &mut App, ui: &mut three_d::egui::Ui) {
                     .changed();
             }
         });
+    let unit_shortcut = app.bvh_unit.clone();
+    let bvh_diagnostic = app
+        .bvh
+        .as_ref()
+        .and_then(|document| app.bvh_span_diagnostic(document).ok());
+    if let Some((raw_span, converted_span)) = bvh_diagnostic {
+        ui.label(format!(
+            "Raw span: {:.4} / Converted span: {:.4} m",
+            raw_span, converted_span
+        ));
+        if converted_span < 0.05 || converted_span > 100.0 {
+            let hint = if converted_span < 0.05 {
+                "Try Use m if this file stores metre offsets."
+            } else {
+                "Try Use cm or Use mm if this file stores smaller offsets."
+            };
+            ui.colored_label(
+                Color32::YELLOW,
+                format!(
+                    "Current unit produces a {:.3} m skeleton. {hint}",
+                    converted_span,
+                ),
+            );
+        }
+        ui.horizontal(|ui| {
+            for unit in ["m", "cm", "mm"] {
+                if ui.button(format!("Use {unit}")).clicked()
+                    && unit_shortcut != unit
+                {
+                    app.set_bvh_unit_from_ui(unit);
+                }
+            }
+        });
+    }
     if axes_changed {
         let up_axis = app.bvh_up_axis.clone();
         let forward_axis = app.bvh_forward_axis.clone();
@@ -721,6 +759,8 @@ fn render_bvh_inspector(app: &mut App, ui: &mut three_d::egui::Ui) {
             mapping.source.unit = app.bvh_unit.clone();
         }
         app.refresh_v2_retarget_mapping();
+        app.needs_bvh_skeleton_reload = true;
+        app.bvh_camera_focus_pending = true;
         app.needs_bvh_target_reload = true;
     }
     if let Some(target) = app.bvh_target_glb.as_ref() {
@@ -743,6 +783,7 @@ fn render_bvh_inspector(app: &mut App, ui: &mut three_d::egui::Ui) {
             if skin_changed {
                 app.refresh_retarget_plan();
                 app.refresh_v2_retarget_mapping();
+                app.needs_bvh_target_reload = true;
             }
         }
     }

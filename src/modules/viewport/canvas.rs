@@ -1,4 +1,7 @@
 use super::helpers;
+use super::skeleton_visual::{
+    SkeletonPose, SkeletonVisual, SkeletonVisualConfig,
+};
 use crate::modules::glb::{AnimationClip, AnimationRuntime};
 use crate::modules::preferences::ViewPreferences;
 use std::path::Path;
@@ -8,8 +11,8 @@ pub struct ViewportCanvas {
     pub axes: Vec<Gm<Mesh, ColorMaterial>>,
     pub grid: Vec<Gm<Mesh, ColorMaterial>>,
     pub origin_sphere: Gm<Mesh, ColorMaterial>,
-    pub skeleton: Vec<Gm<Mesh, ColorMaterial>>,
-    pub target_skeleton: Vec<Gm<Mesh, ColorMaterial>>,
+    pub skeleton: Option<SkeletonVisual>,
+    pub target_skeleton: Option<SkeletonVisual>,
     pub model: Option<Model<PhysicalMaterial>>,
     glb_animation: Option<AnimationRuntime>,
     model_base_transforms: Vec<Mat4>,
@@ -20,6 +23,7 @@ pub struct ViewportCanvas {
     pub show_origin: bool,
     pub show_source_skeleton: bool,
     pub show_target_skeleton: bool,
+    pub skeleton_config: SkeletonVisualConfig,
     ambient_light: AmbientLight,
     directional_light: DirectionalLight,
 }
@@ -30,8 +34,8 @@ impl ViewportCanvas {
             axes: helpers::build_axes(context),
             grid: helpers::build_grid(context),
             origin_sphere: helpers::build_origin_sphere(context),
-            skeleton: Vec::new(),
-            target_skeleton: Vec::new(),
+            skeleton: None,
+            target_skeleton: None,
             model: None,
             glb_animation: None,
             model_base_transforms: Vec::new(),
@@ -42,6 +46,7 @@ impl ViewportCanvas {
             show_origin: true,
             show_source_skeleton: true,
             show_target_skeleton: true,
+            skeleton_config: SkeletonVisualConfig::default(),
             ambient_light: AmbientLight {
                 intensity: 0.3,
                 color: Srgba::new(255, 255, 255, 255),
@@ -146,6 +151,9 @@ impl ViewportCanvas {
         transform: Mat4,
     ) -> Result<(), String> {
         self.root_preview_transform = transform;
+        if let Some(skeleton) = self.target_skeleton.as_mut() {
+            skeleton.set_transformation(transform);
+        }
         self.apply_model_transforms()
     }
 
@@ -276,11 +284,29 @@ impl ViewportCanvas {
         positions: &[[f32; 3]],
         parents: &[Option<usize>],
     ) {
-        self.skeleton = helpers::build_skeleton(context, positions, parents);
+        self.set_bvh_skeleton_pose(
+            context,
+            &SkeletonPose::from_positions(positions.to_vec(), parents.to_vec()),
+        );
+    }
+
+    pub fn set_bvh_skeleton_pose(
+        &mut self,
+        context: &Context,
+        pose: &SkeletonPose,
+    ) {
+        let skeleton = self.skeleton.get_or_insert_with(|| {
+            SkeletonVisual::new(
+                context,
+                Srgba::new(255, 150, 40, 255),
+                self.skeleton_config,
+            )
+        });
+        skeleton.update_pose(pose);
     }
 
     pub fn clear_bvh_skeleton(&mut self) {
-        self.skeleton.clear();
+        self.skeleton = None;
     }
 
     pub fn animation_runtime(&self) -> Option<AnimationRuntime> {
@@ -294,17 +320,30 @@ impl ViewportCanvas {
         parents: &[Option<usize>],
         joints: &[usize],
     ) {
-        self.target_skeleton = helpers::build_skeleton_colored_filtered(
-            context,
-            positions,
-            parents,
-            joints,
-            Srgba::new(70, 220, 255, 255),
-        );
+        let pose =
+            SkeletonPose::from_positions(positions.to_vec(), parents.to_vec());
+        self.set_target_skeleton_pose(context, &filter_pose(&pose, joints));
+    }
+
+    pub fn set_target_skeleton_pose(
+        &mut self,
+        context: &Context,
+        pose: &SkeletonPose,
+    ) {
+        let skeleton = self.target_skeleton.get_or_insert_with(|| {
+            let mut skeleton = SkeletonVisual::new(
+                context,
+                Srgba::new(70, 220, 255, 255),
+                self.skeleton_config,
+            );
+            skeleton.set_transformation(self.root_preview_transform);
+            skeleton
+        });
+        skeleton.update_pose(pose);
     }
 
     pub fn clear_target_skeleton(&mut self) {
-        self.target_skeleton.clear();
+        self.target_skeleton = None;
     }
 
     pub fn update_target_skeleton_animation(
@@ -324,19 +363,120 @@ impl ViewportCanvas {
             .iter()
             .map(|pose| pose.world_translation)
             .collect::<Vec<_>>();
+        let world_rotations = poses
+            .iter()
+            .map(|pose| pose.world_rotation)
+            .collect::<Vec<_>>();
         let parents = runtime
             .nodes
             .iter()
             .map(|node| node.parent)
             .collect::<Vec<_>>();
-        self.target_skeleton = helpers::build_skeleton_colored_filtered(
-            context,
-            &positions,
-            &parents,
-            joints,
-            Srgba::new(70, 220, 255, 255),
-        );
+        let pose = SkeletonPose {
+            positions,
+            world_rotations,
+            parents,
+            end_sites: vec![None; poses.len()],
+            rest_positions: None,
+        };
+        self.set_target_skeleton_pose(context, &filter_pose(&pose, joints));
         Ok(())
+    }
+
+    pub fn update_target_skeleton_animation_cached(
+        &mut self,
+        animation_index: usize,
+        time: f32,
+        joints: &[usize],
+    ) -> Result<(), String> {
+        let Some(runtime) = self.glb_animation.as_ref() else {
+            return Ok(());
+        };
+        let poses = runtime
+            .sample_nodes(animation_index, time)
+            .map_err(|error| error.to_string())?;
+        let pose = SkeletonPose {
+            positions: poses
+                .iter()
+                .map(|pose| pose.world_translation)
+                .collect(),
+            world_rotations: poses
+                .iter()
+                .map(|pose| pose.world_rotation)
+                .collect(),
+            parents: runtime.nodes.iter().map(|node| node.parent).collect(),
+            end_sites: vec![None; poses.len()],
+            rest_positions: None,
+        };
+        if let Some(skeleton) = self.target_skeleton.as_mut() {
+            skeleton.update_pose(&filter_pose(&pose, joints));
+        }
+        Ok(())
+    }
+
+    pub fn set_skeleton_config(&mut self, config: SkeletonVisualConfig) {
+        self.skeleton_config = config;
+        if let Some(skeleton) = self.skeleton.as_mut() {
+            skeleton.set_config(config);
+        }
+        if let Some(skeleton) = self.target_skeleton.as_mut() {
+            skeleton.set_config(config);
+        }
+    }
+
+    pub fn set_guide_scale(&mut self, context: &Context, height: f32) {
+        let height = height.max(0.0001);
+        self.axes = helpers::build_axes_scaled(context, height * 1.25);
+        self.grid = helpers::build_grid_scaled(context, height * 1.5);
+        let origin_radius = (height * 0.03).clamp(0.00001, 100.0);
+        self.origin_sphere
+            .set_transformation(Mat4::from_scale(origin_radius / 0.1));
+    }
+
+    pub fn skeleton_bounds(&self) -> Option<([f32; 3], [f32; 3])> {
+        self.skeleton.as_ref().and_then(SkeletonVisual::bounds)
+    }
+
+    pub fn target_skeleton_bounds(&self) -> Option<([f32; 3], [f32; 3])> {
+        let bounds = self
+            .target_skeleton
+            .as_ref()
+            .and_then(SkeletonVisual::bounds)?;
+        Some(transform_bounds(bounds, self.root_preview_transform))
+    }
+
+    pub fn model_bounds(&self) -> Option<([f32; 3], [f32; 3])> {
+        let model = self.model.as_ref()?;
+        let mut minimum = [f32::INFINITY; 3];
+        let mut maximum = [f32::NEG_INFINITY; 3];
+        for part in model.iter() {
+            let aabb = part.aabb();
+            if aabb.is_empty() || aabb.is_infinite() {
+                continue;
+            }
+            let min = aabb.min();
+            let max = aabb.max();
+            for axis in 0..3 {
+                minimum[axis] = minimum[axis].min([min.x, min.y, min.z][axis]);
+                maximum[axis] = maximum[axis].max([max.x, max.y, max.z][axis]);
+            }
+        }
+        if minimum.iter().any(|value| !value.is_finite()) {
+            None
+        } else {
+            Some((minimum, maximum))
+        }
+    }
+
+    pub fn preview_bounds(&self) -> Option<([f32; 3], [f32; 3])> {
+        let mut bounds = self.skeleton_bounds();
+        if let Some(target) = self.target_skeleton_bounds() {
+            bounds = Some(merge_bounds(bounds, target));
+        }
+        if let Some(model) = self.model_bounds() {
+            bounds = Some(merge_bounds(bounds, model));
+        }
+        bounds
     }
 
     pub fn apply_view_prefs(&mut self, prefs: &ViewPreferences) {
@@ -352,6 +492,117 @@ impl ViewportCanvas {
             show_origin: self.show_origin,
         }
     }
+}
+
+fn filter_pose(pose: &SkeletonPose, joints: &[usize]) -> SkeletonPose {
+    if joints.is_empty() {
+        return SkeletonPose::default();
+    }
+    let mut included = vec![false; pose.positions.len()];
+    for &joint in joints {
+        let mut current = Some(joint);
+        let mut guard = 0;
+        while let Some(index) = current {
+            if index >= included.len() || included[index] {
+                break;
+            }
+            included[index] = true;
+            current = pose.parents.get(index).and_then(|parent| *parent);
+            guard += 1;
+            if guard > included.len() {
+                break;
+            }
+        }
+    }
+    let mut remap = vec![None; included.len()];
+    let mut indices = Vec::new();
+    for (index, keep) in included.iter().copied().enumerate() {
+        if keep {
+            remap[index] = Some(indices.len());
+            indices.push(index);
+        }
+    }
+    let positions = indices
+        .iter()
+        .filter_map(|index| pose.positions.get(*index).copied())
+        .collect::<Vec<_>>();
+    let world_rotations = indices
+        .iter()
+        .map(|index| {
+            pose.world_rotations
+                .get(*index)
+                .copied()
+                .unwrap_or([0.0, 0.0, 0.0, 1.0])
+        })
+        .collect::<Vec<_>>();
+    let parents = indices
+        .iter()
+        .map(|index| {
+            pose.parents
+                .get(*index)
+                .and_then(|parent| *parent)
+                .and_then(|parent| remap.get(parent).and_then(|value| *value))
+        })
+        .collect::<Vec<_>>();
+    let end_sites = indices
+        .iter()
+        .map(|index| pose.end_sites.get(*index).copied().unwrap_or(None))
+        .collect::<Vec<_>>();
+    let rest_positions = pose.rest_positions.as_ref().map(|rest| {
+        indices
+            .iter()
+            .filter_map(|index| rest.get(*index).copied())
+            .collect::<Vec<_>>()
+    });
+    SkeletonPose {
+        positions,
+        world_rotations,
+        parents,
+        end_sites,
+        rest_positions,
+    }
+}
+
+fn transform_bounds(
+    bounds: ([f32; 3], [f32; 3]),
+    transform: Mat4,
+) -> ([f32; 3], [f32; 3]) {
+    let mut minimum = [f32::INFINITY; 3];
+    let mut maximum = [f32::NEG_INFINITY; 3];
+    for x in [bounds.0[0], bounds.1[0]] {
+        for y in [bounds.0[1], bounds.1[1]] {
+            for z in [bounds.0[2], bounds.1[2]] {
+                let point = transform * vec4(x, y, z, 1.0);
+                let point = [point.x, point.y, point.z];
+                for axis in 0..3 {
+                    minimum[axis] = minimum[axis].min(point[axis]);
+                    maximum[axis] = maximum[axis].max(point[axis]);
+                }
+            }
+        }
+    }
+    (minimum, maximum)
+}
+
+fn merge_bounds(
+    first: Option<([f32; 3], [f32; 3])>,
+    second: ([f32; 3], [f32; 3]),
+) -> ([f32; 3], [f32; 3]) {
+    let Some((first_minimum, first_maximum)) = first else {
+        return second;
+    };
+    (
+        [
+            first_minimum[0].min(second.0[0]),
+            first_minimum[1].min(second.0[1]),
+            first_minimum[2].min(second.0[2]),
+        ],
+        [
+            first_maximum[0].max(second.1[0]),
+            first_maximum[1].max(second.1[1]),
+            first_maximum[2].max(second.1[2]),
+        ],
+    )
 }
 
 fn matrix_to_mat4(matrix: [f32; 16]) -> Mat4 {

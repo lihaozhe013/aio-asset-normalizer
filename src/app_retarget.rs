@@ -11,6 +11,37 @@ use crate::modules::retarget::{
 use three_d::Context;
 
 impl App {
+    pub(crate) fn initialize_glb_retarget_preview_skeleton(
+        &mut self,
+        context: &Context,
+    ) {
+        let Some(target) = self.glb_retarget_target.as_ref() else {
+            return;
+        };
+        let Ok(skin) = target.skin_data_at(self.retarget_target_skin_index)
+        else {
+            return;
+        };
+        if let Err(error) = self.canvas.update_target_skeleton_animation(
+            context,
+            0,
+            0.0,
+            &skin.joints,
+        ) {
+            self.log.append(&format!(
+                "[glb_retarget] Target skeleton preview failed: {error}"
+            ));
+        }
+        self.canvas.set_guide_scale(
+            context,
+            self.canvas
+                .target_skeleton
+                .as_ref()
+                .map(|skeleton| skeleton.metrics().height)
+                .unwrap_or(1.0),
+        );
+    }
+
     pub(crate) fn import_glb_retarget_target(&mut self) {
         let Some(path) = rfd::FileDialog::new()
             .add_filter("GLB", &["glb"])
@@ -394,6 +425,14 @@ impl App {
                     &positions,
                     &parents,
                     &skin.joints,
+                );
+                self.canvas.set_guide_scale(
+                    context,
+                    self.canvas
+                        .target_skeleton
+                        .as_ref()
+                        .map(|skeleton| skeleton.metrics().height)
+                        .unwrap_or(1.0),
                 );
             }
             Err(error) => self.log.append(&format!(

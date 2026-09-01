@@ -54,6 +54,9 @@ BVH processing is an independent page that takes a BVH file, a target GLB, and a
 - export a Character Package containing a character and animation;
 - export an Animation Clip containing only the skeleton and animation;
 - use explicit Mapping files to support different motion-capture systems and character naming conventions.
+- inspect source and target hierarchies with the shared instanced Octahedral,
+  Stick, or Lines skeleton display, stable Rest Pose sizing, End Site markers,
+  adaptive camera/grid fitting, and explicit BVH unit diagnostics.
 
 ## Default Standardization Contract
 
@@ -142,10 +145,12 @@ The GLB read/write layer preserves the original JSON and BIN data and changes on
 3. **Quality and release**: complete tests, diagnostics, documentation, and cross-platform packaging.
 
 The complete design, interfaces, migration boundaries, acceptance criteria, and test plan are documented in [`docs/REBUILD_PLAN.md`](docs/REBUILD_PLAN.md).
+Skeleton visualization behavior and manual checks are documented in
+[`docs/bvh-skeleton-visualization.md`](docs/bvh-skeleton-visualization.md).
 
 ## Current Status
 
-The application builds without the Blender bridge or legacy format scripts. The GLB Editor has a pure-Rust document layer with GLB validation, scene indexing, root transforms, interpolated animation trimming, runtime playback for node and Skinned Mesh animations, CPU skinning, PNG/JPEG PBR texture replacement, shared-material duplication, atomic reparse-validated export, and generic GLB→GLB animation retargeting. BVH Studio has generic hierarchy parsing, authored Rest Pose delta retargeting, frame-stepped source and target Skin preview, Mapping v1/v2 validation and saving, reviewed name-match suggestions, external Agent prompt handoff, optional Root Motion and initial-heading normalization, redundant-key reduction, and Character Package / Animation Clip GLB export.
+The application builds without the Blender bridge or legacy format scripts. The GLB Editor has a pure-Rust document layer with GLB validation, scene indexing, root transforms, interpolated animation trimming, runtime playback for node and Skinned Mesh animations, CPU skinning, PNG/JPEG PBR texture replacement, shared-material duplication, atomic reparse-validated export, and generic GLB→GLB animation retargeting. BVH Studio has generic hierarchy parsing, authored Rest Pose delta retargeting, frame-stepped source and target Skin preview, an instanced Octahedral/Stick/Lines skeleton visualizer, adaptive camera and guide geometry, explicit raw/converted unit diagnostics, Mapping v1/v2 validation and saving, reviewed name-match suggestions, external Agent prompt handoff, optional Root Motion and initial-heading normalization, redundant-key reduction, and Character Package / Animation Clip GLB export.
 
 GPU skinning, Morph Target playback, CUBICSPLINE sampling, mesh weight
 rebinding, IK/Twist processing, and skeleton replacement remain intentionally

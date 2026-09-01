@@ -98,25 +98,61 @@ fn main() {
             );
         }
 
-        if app.page == modules::ui::menu_bar::Page::BvhStudio {
-            if app.canvas.show_source_skeleton {
-                for bone in &app.canvas.skeleton {
+        if app.page == modules::ui::menu_bar::Page::BvhStudio
+            || app.glb_retarget_preview_active
+        {
+            if app.page == modules::ui::menu_bar::Page::BvhStudio
+                && app.canvas.show_source_skeleton
+            {
+                if let Some(skeleton) = app.canvas.skeleton.as_ref() {
                     clear_rt = clear_rt.render_partially(
                         viewport.into(),
                         &app.camera.camera,
-                        bone,
+                        skeleton.bone_object(),
                         &[],
                     );
+                    if skeleton.joints_visible() {
+                        clear_rt = clear_rt.render_partially(
+                            viewport.into(),
+                            &app.camera.camera,
+                            skeleton.joints_object(),
+                            &[],
+                        );
+                    }
+                    if skeleton.end_sites_visible() {
+                        clear_rt = clear_rt.render_partially(
+                            viewport.into(),
+                            &app.camera.camera,
+                            skeleton.end_sites_object(),
+                            &[],
+                        );
+                    }
                 }
             }
             if app.canvas.show_target_skeleton {
-                for bone in &app.canvas.target_skeleton {
+                if let Some(skeleton) = app.canvas.target_skeleton.as_ref() {
                     clear_rt = clear_rt.render_partially(
                         viewport.into(),
                         &app.camera.camera,
-                        bone,
+                        skeleton.bone_object(),
                         &[],
                     );
+                    if skeleton.joints_visible() {
+                        clear_rt = clear_rt.render_partially(
+                            viewport.into(),
+                            &app.camera.camera,
+                            skeleton.joints_object(),
+                            &[],
+                        );
+                    }
+                    if skeleton.end_sites_visible() {
+                        clear_rt = clear_rt.render_partially(
+                            viewport.into(),
+                            &app.camera.camera,
+                            skeleton.end_sites_object(),
+                            &[],
+                        );
+                    }
                 }
             }
         }

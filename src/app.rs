@@ -3,9 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::Instant;
 
-use crate::modules::retarget::{
-    self, MappingValidationReport, SkeletonMapping,
-};
+use crate::modules::retarget::{MappingValidationReport, SkeletonMapping};
 use crate::modules::{
     bvh::{
         self, BvhDocument, MappingFile, MappingSuggestion, MappingValidation,
@@ -106,6 +104,7 @@ pub struct App {
     pending_auto_play: bool,
     pending_animation_selection: Option<usize>,
     pub(crate) needs_bvh_skeleton_reload: bool,
+    pub(crate) bvh_camera_focus_pending: bool,
     pub(crate) needs_bvh_target_reload: bool,
     pub(crate) needs_save: bool,
     quit_requested: bool,
@@ -206,6 +205,7 @@ impl App {
             pending_auto_play: false,
             pending_animation_selection: None,
             needs_bvh_skeleton_reload: false,
+            bvh_camera_focus_pending: false,
             needs_bvh_target_reload: false,
             needs_save: false,
             quit_requested: false,
@@ -451,6 +451,7 @@ impl App {
                         self.glb_animation_playing = false;
                         self.log
                             .append("[glb_retarget] Retarget preview ready");
+                        self.initialize_glb_retarget_preview_skeleton(context);
                     }
                     Err(error) => {
                         self.log.append(&format!(
@@ -461,6 +462,7 @@ impl App {
                         self.glb_animation_index = 0;
                         self.glb_animation_time = 0.0;
                         self.glb_animation_playing = false;
+                        self.initialize_glb_retarget_preview_skeleton(context);
                     }
                 }
             }
@@ -471,36 +473,33 @@ impl App {
             if let Some(document) = self.bvh.as_ref() {
                 let frame =
                     self.bvh_frame.min(document.frames.len().saturating_sub(1));
-                match document.joint_positions(frame) {
-                    Ok(positions) => {
-                        let positions = positions
-                            .into_iter()
-                            .map(|position| {
-                                retarget::convert_bvh_position_to_glb(
-                                    position,
-                                    &self.bvh_up_axis,
-                                    &self.bvh_forward_axis,
-                                    &self.bvh_unit,
-                                )
-                                .map_err(|error| error.to_string())
-                            })
-                            .collect::<Result<Vec<_>, _>>();
-                        let positions = match positions {
-                            Ok(positions) => positions,
-                            Err(error) => {
-                                self.log.append(&format!(
-                                    "[bvh_studio] Skeleton coordinate conversion failed: {error}"
-                                ));
-                                return;
+                match self.bvh_preview_pose(document, frame) {
+                    Ok(pose) => {
+                        let positions = pose.positions.clone();
+                        self.canvas.set_bvh_skeleton_pose(context, &pose);
+                        self.canvas.set_guide_scale(
+                            context,
+                            self.canvas
+                                .skeleton
+                                .as_ref()
+                                .map(|skeleton| skeleton.metrics().height)
+                                .unwrap_or(1.0),
+                        );
+                        if self.bvh_camera_focus_pending {
+                            if let Some((minimum, maximum)) =
+                                self.canvas.preview_bounds()
+                            {
+                                self.camera.focus_on_bounds(minimum, maximum);
+                            } else {
+                                self.camera.focus_on_points(&positions);
                             }
-                        };
-                        let parents = document
-                            .joints
-                            .iter()
-                            .map(|joint| joint.parent)
-                            .collect::<Vec<_>>();
-                        self.canvas
-                            .set_bvh_skeleton(context, &positions, &parents);
+                            self.bvh_camera_focus_pending = false;
+                            self.log.append(&format!(
+                                "[bvh_studio] Focused preview on {} converted joints (unit={})",
+                                positions.len(),
+                                self.bvh_unit
+                            ));
+                        }
                         if self
                             .retarget_validation
                             .as_ref()
@@ -644,6 +643,7 @@ impl App {
                 self.pending_glb_retarget_runtime = None;
                 self.needs_bvh_target_reload = false;
                 self.needs_bvh_skeleton_reload = false;
+                self.bvh_camera_focus_pending = false;
                 self.bvh_playing = false;
                 self.bvh_frame = 0;
                 self.reset_root_preview();
@@ -678,8 +678,13 @@ impl App {
             }
             MenuAction::OpenBvhStudio => {
                 self.page = Page::BvhStudio;
+                self.canvas.show_origin = false;
                 if self.glb_retarget_preview_active {
                     self.exit_glb_retarget_preview();
+                }
+                if self.bvh.is_some() {
+                    self.needs_bvh_skeleton_reload = true;
+                    self.bvh_camera_focus_pending = true;
                 }
                 self.needs_bvh_target_reload = true;
                 self.refresh_v2_retarget_mapping();
