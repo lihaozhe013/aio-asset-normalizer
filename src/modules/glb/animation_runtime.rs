@@ -1,5 +1,6 @@
 //! Runtime sampling and CPU skinning for GLB animation preview.
 
+use std::collections::HashSet;
 use std::fmt;
 use std::fs;
 use std::path::Path;
@@ -65,6 +66,24 @@ impl AnimationCurve {
     }
 }
 
+fn validate_curve(curve: &AnimationCurve) -> Result<(), RuntimeError> {
+    if curve.times.len() != curve.values.len()
+        || curve.times.is_empty()
+        || curve.times.iter().any(|time| !time.is_finite())
+        || curve.times.windows(2).any(|pair| pair[0] >= pair[1])
+        || curve.values.iter().any(|value| {
+            !finite_vec4(*value)
+                || (curve.path == AnimationPath::Rotation
+                    && quaternion_length(*value) <= f32::EPSILON)
+        })
+    {
+        return Err(RuntimeError::Invalid(
+            "Animation curve contains invalid keyframes".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone)]
 pub struct AnimationChannel {
     pub node: usize,
@@ -93,6 +112,16 @@ pub struct RuntimeNode {
     pub translation: [f32; 3],
     pub rotation: [f32; 4],
     pub scale: [f32; 3],
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct RuntimeNodePose {
+    pub local_translation: [f32; 3],
+    pub local_rotation: [f32; 4],
+    pub local_scale: [f32; 3],
+    pub world_translation: [f32; 3],
+    pub world_rotation: [f32; 4],
+    pub world_scale: [f32; 3],
 }
 
 #[derive(Debug, Clone)]
@@ -166,9 +195,36 @@ impl From<gltf::Error> for RuntimeError {
 impl AnimationRuntime {
     pub fn load(path: &Path) -> Result<Self, RuntimeError> {
         let bytes = fs::read(path)?;
+        Self::from_bytes(&bytes, path.parent())
+    }
+
+    /// Build a runtime from an in-memory GLB.  Retarget previews use this to
+    /// inspect a generated animation without writing a temporary user asset.
+    pub fn from_bytes(
+        bytes: &[u8],
+        base_path: Option<&Path>,
+    ) -> Result<Self, RuntimeError> {
+        Self::from_bytes_internal(bytes, base_path, true)
+    }
+
+    /// Parse nodes, Skins, and animations without decoding Mesh primitives.
+    /// This keeps GLB→GLB retargeting available for compressed geometry that
+    /// cannot be previewed by the CPU renderer.
+    pub fn from_bytes_skeleton_only(
+        bytes: &[u8],
+        base_path: Option<&Path>,
+    ) -> Result<Self, RuntimeError> {
+        Self::from_bytes_internal(bytes, base_path, false)
+    }
+
+    fn from_bytes_internal(
+        bytes: &[u8],
+        base_path: Option<&Path>,
+        decode_primitives: bool,
+    ) -> Result<Self, RuntimeError> {
         let source = gltf::Gltf::from_slice(&bytes)?;
         let (document, blob) = (source.document, source.blob);
-        let buffers = gltf::import_buffers(&document, path.parent(), blob)?;
+        let buffers = gltf::import_buffers(&document, base_path, blob)?;
         let get_buffer_data = |buffer: gltf::Buffer<'_>| -> Option<&[u8]> {
             buffers.get(buffer.index()).map(|data| data.0.as_slice())
         };
@@ -176,7 +232,12 @@ impl AnimationRuntime {
         let mut parents = vec![None; document.nodes().count()];
         for node in document.nodes() {
             for child in node.children() {
-                parents[child.index()] = Some(node.index());
+                if parents[child.index()].replace(node.index()).is_some() {
+                    return Err(RuntimeError::Invalid(format!(
+                        "Node {} has more than one parent",
+                        child.index()
+                    )));
+                }
             }
         }
 
@@ -207,14 +268,41 @@ impl AnimationRuntime {
             .skins()
             .map(|skin| {
                 let joints = skin.joints().map(|joint| joint.index()).collect::<Vec<_>>();
-                let inverse_bind_matrices = skin
-                    .reader(get_buffer_data)
-                    .read_inverse_bind_matrices()
-                    .map(|matrices| matrices.map(matrix_from_columns).collect::<Vec<_>>())
-                    .unwrap_or_else(|| vec![identity(); joints.len()]);
+                let mut unique_joints = HashSet::new();
+                if joints.iter().any(|joint| {
+                    *joint >= nodes.len() || !unique_joints.insert(*joint)
+                }) {
+                    return Err(RuntimeError::Invalid(format!(
+                        "Skin {} contains an invalid or duplicate joint",
+                        skin.index()
+                    )));
+                }
+                let inverse_bind_matrices = if skin.inverse_bind_matrices().is_some() {
+                    skin.reader(get_buffer_data)
+                        .read_inverse_bind_matrices()
+                        .ok_or_else(|| {
+                            RuntimeError::Invalid(format!(
+                                "Skin {} inverse bind matrices are unreadable",
+                                skin.index()
+                            ))
+                        })?
+                        .map(matrix_from_columns)
+                        .collect::<Vec<_>>()
+                } else {
+                    vec![identity(); joints.len()]
+                };
                 if inverse_bind_matrices.len() != joints.len() {
                     return Err(RuntimeError::Invalid(format!(
                         "Skin {} inverse bind matrix count does not match joint count",
+                        skin.index()
+                    )));
+                }
+                if inverse_bind_matrices
+                    .iter()
+                    .any(|matrix| matrix.iter().any(|value| !value.is_finite()))
+                {
+                    return Err(RuntimeError::Invalid(format!(
+                        "Skin {} contains non-finite inverse bind matrices",
                         skin.index()
                     )));
                 }
@@ -230,7 +318,9 @@ impl AnimationRuntime {
             RuntimeError::Invalid("GLB has no scenes".to_owned())
         })?;
         for node in scene.nodes() {
-            collect_primitives(node, &get_buffer_data, &mut primitives)?;
+            if decode_primitives {
+                collect_primitives(node, &get_buffer_data, &mut primitives)?;
+            }
         }
 
         let clips = document
@@ -246,11 +336,14 @@ impl AnimationRuntime {
         })
     }
 
-    pub fn sample(
+    /// Sample only node transforms.  This is intentionally independent from
+    /// CPU Mesh decoding so a compressed target can still show a skeleton and
+    /// participate in a validated animation retarget export.
+    pub fn sample_nodes(
         &self,
         clip_index: usize,
         time: f32,
-    ) -> Result<RuntimePose, RuntimeError> {
+    ) -> Result<Vec<RuntimeNodePose>, RuntimeError> {
         let clip = self.clips.get(clip_index).ok_or_else(|| {
             RuntimeError::Invalid(format!(
                 "Animation {clip_index} does not exist"
@@ -258,6 +351,11 @@ impl AnimationRuntime {
         })?;
         if !clip.is_playable() {
             return Err(RuntimeError::Unsupported(clip.unsupported.join(", ")));
+        }
+        if !time.is_finite() {
+            return Err(RuntimeError::Invalid(
+                "Animation sample time must be finite".to_owned(),
+            ));
         }
         let sample_time = if clip.duration > f32::EPSILON {
             time.clamp(0.0, clip.duration)
@@ -277,6 +375,146 @@ impl AnimationRuntime {
         let mut scales =
             self.nodes.iter().map(|node| node.scale).collect::<Vec<_>>();
         for channel in &clip.channels {
+            if channel.node >= self.nodes.len() {
+                return Err(RuntimeError::Invalid(format!(
+                    "Animation channel references missing node {}",
+                    channel.node
+                )));
+            }
+            validate_curve(&channel.curve)?;
+            let value = channel.curve.sample(sample_time);
+            if !finite_vec4(value) {
+                return Err(RuntimeError::Invalid(
+                    "Animation sample contains non-finite values".to_owned(),
+                ));
+            }
+            match channel.curve.path {
+                AnimationPath::Translation => {
+                    translations[channel.node] = [value[0], value[1], value[2]]
+                }
+                AnimationPath::Rotation => {
+                    rotations[channel.node] = normalize_quaternion(value)
+                }
+                AnimationPath::Scale => {
+                    scales[channel.node] = [value[0], value[1], value[2]]
+                }
+            }
+        }
+        let locals = (0..self.nodes.len())
+            .map(|index| RuntimeNodePose {
+                local_translation: translations[index],
+                local_rotation: normalize_quaternion(rotations[index]),
+                local_scale: scales[index],
+                world_translation: [0.0; 3],
+                world_rotation: identity_rotation(),
+                world_scale: [1.0; 3],
+            })
+            .collect::<Vec<_>>();
+        if locals.iter().any(|pose| {
+            !finite_vec3(pose.local_translation)
+                || !finite_vec4(pose.local_rotation)
+                || !finite_vec3(pose.local_scale)
+        }) {
+            return Err(RuntimeError::Invalid(
+                "Animation sample contains non-finite node transforms"
+                    .to_owned(),
+            ));
+        }
+        let mut sampled = vec![None; self.nodes.len()];
+        let mut visiting = vec![false; self.nodes.len()];
+        for index in 0..self.nodes.len() {
+            resolve_node_pose(
+                index,
+                &self.nodes,
+                &locals,
+                &mut sampled,
+                &mut visiting,
+            )?;
+        }
+        sampled
+            .into_iter()
+            .map(|pose| {
+                pose.ok_or_else(|| {
+                    RuntimeError::Invalid(
+                        "node pose resolution did not produce a value"
+                            .to_owned(),
+                    )
+                })
+            })
+            .collect()
+    }
+
+    pub fn keyframe_times(
+        &self,
+        clip_index: usize,
+    ) -> Result<Vec<f32>, RuntimeError> {
+        let clip = self.clips.get(clip_index).ok_or_else(|| {
+            RuntimeError::Invalid(format!(
+                "Animation {clip_index} does not exist"
+            ))
+        })?;
+        for channel in &clip.channels {
+            if channel.node >= self.nodes.len() {
+                return Err(RuntimeError::Invalid(format!(
+                    "Animation channel references missing node {}",
+                    channel.node
+                )));
+            }
+            validate_curve(&channel.curve)?;
+        }
+        let mut times = clip
+            .channels
+            .iter()
+            .flat_map(|channel| channel.curve.times.iter().copied())
+            .collect::<Vec<_>>();
+        times.sort_by(|left, right| left.total_cmp(right));
+        times.dedup_by(|left, right| (*left - *right).abs() <= f32::EPSILON);
+        Ok(times)
+    }
+
+    pub fn sample(
+        &self,
+        clip_index: usize,
+        time: f32,
+    ) -> Result<RuntimePose, RuntimeError> {
+        let clip = self.clips.get(clip_index).ok_or_else(|| {
+            RuntimeError::Invalid(format!(
+                "Animation {clip_index} does not exist"
+            ))
+        })?;
+        if !clip.is_playable() {
+            return Err(RuntimeError::Unsupported(clip.unsupported.join(", ")));
+        }
+        if !time.is_finite() {
+            return Err(RuntimeError::Invalid(
+                "Animation sample time must be finite".to_owned(),
+            ));
+        }
+        let sample_time = if clip.duration > f32::EPSILON {
+            time.clamp(0.0, clip.duration)
+        } else {
+            0.0
+        };
+        let mut translations = self
+            .nodes
+            .iter()
+            .map(|node| node.translation)
+            .collect::<Vec<_>>();
+        let mut rotations = self
+            .nodes
+            .iter()
+            .map(|node| node.rotation)
+            .collect::<Vec<_>>();
+        let mut scales =
+            self.nodes.iter().map(|node| node.scale).collect::<Vec<_>>();
+        for channel in &clip.channels {
+            if channel.node >= self.nodes.len() {
+                return Err(RuntimeError::Invalid(format!(
+                    "Animation channel references missing node {}",
+                    channel.node
+                )));
+            }
+            validate_curve(&channel.curve)?;
             let value = channel.curve.sample(sample_time);
             match channel.curve.path {
                 AnimationPath::Translation => {
@@ -625,6 +863,16 @@ where
                 "Animation output contains non-finite values".to_owned(),
             ));
         }
+        if path == AnimationPath::Rotation
+            && values
+                .iter()
+                .any(|value| quaternion_length(*value) <= f32::EPSILON)
+        {
+            return Err(RuntimeError::Invalid(
+                "Animation rotation output contains a zero quaternion"
+                    .to_owned(),
+            ));
+        }
         channels.push(AnimationChannel {
             node: channel.target().node().index(),
             curve: AnimationCurve {
@@ -672,6 +920,105 @@ fn compute_world(
     };
     visiting[index] = false;
     Ok(())
+}
+
+fn resolve_node_pose(
+    index: usize,
+    nodes: &[RuntimeNode],
+    locals: &[RuntimeNodePose],
+    sampled: &mut [Option<RuntimeNodePose>],
+    visiting: &mut [bool],
+) -> Result<RuntimeNodePose, RuntimeError> {
+    if let Some(pose) = sampled.get(index).and_then(|pose| *pose) {
+        return Ok(pose);
+    }
+    if visiting.get(index).copied().unwrap_or(false) {
+        return Err(RuntimeError::Invalid(
+            "Node hierarchy contains a cycle".to_owned(),
+        ));
+    }
+    let local = locals.get(index).copied().ok_or_else(|| {
+        RuntimeError::Invalid("Node pose index is invalid".to_owned())
+    })?;
+    visiting[index] = true;
+    let pose = if let Some(parent) = nodes[index].parent {
+        if parent >= nodes.len() {
+            return Err(RuntimeError::Invalid(
+                "Node parent index is invalid".to_owned(),
+            ));
+        }
+        let parent_pose =
+            resolve_node_pose(parent, nodes, locals, sampled, visiting)?;
+        RuntimeNodePose {
+            world_translation: add_vec3(
+                parent_pose.world_translation,
+                rotate_vector(
+                    parent_pose.world_rotation,
+                    multiply_vec3(
+                        parent_pose.world_scale,
+                        local.local_translation,
+                    ),
+                ),
+            ),
+            world_rotation: normalize_quaternion(multiply_quaternion(
+                parent_pose.world_rotation,
+                local.local_rotation,
+            )),
+            world_scale: multiply_vec3(
+                parent_pose.world_scale,
+                local.local_scale,
+            ),
+            ..local
+        }
+    } else {
+        RuntimeNodePose {
+            world_translation: local.local_translation,
+            world_rotation: local.local_rotation,
+            world_scale: local.local_scale,
+            ..local
+        }
+    };
+    if !finite_vec3(pose.world_translation)
+        || !finite_vec4(pose.world_rotation)
+        || !finite_vec3(pose.world_scale)
+    {
+        return Err(RuntimeError::Invalid(
+            "Node pose contains non-finite world transforms".to_owned(),
+        ));
+    }
+    visiting[index] = false;
+    sampled[index] = Some(pose);
+    Ok(pose)
+}
+
+fn identity_rotation() -> [f32; 4] {
+    [0.0, 0.0, 0.0, 1.0]
+}
+
+fn add_vec3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
+}
+
+fn multiply_vec3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [a[0] * b[0], a[1] * b[1], a[2] * b[2]]
+}
+
+fn multiply_quaternion(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
+    [
+        a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1],
+        a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
+        a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3],
+        a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2],
+    ]
+}
+
+fn rotate_vector(rotation: [f32; 4], value: [f32; 3]) -> [f32; 3] {
+    let inverse = [-rotation[0], -rotation[1], -rotation[2], rotation[3]];
+    let result = multiply_quaternion(
+        multiply_quaternion(rotation, [value[0], value[1], value[2], 0.0]),
+        inverse,
+    );
+    [result[0], result[1], result[2]]
 }
 
 fn blend_point(
@@ -860,6 +1207,14 @@ fn normalize_quaternion(value: [f32; 4]) -> [f32; 4] {
     } else {
         [0.0, 0.0, 0.0, 1.0]
     }
+}
+
+fn quaternion_length(value: [f32; 4]) -> f32 {
+    value
+        .iter()
+        .map(|component| component * component)
+        .sum::<f32>()
+        .sqrt()
 }
 
 fn normalize_vec3(value: [f32; 3]) -> [f32; 3] {

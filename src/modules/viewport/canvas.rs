@@ -9,6 +9,7 @@ pub struct ViewportCanvas {
     pub grid: Vec<Gm<Mesh, ColorMaterial>>,
     pub origin_sphere: Gm<Mesh, ColorMaterial>,
     pub skeleton: Vec<Gm<Mesh, ColorMaterial>>,
+    pub target_skeleton: Vec<Gm<Mesh, ColorMaterial>>,
     pub model: Option<Model<PhysicalMaterial>>,
     glb_animation: Option<AnimationRuntime>,
     model_base_transforms: Vec<Mat4>,
@@ -17,6 +18,8 @@ pub struct ViewportCanvas {
     pub show_axes: bool,
     pub show_grid: bool,
     pub show_origin: bool,
+    pub show_source_skeleton: bool,
+    pub show_target_skeleton: bool,
     ambient_light: AmbientLight,
     directional_light: DirectionalLight,
 }
@@ -28,6 +31,7 @@ impl ViewportCanvas {
             grid: helpers::build_grid(context),
             origin_sphere: helpers::build_origin_sphere(context),
             skeleton: Vec::new(),
+            target_skeleton: Vec::new(),
             model: None,
             glb_animation: None,
             model_base_transforms: Vec::new(),
@@ -36,6 +40,8 @@ impl ViewportCanvas {
             show_axes: true,
             show_grid: true,
             show_origin: true,
+            show_source_skeleton: true,
+            show_target_skeleton: true,
             ambient_light: AmbientLight {
                 intensity: 0.3,
                 color: Srgba::new(255, 255, 255, 255),
@@ -54,6 +60,17 @@ impl ViewportCanvas {
         &mut self,
         context: &Context,
         path: &Path,
+    ) -> Result<(), String> {
+        let runtime =
+            AnimationRuntime::load(path).map_err(|error| error.to_string())?;
+        self.load_glb_with_runtime(context, path, runtime)
+    }
+
+    pub fn load_glb_with_runtime(
+        &mut self,
+        context: &Context,
+        path: &Path,
+        runtime: AnimationRuntime,
     ) -> Result<(), String> {
         self.clear_glb();
         let mut raw = three_d_asset::io::load(&[path])
@@ -84,8 +101,6 @@ impl ViewportCanvas {
         self.model = Some(model);
         self.animated_node_world = None;
         self.root_preview_transform = Mat4::identity();
-        let runtime =
-            AnimationRuntime::load(path).map_err(|error| error.to_string())?;
         let render_primitive_count = self
             .model
             .as_ref()
@@ -115,6 +130,15 @@ impl ViewportCanvas {
         self.model_base_transforms.clear();
         self.animated_node_world = None;
         self.root_preview_transform = Mat4::identity();
+    }
+
+    /// Keep a skeleton-only runtime for compressed targets that the CPU
+    /// renderer cannot decode.  Node animation and overlays remain available
+    /// while the original Mesh resources are left untouched for export.
+    pub fn load_skeleton_runtime(&mut self, runtime: AnimationRuntime) {
+        self.clear_glb();
+        self.glb_animation = Some(runtime);
+        self.show_origin = false;
     }
 
     pub fn set_root_preview_transform(
@@ -257,6 +281,62 @@ impl ViewportCanvas {
 
     pub fn clear_bvh_skeleton(&mut self) {
         self.skeleton.clear();
+    }
+
+    pub fn animation_runtime(&self) -> Option<AnimationRuntime> {
+        self.glb_animation.clone()
+    }
+
+    pub fn set_target_skeleton_filtered(
+        &mut self,
+        context: &Context,
+        positions: &[[f32; 3]],
+        parents: &[Option<usize>],
+        joints: &[usize],
+    ) {
+        self.target_skeleton = helpers::build_skeleton_colored_filtered(
+            context,
+            positions,
+            parents,
+            joints,
+            Srgba::new(70, 220, 255, 255),
+        );
+    }
+
+    pub fn clear_target_skeleton(&mut self) {
+        self.target_skeleton.clear();
+    }
+
+    pub fn update_target_skeleton_animation(
+        &mut self,
+        context: &Context,
+        animation_index: usize,
+        time: f32,
+        joints: &[usize],
+    ) -> Result<(), String> {
+        let Some(runtime) = self.glb_animation.as_ref() else {
+            return Ok(());
+        };
+        let poses = runtime
+            .sample_nodes(animation_index, time)
+            .map_err(|error| error.to_string())?;
+        let positions = poses
+            .iter()
+            .map(|pose| pose.world_translation)
+            .collect::<Vec<_>>();
+        let parents = runtime
+            .nodes
+            .iter()
+            .map(|node| node.parent)
+            .collect::<Vec<_>>();
+        self.target_skeleton = helpers::build_skeleton_colored_filtered(
+            context,
+            &positions,
+            &parents,
+            joints,
+            Srgba::new(70, 220, 255, 255),
+        );
+        Ok(())
     }
 
     pub fn apply_view_prefs(&mut self, prefs: &ViewPreferences) {

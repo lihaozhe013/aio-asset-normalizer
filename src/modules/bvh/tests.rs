@@ -40,8 +40,11 @@ fn retargets_rotation_deltas_to_a_mapped_skin() {
         ],
     };
     let target = SkinData {
+        index: 0,
         name: "CharacterSkin".to_owned(),
+        skeleton: None,
         joints: vec![0, 1],
+        mesh_nodes: Vec::new(),
         nodes: vec![
             super::super::glb::SkinNode {
                 index: 0,
@@ -74,8 +77,11 @@ fn retargets_rotation_deltas_to_a_mapped_skin() {
 fn mapping_suggestions_normalize_common_rig_prefixes() {
     let document = BvhDocument::parse(SAMPLE).unwrap();
     let target = SkinData {
+        index: 0,
         name: "CharacterSkin".to_owned(),
+        skeleton: None,
         joints: vec![0, 1],
+        mesh_nodes: Vec::new(),
         nodes: vec![
             super::super::glb::SkinNode {
                 index: 0,
@@ -106,8 +112,11 @@ fn mapping_suggestions_normalize_common_rig_prefixes() {
 fn mapping_report_rejects_unknown_and_duplicate_targets() {
     let document = BvhDocument::parse(SAMPLE).unwrap();
     let target = SkinData {
+        index: 0,
         name: "CharacterSkin".to_owned(),
+        skeleton: None,
         joints: vec![0, 1],
+        mesh_nodes: Vec::new(),
         nodes: vec![
             super::super::glb::SkinNode {
                 index: 0,

@@ -12,13 +12,37 @@ fn apply_glb_export_preview(
     animation_rate: Option<(usize, f32)>,
     smart_loop: Option<(usize, f32)>,
 ) -> Result<(), String> {
-    RootTransformPreview {
-        euler_degrees: orientation_euler_degrees,
-        scale: root_scale,
-        translation: root_translation,
+    apply_glb_export_preview_with_root_transform(
+        document,
+        orientation_euler_degrees,
+        root_scale,
+        root_translation,
+        trim,
+        animation_rate,
+        smart_loop,
+        true,
+    )
+}
+
+fn apply_glb_export_preview_with_root_transform(
+    document: &mut GlbDocument,
+    orientation_euler_degrees: [f32; 3],
+    root_scale: f32,
+    root_translation: [f32; 3],
+    trim: Option<(usize, f32, f32)>,
+    animation_rate: Option<(usize, f32)>,
+    smart_loop: Option<(usize, f32)>,
+    include_root_transform: bool,
+) -> Result<(), String> {
+    if include_root_transform {
+        RootTransformPreview {
+            euler_degrees: orientation_euler_degrees,
+            scale: root_scale,
+            translation: root_translation,
+        }
+        .to_matrix()
+        .map_err(|error| error.to_string())?;
     }
-    .to_matrix()
-    .map_err(|error| error.to_string())?;
 
     if let Some((animation, start, end)) = trim {
         document
@@ -29,9 +53,11 @@ fn apply_glb_export_preview(
             })
             .map_err(|error| error.to_string())?;
     }
-    if orientation_euler_degrees
-        .iter()
-        .any(|value| value.abs() > f32::EPSILON)
+
+    if include_root_transform
+        && orientation_euler_degrees
+            .iter()
+            .any(|value| value.abs() > f32::EPSILON)
     {
         document
             .apply(EditOperation::RotateRoots {
@@ -39,14 +65,15 @@ fn apply_glb_export_preview(
             })
             .map_err(|error| error.to_string())?;
     }
-    if (root_scale - 1.0).abs() > f32::EPSILON {
+    if include_root_transform && (root_scale - 1.0).abs() > f32::EPSILON {
         document
             .apply(EditOperation::ScaleRoots { factor: root_scale })
             .map_err(|error| error.to_string())?;
     }
-    if root_translation
-        .iter()
-        .any(|value| value.abs() > f32::EPSILON)
+    if include_root_transform
+        && root_translation
+            .iter()
+            .any(|value| value.abs() > f32::EPSILON)
     {
         document
             .apply(EditOperation::TranslateRoots {
@@ -54,6 +81,7 @@ fn apply_glb_export_preview(
             })
             .map_err(|error| error.to_string())?;
     }
+
     if let Some((animation, rate)) = animation_rate {
         if !rate.is_finite() || rate <= 0.0 {
             return Err("Animation rate must be finite and greater than zero"
@@ -65,6 +93,7 @@ fn apply_glb_export_preview(
                 .map_err(|error| error.to_string())?;
         }
     }
+
     if let Some((animation, transition_seconds)) = smart_loop {
         document
             .smart_loop_animation(
@@ -80,6 +109,19 @@ fn apply_glb_export_preview(
 impl App {
     pub(crate) fn build_glb_export_snapshot(
         &self,
+    ) -> Result<GlbDocument, String> {
+        self.build_glb_export_snapshot_with_root_transform(true)
+    }
+
+    pub(crate) fn build_glb_retarget_source_snapshot(
+        &self,
+    ) -> Result<GlbDocument, String> {
+        self.build_glb_export_snapshot_with_root_transform(false)
+    }
+
+    fn build_glb_export_snapshot_with_root_transform(
+        &self,
+        include_root_transform: bool,
     ) -> Result<GlbDocument, String> {
         let Some(document) = self.glb.as_ref() else {
             return Err("Nothing to export".to_owned());
@@ -122,15 +164,28 @@ impl App {
         };
 
         let mut snapshot = document.clone();
-        apply_glb_export_preview(
-            &mut snapshot,
-            self.orientation_euler_degrees,
-            self.root_scale,
-            self.root_translation,
-            trim,
-            animation_rate,
-            smart_loop,
-        )?;
+        if include_root_transform {
+            apply_glb_export_preview(
+                &mut snapshot,
+                self.orientation_euler_degrees,
+                self.root_scale,
+                self.root_translation,
+                trim,
+                animation_rate,
+                smart_loop,
+            )?;
+        } else {
+            apply_glb_export_preview_with_root_transform(
+                &mut snapshot,
+                self.orientation_euler_degrees,
+                self.root_scale,
+                self.root_translation,
+                trim,
+                animation_rate,
+                smart_loop,
+                false,
+            )?;
+        }
         Ok(snapshot)
     }
 }

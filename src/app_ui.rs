@@ -68,6 +68,7 @@ impl App {
             return;
         }
         self.glb_animation_index = index;
+        self.refresh_glb_retarget_mapping();
         self.glb_animation_time = 0.0;
         self.glb_animation_accumulator = 0.0;
         self.glb_animation_playing = false;

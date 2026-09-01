@@ -1,8 +1,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+mod app_bvh;
 mod app_export;
 mod app_preview;
+mod app_retarget;
+mod app_retarget_prompt;
 mod app_ui;
 mod modules;
 mod reload;
@@ -96,13 +99,25 @@ fn main() {
         }
 
         if app.page == modules::ui::menu_bar::Page::BvhStudio {
-            for bone in &app.canvas.skeleton {
-                clear_rt = clear_rt.render_partially(
-                    viewport.into(),
-                    &app.camera.camera,
-                    bone,
-                    &[],
-                );
+            if app.canvas.show_source_skeleton {
+                for bone in &app.canvas.skeleton {
+                    clear_rt = clear_rt.render_partially(
+                        viewport.into(),
+                        &app.camera.camera,
+                        bone,
+                        &[],
+                    );
+                }
+            }
+            if app.canvas.show_target_skeleton {
+                for bone in &app.canvas.target_skeleton {
+                    clear_rt = clear_rt.render_partially(
+                        viewport.into(),
+                        &app.camera.camera,
+                        bone,
+                        &[],
+                    );
+                }
             }
         }
 

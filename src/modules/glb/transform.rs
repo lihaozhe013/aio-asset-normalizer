@@ -11,17 +11,33 @@ pub(super) fn node_matrix(node: &Value) -> Result<[[f32; 4]; 4], GlbError> {
         }
         let mut result = [[0.0; 4]; 4];
         for (index, value) in matrix.iter().enumerate() {
-            result[index % 4][index / 4] = value.as_f64().unwrap_or(0.0) as f32;
+            let value = value.as_f64().ok_or_else(|| {
+                GlbError::Invalid(format!(
+                    "Node matrix component {index} is not numeric"
+                ))
+            })? as f32;
+            if !value.is_finite() {
+                return Err(GlbError::Invalid(
+                    "Node matrix contains non-finite values".to_owned(),
+                ));
+            }
+            result[index % 4][index / 4] = value;
         }
         return Ok(result);
     }
-    let translation = array3(node.get("translation"), [0.0, 0.0, 0.0]);
-    let scale = array3(node.get("scale"), [1.0, 1.0, 1.0]);
-    let rotation = array4(node.get("rotation"), [0.0, 0.0, 0.0, 1.0]);
-    Ok(multiply(
+    let translation = array3(node.get("translation"), [0.0, 0.0, 0.0])?;
+    let scale = array3(node.get("scale"), [1.0, 1.0, 1.0])?;
+    let rotation = array4(node.get("rotation"), [0.0, 0.0, 0.0, 1.0])?;
+    let matrix = multiply(
         translation_matrix(translation),
         multiply(quaternion_matrix(rotation), scale_matrix(scale)),
-    ))
+    );
+    if matrix.iter().flatten().any(|value| !value.is_finite()) {
+        return Err(GlbError::Invalid(
+            "Node TRS contains non-finite values".to_owned(),
+        ));
+    }
+    Ok(matrix)
 }
 
 pub(super) type NodeTrs = ([f32; 3], [f32; 4], [f32; 3]);
@@ -30,6 +46,11 @@ pub(super) fn decompose_matrix(
     matrix: [[f32; 4]; 4],
 ) -> Result<NodeTrs, GlbError> {
     let translation = [matrix[0][3], matrix[1][3], matrix[2][3]];
+    if translation.iter().any(|value| !value.is_finite()) {
+        return Err(GlbError::Invalid(
+            "Node translation contains non-finite values".to_owned(),
+        ));
+    }
     let columns = [
         [matrix[0][0], matrix[1][0], matrix[2][0]],
         [matrix[0][1], matrix[1][1], matrix[2][1]],
@@ -137,48 +158,85 @@ pub(super) fn set_matrix(node: &mut Value, matrix: [[f32; 4]; 4]) {
     }
 }
 
-fn array3(value: Option<&Value>, default: [f32; 3]) -> [f32; 3] {
-    let Some(values) = value.and_then(Value::as_array) else {
-        return default;
+fn array3(
+    value: Option<&Value>,
+    default: [f32; 3],
+) -> Result<[f32; 3], GlbError> {
+    let Some(value) = value else {
+        return Ok(default);
     };
-    [
-        values
-            .first()
-            .and_then(Value::as_f64)
-            .unwrap_or(default[0] as f64) as f32,
-        values
-            .get(1)
-            .and_then(Value::as_f64)
-            .unwrap_or(default[1] as f64) as f32,
-        values
-            .get(2)
-            .and_then(Value::as_f64)
-            .unwrap_or(default[2] as f64) as f32,
-    ]
+    let values = value.as_array().ok_or_else(|| {
+        GlbError::Invalid("Node TRS component must be an array".to_owned())
+    })?;
+    if values.len() != 3 {
+        return Err(GlbError::Invalid(
+            "Node translation/scale must contain three values".to_owned(),
+        ));
+    }
+    let values = values
+        .iter()
+        .enumerate()
+        .map(|(index, value)| {
+            let value = value.as_f64().ok_or_else(|| {
+                GlbError::Invalid(format!(
+                    "Node TRS component {index} is not numeric"
+                ))
+            })? as f32;
+            if !value.is_finite() {
+                return Err(GlbError::Invalid(
+                    "Node TRS contains non-finite values".to_owned(),
+                ));
+            }
+            Ok(value)
+        })
+        .collect::<Result<Vec<_>, GlbError>>()?;
+    Ok([values[0], values[1], values[2]])
 }
 
-fn array4(value: Option<&Value>, default: [f32; 4]) -> [f32; 4] {
-    let Some(values) = value.and_then(Value::as_array) else {
-        return default;
+fn array4(
+    value: Option<&Value>,
+    default: [f32; 4],
+) -> Result<[f32; 4], GlbError> {
+    let Some(value) = value else {
+        return Ok(default);
     };
-    [
-        values
-            .first()
-            .and_then(Value::as_f64)
-            .unwrap_or(default[0] as f64) as f32,
-        values
-            .get(1)
-            .and_then(Value::as_f64)
-            .unwrap_or(default[1] as f64) as f32,
-        values
-            .get(2)
-            .and_then(Value::as_f64)
-            .unwrap_or(default[2] as f64) as f32,
-        values
-            .get(3)
-            .and_then(Value::as_f64)
-            .unwrap_or(default[3] as f64) as f32,
-    ]
+    let values = value.as_array().ok_or_else(|| {
+        GlbError::Invalid("Node TRS component must be an array".to_owned())
+    })?;
+    if values.len() != 4 {
+        return Err(GlbError::Invalid(
+            "Node rotation must contain four values".to_owned(),
+        ));
+    }
+    let values = values
+        .iter()
+        .enumerate()
+        .map(|(index, value)| {
+            let value = value.as_f64().ok_or_else(|| {
+                GlbError::Invalid(format!(
+                    "Node rotation component {index} is not numeric"
+                ))
+            })? as f32;
+            if !value.is_finite() {
+                return Err(GlbError::Invalid(
+                    "Node rotation contains non-finite values".to_owned(),
+                ));
+            }
+            Ok(value)
+        })
+        .collect::<Result<Vec<_>, GlbError>>()?;
+    let quaternion = [values[0], values[1], values[2], values[3]];
+    let length = quaternion
+        .iter()
+        .map(|value| value * value)
+        .sum::<f32>()
+        .sqrt();
+    if !length.is_finite() || length <= f32::EPSILON {
+        return Err(GlbError::Invalid(
+            "Node rotation quaternion must be non-zero".to_owned(),
+        ));
+    }
+    Ok(quaternion)
 }
 
 pub(super) fn identity() -> [[f32; 4]; 4] {

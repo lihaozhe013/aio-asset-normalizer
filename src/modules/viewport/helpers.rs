@@ -40,12 +40,59 @@ pub fn build_skeleton(
     positions: &[[f32; 3]],
     parents: &[Option<usize>],
 ) -> Vec<Gm<Mesh, ColorMaterial>> {
-    let color = Srgba::new(255, 190, 70, 255);
+    build_skeleton_colored(
+        context,
+        positions,
+        parents,
+        Srgba::new(255, 190, 70, 255),
+    )
+}
+
+pub fn build_skeleton_colored(
+    context: &Context,
+    positions: &[[f32; 3]],
+    parents: &[Option<usize>],
+    color: Srgba,
+) -> Vec<Gm<Mesh, ColorMaterial>> {
     positions
         .iter()
         .enumerate()
         .filter_map(|(index, position)| {
             let parent = parents.get(index).and_then(|parent| *parent)?;
+            let parent_position = positions.get(parent)?;
+            Some(build_line_quad(
+                context,
+                vec3(
+                    parent_position[0],
+                    parent_position[1],
+                    parent_position[2],
+                ),
+                vec3(position[0], position[1], position[2]),
+                0.025,
+                color,
+            ))
+        })
+        .collect()
+}
+
+pub fn build_skeleton_colored_filtered(
+    context: &Context,
+    positions: &[[f32; 3]],
+    parents: &[Option<usize>],
+    include: &[usize],
+    color: Srgba,
+) -> Vec<Gm<Mesh, ColorMaterial>> {
+    positions
+        .iter()
+        .enumerate()
+        .filter_map(|(index, position)| {
+            if !include.contains(&index) {
+                return None;
+            }
+            let parent = parents.get(index).and_then(|parent| *parent)?;
+            if !include.contains(&parent) {
+                return None;
+            }
             let parent_position = positions.get(parent)?;
             Some(build_line_quad(
                 context,
