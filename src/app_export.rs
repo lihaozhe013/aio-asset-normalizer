@@ -266,9 +266,12 @@ mod tests {
     }
 
     fn fixture_path() -> PathBuf {
+        // Tests run concurrently on separate threads; include the thread id
+        // so parallel fixtures never share a file.
         std::env::temp_dir().join(format!(
-            "aio-asset-normalizer-export-preview-{}.glb",
-            std::process::id()
+            "aio-asset-normalizer-export-preview-{}-{:?}.glb",
+            std::process::id(),
+            std::thread::current().id()
         ))
     }
 
@@ -379,5 +382,156 @@ mod tests {
             })
             .collect::<Vec<_>>();
         assert_eq!(times, vec![0.0, 0.5]);
+    }
+}
+
+use std::fs;
+use std::path::Path;
+
+use crate::modules::bvh;
+
+impl App {
+    pub(crate) fn export_glb(&mut self) {
+        if self.glb.is_none() {
+            self.log.append("[glb_editor] Nothing to export");
+            return;
+        }
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter("GLB", &["glb"])
+            .set_file_name(
+                self.glb_path
+                    .as_ref()
+                    .and_then(|path| path.file_stem())
+                    .map(|stem| {
+                        format!("{}_standardized.glb", stem.to_string_lossy())
+                    })
+                    .as_deref()
+                    .unwrap_or("asset_standardized.glb"),
+            )
+            .save_file()
+        else {
+            return;
+        };
+        if is_source_path(&path, self.glb_path.as_deref()) {
+            self.log
+                .append("[glb_editor] Refusing to overwrite the source GLB");
+            return;
+        }
+        let document = match self.build_glb_export_snapshot() {
+            Ok(document) => document,
+            Err(error) => {
+                self.log
+                    .append(&format!("[glb_editor] Export failed: {error}"));
+                return;
+            }
+        };
+        match document.export_atomic(&path) {
+            Ok(()) => {
+                self.file_tree.refresh();
+                self.bvh_file_tree.refresh();
+                let baked_note = if !self.bake_root_transform
+                    && self.root_transform_active()
+                {
+                    " (root transform not baked)"
+                } else {
+                    ""
+                };
+                self.log.append(&format!(
+                    "[glb_editor] Exported {}{baked_note}",
+                    path.display()
+                ));
+            }
+            Err(error) => self
+                .log
+                .append(&format!("[glb_editor] Export failed: {error}")),
+        }
+    }
+
+    pub(crate) fn export_mapping(&mut self) {
+        if self.retarget_mapping.is_some() {
+            self.export_retarget_mapping();
+            return;
+        }
+        let Some(mapping) = self.mapping.as_ref() else {
+            self.log.append("[bvh_studio] Nothing to export");
+            return;
+        };
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter("Mapping JSON", &["json"])
+            .set_file_name("mapping.json")
+            .save_file()
+        else {
+            return;
+        };
+        if is_source_path(&path, self.mapping_path.as_deref()) {
+            self.log.append(
+                "[bvh_studio] Refusing to overwrite the source mapping file",
+            );
+            return;
+        }
+        match bvh::save_mapping(&path, mapping) {
+            Ok(()) => {
+                self.file_tree.refresh();
+                self.bvh_file_tree.refresh();
+                self.log.append(&format!(
+                    "[bvh_studio] Exported mapping {}",
+                    path.display()
+                ));
+            }
+            Err(error) => self.log.append(&format!(
+                "[bvh_studio] Mapping export failed: {error}"
+            )),
+        }
+    }
+
+    pub(crate) fn export_bvh(&mut self) {
+        let Some(document) = self.bvh.as_ref() else {
+            self.log.append("[bvh_studio] Nothing to export");
+            return;
+        };
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter("BVH", &["bvh"])
+            .set_file_name("animation_trimmed.bvh")
+            .save_file()
+        else {
+            return;
+        };
+        if is_source_path(&path, self.bvh_path.as_deref()) {
+            self.log
+                .append("[bvh_studio] Refusing to overwrite the source BVH");
+            return;
+        }
+        match document.write(&path) {
+            Ok(()) => {
+                self.file_tree.refresh();
+                self.bvh_file_tree.refresh();
+                self.log.append(&format!(
+                    "[bvh_studio] Exported {}",
+                    path.display()
+                ));
+            }
+            Err(error) => self
+                .log
+                .append(&format!("[bvh_studio] Export failed: {error}")),
+        }
+    }
+}
+
+fn is_source_path(path: &Path, source: Option<&Path>) -> bool {
+    source.is_some_and(|source| same_path(path, source))
+}
+
+fn same_path(left: &Path, right: &Path) -> bool {
+    let left = fs::canonicalize(left).unwrap_or_else(|_| left.to_path_buf());
+    let right = fs::canonicalize(right).unwrap_or_else(|_| right.to_path_buf());
+
+    #[cfg(windows)]
+    {
+        left.to_string_lossy()
+            .eq_ignore_ascii_case(&right.to_string_lossy())
+    }
+    #[cfg(not(windows))]
+    {
+        left == right
     }
 }

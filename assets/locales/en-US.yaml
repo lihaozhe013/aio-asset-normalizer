@@ -20,6 +20,7 @@ menu:
 page:
   glb_editor: "GLB Editor"
   bvh_studio: "BVH Studio"
+  fbx_converter: "FBX Converter"
 bottom:
   animation: "Animation"
   debug_log: "Debug Log"
@@ -159,3 +160,19 @@ preferences:
 about:
   title: "About AIO Asset Normalizer"
   github: "GitHub"
+converter:
+  hint: "Batch-convert FBX, OBJ, and Blend files to standardized GLB using a local Blender installation."
+  blender_path: "Blender:"
+  blender_auto_detect: "auto-detect"
+  browse: "Browse..."
+  clear: "Clear"
+  blender_detected: "Blender found: {path}"
+  blender_missing: "Blender not found. Install Blender or set its path above."
+  select_hint: "Check files in the folder list to queue a conversion."
+  converting: "Converting..."
+  convert: "Convert ({count} selected)"
+  progress: "Batch progress: {done} / {total}"
+  status_pending: "pending"
+  status_running: "converting..."
+  status_success: "done"
+  status_failed: "failed"

@@ -9,3 +9,7 @@ file_tree:
   last_opened_directory: null
 log_viewer:
   auto_scroll: true
+converter:
+  blender_path: null
+  show_all_files: false
+  last_opened_directory: null

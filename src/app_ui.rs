@@ -3,12 +3,20 @@ use crate::modules::{preferences, ui::main_panel};
 
 impl App {
     pub fn collect_preferences(&self) -> preferences::UserPreferences {
+        let converter_tree = self.converter_file_tree.to_prefs();
         preferences::UserPreferences {
             version: 1,
             language: self.i18n.preference(),
             view: self.canvas.to_view_prefs(),
             file_tree: self.file_tree.to_prefs(),
             log_viewer: self.log.to_prefs(),
+            converter: preferences::ConverterPreferences {
+                blender_path: self.blender_path.clone(),
+                show_all_files: converter_tree.show_all_files,
+                last_opened_directory: converter_tree
+                    .last_opened_directory
+                    .clone(),
+            },
         }
     }
 

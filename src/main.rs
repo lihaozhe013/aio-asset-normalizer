@@ -3,6 +3,7 @@
 mod app;
 mod app_bvh;
 mod app_export;
+mod app_fbx_converter;
 mod app_preview;
 mod app_retarget;
 mod app_retarget_prompt;
@@ -49,7 +50,12 @@ fn main() {
                 height: 1,
             });
 
-        app.camera.handle_events(&frame_input.events, viewport);
+        // The FBX Converter page has no 3D canvas; skip viewport work
+        // entirely while it is active.
+        let show_scene = app.page != modules::ui::menu_bar::Page::FbxConverter;
+        if show_scene {
+            app.camera.handle_events(&frame_input.events, viewport);
+        }
 
         app.reload_model_if_needed(&context);
 
@@ -59,7 +65,7 @@ fn main() {
         let mut clear_rt = screen
             .clear(ClearState::color_and_depth(0.12, 0.13, 0.17, 1.0, 1.0));
 
-        if app.canvas.show_axes {
+        if show_scene && app.canvas.show_axes {
             for axis in &app.canvas.axes {
                 clear_rt = clear_rt.render_partially(
                     viewport.into(),
@@ -69,7 +75,7 @@ fn main() {
                 );
             }
         }
-        if app.canvas.show_grid {
+        if show_scene && app.canvas.show_grid {
             for line in &app.canvas.grid {
                 clear_rt = clear_rt.render_partially(
                     viewport.into(),
@@ -79,7 +85,7 @@ fn main() {
                 );
             }
         }
-        if app.canvas.show_origin {
+        if show_scene && app.canvas.show_origin {
             clear_rt = clear_rt.render_partially(
                 viewport.into(),
                 &app.camera.camera,
@@ -88,7 +94,7 @@ fn main() {
             );
         }
 
-        if let Some(ref model) = app.canvas.model {
+        if let Some(model) = app.canvas.model.as_ref().filter(|_| show_scene) {
             let lights = app.canvas.model_lights();
             clear_rt = clear_rt.render_partially(
                 viewport.into(),
@@ -98,8 +104,9 @@ fn main() {
             );
         }
 
-        if app.page == modules::ui::menu_bar::Page::BvhStudio
-            || app.glb_retarget_preview_active
+        if show_scene
+            && (app.page == modules::ui::menu_bar::Page::BvhStudio
+                || app.glb_retarget_preview_active)
         {
             if app.page == modules::ui::menu_bar::Page::BvhStudio
                 && app.canvas.show_source_skeleton

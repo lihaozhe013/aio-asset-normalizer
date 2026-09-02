@@ -5,6 +5,7 @@ use three_d::egui;
 pub enum Page {
     GlbEditor,
     BvhStudio,
+    FbxConverter,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,6 +25,7 @@ pub enum MenuAction {
     ToggleOrigin,
     OpenGlbEditor,
     OpenBvhStudio,
+    OpenFbxConverter,
     About,
     SetLanguage(crate::modules::i18n::LanguagePreference),
     Quit,
@@ -98,6 +100,16 @@ pub fn render(
                         .clicked()
                     {
                         actions.push(MenuAction::OpenBvhStudio);
+                        ui.close();
+                    }
+                    if ui
+                        .selectable_label(
+                            page == Page::FbxConverter,
+                            i18n.tr("page.fbx_converter"),
+                        )
+                        .clicked()
+                    {
+                        actions.push(MenuAction::OpenFbxConverter);
                         ui.close();
                     }
                 });

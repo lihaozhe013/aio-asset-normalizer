@@ -1,12 +1,14 @@
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::Instant;
 
+use crate::app_fbx_converter::ConverterFileState;
+use crate::modules::blender::task::ConverterMessage;
+use crate::modules::preferences::FileTreePreferences;
 use crate::modules::retarget::{MappingValidationReport, SkeletonMapping};
 use crate::modules::{
     bvh::{
-        self, BvhDocument, MappingFile, MappingSuggestion, MappingValidation,
+        BvhDocument, MappingFile, MappingSuggestion, MappingValidation,
         RetargetPlan,
     },
     glb::{
@@ -110,6 +112,11 @@ pub struct App {
     pub(crate) needs_save: bool,
     quit_requested: bool,
     pub(crate) task_rx: Option<mpsc::Receiver<ExportTaskResult>>,
+    pub converter_file_tree: FileTree,
+    pub blender_path: Option<String>,
+    pub(crate) converter_busy: bool,
+    pub(crate) converter_rx: Option<mpsc::Receiver<ConverterMessage>>,
+    pub(crate) converter_results: Vec<ConverterFileState>,
 }
 
 pub(crate) struct ExportTaskResult {
@@ -131,6 +138,24 @@ impl App {
         let mut bvh_file_tree = BvhFileTree::new();
         if let Some(root) = file_tree.root().cloned() {
             bvh_file_tree.open_folder(root);
+        }
+        let mut converter_file_tree = FileTree::new();
+        converter_file_tree.set_accepted_extensions(vec![
+            "fbx".to_owned(),
+            "obj".to_owned(),
+            "blend".to_owned(),
+        ]);
+        converter_file_tree.apply_prefs(&FileTreePreferences {
+            show_all_files: prefs.converter.show_all_files,
+            last_opened_directory: prefs
+                .converter
+                .last_opened_directory
+                .clone(),
+        });
+        if let Some(root) = file_tree.root().cloned() {
+            if converter_file_tree.root().is_none() {
+                converter_file_tree.open_folder(root);
+            }
         }
         let mut log = LogViewer::new();
         log.apply_prefs(&prefs.log_viewer);
@@ -212,6 +237,11 @@ impl App {
             needs_save: false,
             quit_requested: false,
             task_rx: None,
+            converter_file_tree,
+            blender_path: prefs.converter.blender_path.clone(),
+            converter_busy: false,
+            converter_rx: None,
+            converter_results: Vec::new(),
         }
     }
 
@@ -243,6 +273,7 @@ impl App {
     }
 
     pub fn poll_tasks(&mut self) {
+        self.poll_converter();
         let Some(receiver) = self.task_rx.as_ref() else {
             return;
         };
@@ -617,12 +648,19 @@ impl App {
             MenuAction::Export => match self.page {
                 Page::GlbEditor => self.export_glb(),
                 Page::BvhStudio => self.export_bvh(),
+                Page::FbxConverter => self.log.append(&format!(
+                    "{} Use Convert on the FBX Converter page; this page \
+                     has no document export",
+                    crate::app_fbx_converter::CONVERTER_LOG_PREFIX
+                )),
             },
             MenuAction::ExportBvhGlb => self.export_bvh_glb(false),
             MenuAction::ExportBvhAnimationClip => self.export_bvh_glb(true),
             MenuAction::ClearFileList => {
                 self.file_tree.clear();
                 self.bvh_file_tree.clear();
+                self.converter_file_tree.clear();
+                self.converter_results.clear();
                 self.glb = None;
                 self.glb_path = None;
                 self.canvas.clear_glb();
@@ -677,6 +715,12 @@ impl App {
                     self.exit_glb_retarget_preview();
                 } else {
                     self.request_glb_reload(GlbReloadKind::OpenModel);
+                }
+            }
+            MenuAction::OpenFbxConverter => {
+                self.page = Page::FbxConverter;
+                if self.glb_retarget_preview_active {
+                    self.exit_glb_retarget_preview();
                 }
             }
             MenuAction::OpenBvhStudio => {
@@ -807,150 +851,6 @@ impl App {
             self.file_tree.select_file(&path);
         }
         self.preview_glb(&path);
-    }
-
-    fn export_glb(&mut self) {
-        if self.glb.is_none() {
-            self.log.append("[glb_editor] Nothing to export");
-            return;
-        }
-        let Some(path) = rfd::FileDialog::new()
-            .add_filter("GLB", &["glb"])
-            .set_file_name(
-                self.glb_path
-                    .as_ref()
-                    .and_then(|path| path.file_stem())
-                    .map(|stem| {
-                        format!("{}_standardized.glb", stem.to_string_lossy())
-                    })
-                    .as_deref()
-                    .unwrap_or("asset_standardized.glb"),
-            )
-            .save_file()
-        else {
-            return;
-        };
-        if is_source_path(&path, self.glb_path.as_deref()) {
-            self.log
-                .append("[glb_editor] Refusing to overwrite the source GLB");
-            return;
-        }
-        let document = match self.build_glb_export_snapshot() {
-            Ok(document) => document,
-            Err(error) => {
-                self.log
-                    .append(&format!("[glb_editor] Export failed: {error}"));
-                return;
-            }
-        };
-        match document.export_atomic(&path) {
-            Ok(()) => {
-                self.file_tree.refresh();
-                self.bvh_file_tree.refresh();
-                let baked_note = if !self.bake_root_transform
-                    && self.root_transform_active()
-                {
-                    " (root transform not baked)"
-                } else {
-                    ""
-                };
-                self.log.append(&format!(
-                    "[glb_editor] Exported {}{baked_note}",
-                    path.display()
-                ));
-            }
-            Err(error) => self
-                .log
-                .append(&format!("[glb_editor] Export failed: {error}")),
-        }
-    }
-
-    fn export_mapping(&mut self) {
-        if self.retarget_mapping.is_some() {
-            self.export_retarget_mapping();
-            return;
-        }
-        let Some(mapping) = self.mapping.as_ref() else {
-            self.log.append("[bvh_studio] Nothing to export");
-            return;
-        };
-        let Some(path) = rfd::FileDialog::new()
-            .add_filter("Mapping JSON", &["json"])
-            .set_file_name("mapping.json")
-            .save_file()
-        else {
-            return;
-        };
-        if is_source_path(&path, self.mapping_path.as_deref()) {
-            self.log.append(
-                "[bvh_studio] Refusing to overwrite the source mapping file",
-            );
-            return;
-        }
-        match bvh::save_mapping(&path, mapping) {
-            Ok(()) => {
-                self.file_tree.refresh();
-                self.bvh_file_tree.refresh();
-                self.log.append(&format!(
-                    "[bvh_studio] Exported mapping {}",
-                    path.display()
-                ));
-            }
-            Err(error) => self.log.append(&format!(
-                "[bvh_studio] Mapping export failed: {error}"
-            )),
-        }
-    }
-
-    fn export_bvh(&mut self) {
-        let Some(document) = self.bvh.as_ref() else {
-            self.log.append("[bvh_studio] Nothing to export");
-            return;
-        };
-        let Some(path) = rfd::FileDialog::new()
-            .add_filter("BVH", &["bvh"])
-            .set_file_name("animation_trimmed.bvh")
-            .save_file()
-        else {
-            return;
-        };
-        if is_source_path(&path, self.bvh_path.as_deref()) {
-            self.log
-                .append("[bvh_studio] Refusing to overwrite the source BVH");
-            return;
-        }
-        match document.write(&path) {
-            Ok(()) => {
-                self.file_tree.refresh();
-                self.bvh_file_tree.refresh();
-                self.log.append(&format!(
-                    "[bvh_studio] Exported {}",
-                    path.display()
-                ));
-            }
-            Err(error) => self
-                .log
-                .append(&format!("[bvh_studio] Export failed: {error}")),
-        }
-    }
-}
-
-fn is_source_path(path: &Path, source: Option<&Path>) -> bool {
-    source.is_some_and(|source| same_path(path, source))
-}
-
-fn same_path(left: &Path, right: &Path) -> bool {
-    let left = fs::canonicalize(left).unwrap_or_else(|_| left.to_path_buf());
-    let right = fs::canonicalize(right).unwrap_or_else(|_| right.to_path_buf());
-
-    #[cfg(windows)]
-    {
-        left.to_string_lossy()
-            .eq_ignore_ascii_case(&right.to_string_lossy())
-    }
-    #[cfg(not(windows))]
-    {
-        left == right
     }
 }
 

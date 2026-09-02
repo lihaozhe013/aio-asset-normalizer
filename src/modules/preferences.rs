@@ -14,6 +14,17 @@ pub struct UserPreferences {
     pub file_tree: FileTreePreferences,
     #[serde(default)]
     pub log_viewer: LogViewerPreferences,
+    #[serde(default)]
+    pub converter: ConverterPreferences,
+}
+
+/// Settings for the FBX Converter workflow: an optional Blender executable
+/// override and the converter page's own file tree state.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ConverterPreferences {
+    pub blender_path: Option<String>,
+    pub show_all_files: bool,
+    pub last_opened_directory: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

@@ -1,10 +1,13 @@
 # AIO Asset Normalizer
 
-A pure-Rust 3D asset standardization tool for indie game developers and independent creators.
+A Rust desktop 3D asset standardization tool for indie game developers and independent creators.
 
-The project is undergoing a complete redesign. It is moving away from a Blender-dependent multi-format converter and becoming a desktop tool focused exclusively on `.glb` assets. The new product will provide:
+The product centers on `.glb` assets. It provides:
 
 - GLB editing, preview, and standardized export;
+- FBX, OBJ, and Blend batch conversion to GLB on a dedicated FBX Converter
+  page that invokes a locally installed Blender (the rest of the application
+  never requires Blender);
 - animation clip playback, timeline controls, trimming, and export;
 - Mesh material and PBR texture replacement;
 - BVH playback, trimming, generic skeleton mapping, and GLB animation export;
@@ -16,8 +19,10 @@ The project is undergoing a complete redesign. It is moving away from a Blender-
 
 ## Design Goals
 
-- Support glTF 2.0 Binary (`.glb`) only. FBX, OBJ, Blend, and other source formats are out of scope.
-- Require no Blender runtime, Blender API, or external conversion process.
+- Support glTF 2.0 Binary (`.glb`) as the editing and preview format. FBX,
+  OBJ, and Blend inputs are handled only by the FBX Converter page.
+- The GLB Editor and BVH Studio require no Blender runtime, Blender API, or
+  external conversion process; only the FBX Converter page invokes Blender.
 - Implement GLB loading, editing, animation processing, and export in Rust.
 - Reuse the existing `egui` + `three-d` window, 3D Canvas, orbit camera, axes, grid, and skeleton visualization foundations.
 - Use a shared bottom dock with switchable Animation and Debug Log tabs so the Canvas always owns its reserved viewport area.
@@ -60,6 +65,27 @@ BVH processing is an independent page that takes a BVH file, a target GLB, and a
 - inspect source and target hierarchies with the shared instanced Octahedral,
   Stick, or Lines skeleton display, stable Rest Pose sizing, End Site markers,
   adaptive camera/grid fitting, and explicit BVH unit diagnostics.
+
+### FBX Converter
+
+A Blender-backed batch conversion page with no 3D viewport:
+
+- Browse or open a folder; check `.fbx`, `.obj`, or `.blend` files in the
+  left file tree;
+- convert selected files sequentially to `<name>_normalized.glb` next to each
+  source through a headless Blender subprocess using an embedded
+  normalization script;
+- apply one fixed normalization profile (remove cameras, lights, and unused
+  materials; correct bone axes; preserve leaf bones; bake animations; Y-up
+  GLB export);
+- re-parse every produced GLB through the project reader before it is
+  reported as successful;
+- set the Blender executable path directly on the page, or rely on automatic
+  detection. When Blender is unavailable, conversion is disabled with a clear
+  message and the rest of the application keeps working.
+
+Detailed behavior and manual verification steps are documented in
+[`docs/fbx-converter.md`](docs/fbx-converter.md).
 
 ## Default Standardization Contract
 
@@ -153,7 +179,9 @@ Skeleton visualization behavior and manual checks are documented in
 
 ## Current Status
 
-The application builds without the Blender bridge or legacy format scripts. The GLB Editor has a pure-Rust document layer with GLB validation, scene indexing, root transforms, interpolated animation trimming, runtime playback for node and Skinned Mesh animations, CPU skinning, PNG/JPEG PBR texture replacement, shared-material duplication, atomic reparse-validated export, and generic GLB→GLB animation retargeting. BVH Studio has generic hierarchy parsing, authored Rest Pose delta retargeting, frame-stepped source and target Skin preview, an instanced Octahedral/Stick/Lines skeleton visualizer, adaptive camera and guide geometry, explicit raw/converted unit diagnostics, Mapping v1/v2 validation and saving, reviewed name-match suggestions, external Agent prompt handoff, optional Root Motion and initial-heading normalization, redundant-key reduction, and Character Package / Animation Clip GLB export.
+The GLB Editor and BVH Studio build and run with no Blender dependency; the
+FBX Converter page invokes a local Blender subprocess when one is available.
+The GLB Editor has a pure-Rust document layer with GLB validation, scene indexing, root transforms, interpolated animation trimming, runtime playback for node and Skinned Mesh animations, CPU skinning, PNG/JPEG PBR texture replacement, shared-material duplication, atomic reparse-validated export, and generic GLB→GLB animation retargeting. BVH Studio has generic hierarchy parsing, authored Rest Pose delta retargeting, frame-stepped source and target Skin preview, an instanced Octahedral/Stick/Lines skeleton visualizer, adaptive camera and guide geometry, explicit raw/converted unit diagnostics, Mapping v1/v2 validation and saving, reviewed name-match suggestions, external Agent prompt handoff, optional Root Motion and initial-heading normalization, redundant-key reduction, and Character Package / Animation Clip GLB export.
 
 GPU skinning, Morph Target playback, CUBICSPLINE sampling, mesh weight
 rebinding, IK/Twist processing, and skeleton replacement remain intentionally

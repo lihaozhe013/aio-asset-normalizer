@@ -14,6 +14,9 @@ pub struct FileTree {
     open_dirs: HashSet<PathBuf>,
     pub show_all_files: bool,
     root_changed: bool,
+    /// Lowercase extensions treated as selectable files, e.g. `["glb"]` for
+    /// the GLB Editor or `["fbx", "obj", "blend"]` for the FBX Converter.
+    accepted_extensions: Vec<String>,
 }
 
 pub struct FileTreeEntry {
@@ -41,7 +44,14 @@ impl FileTree {
             open_dirs: HashSet::new(),
             show_all_files: false,
             root_changed: false,
+            accepted_extensions: vec!["glb".to_owned()],
         }
+    }
+
+    /// Replace the selectable extension set and rescan the current root.
+    pub fn set_accepted_extensions(&mut self, extensions: Vec<String>) {
+        self.accepted_extensions = extensions;
+        self.rescan();
     }
 
     pub fn take_root_changed(&mut self) -> bool {
@@ -68,8 +78,20 @@ impl FileTree {
         self.root = Some(path.clone());
         self.selected.clear();
         self.open_dirs.clear();
-        self.root_entries = Some(Self::scan_dir(&path, 2, self.show_all_files));
+        self.root_entries = Some(Self::scan_dir(
+            &path,
+            2,
+            self.show_all_files,
+            &self.accepted_extensions,
+        ));
         self.root_changed = true;
+    }
+
+    /// Checked files, sorted for stable batch ordering.
+    pub fn selected_files(&self) -> Vec<PathBuf> {
+        let mut files: Vec<PathBuf> = self.selected.iter().cloned().collect();
+        files.sort();
+        files
     }
 
     pub fn apply_prefs(&mut self, prefs: &FileTreePreferences) {
@@ -93,19 +115,23 @@ impl FileTree {
 
     fn rescan(&mut self) {
         if let Some(ref root) = self.root.clone() {
+            let show_all = self.show_all_files;
+            let accepted = self.accepted_extensions.clone();
             self.root_entries =
-                Some(Self::scan_dir(root, 2, self.show_all_files));
+                Some(Self::scan_dir(root, 2, show_all, &accepted));
         }
     }
 
     pub fn refresh(&mut self) {
         if let Some(ref root) = self.root.clone() {
             let show_all = self.show_all_files;
-            self.root_entries = Some(Self::scan_dir(root, 2, show_all));
+            let accepted = self.accepted_extensions.clone();
+            self.root_entries =
+                Some(Self::scan_dir(root, 2, show_all, &accepted));
             let open: Vec<PathBuf> = self.open_dirs.iter().cloned().collect();
             for path in &open {
+                let children = Self::scan_dir(path, 1, show_all, &accepted);
                 if let Some(entry) = self.find_entry_mut(path) {
-                    let children = Self::scan_dir(path, 1, show_all);
                     entry.children = Some(children);
                 }
             }
@@ -127,8 +153,11 @@ impl FileTree {
             if let Some(parent) = path.parent().map(|p| p.to_path_buf()) {
                 self.open_folder(parent);
                 for file in &dropped {
-                    if let Some(fp) = &file.path {
-                        if Self::is_supported(fp) {
+                    let selected = file.path.as_ref().is_some_and(|fp| {
+                        Self::extension_in(fp, &self.accepted_extensions)
+                    });
+                    if selected {
+                        if let Some(fp) = &file.path {
                             self.selected.insert(fp.clone());
                         }
                     }
@@ -141,6 +170,7 @@ impl FileTree {
         path: &Path,
         max_depth: usize,
         show_all_files: bool,
+        accepted: &[String],
     ) -> Vec<FileTreeEntry> {
         let mut entries: Vec<FileTreeEntry> = Vec::new();
 
@@ -153,7 +183,10 @@ impl FileTree {
             let entry_path = entry.path();
             let is_dir = entry_path.is_dir();
 
-            if !is_dir && !show_all_files && !Self::is_supported(&entry_path) {
+            if !is_dir
+                && !show_all_files
+                && !Self::extension_in(&entry_path, accepted)
+            {
                 continue;
             }
 
@@ -164,8 +197,12 @@ impl FileTree {
                 .into_owned();
 
             let children = if is_dir && max_depth > 1 {
-                let sub =
-                    Self::scan_dir(&entry_path, max_depth - 1, show_all_files);
+                let sub = Self::scan_dir(
+                    &entry_path,
+                    max_depth - 1,
+                    show_all_files,
+                    accepted,
+                );
                 if sub.is_empty() {
                     None
                 } else {
@@ -192,11 +229,14 @@ impl FileTree {
         entries
     }
 
-    pub fn is_supported(path: &Path) -> bool {
+    fn extension_in(path: &Path, accepted: &[String]) -> bool {
         path.extension()
             .and_then(|e| e.to_str())
-            .map(|e| e.eq_ignore_ascii_case("glb"))
-            .unwrap_or(false)
+            .is_some_and(|extension| {
+                accepted
+                    .iter()
+                    .any(|accepted| accepted.eq_ignore_ascii_case(extension))
+            })
     }
 
     fn is_glb(path: &Path) -> bool {
@@ -208,7 +248,8 @@ impl FileTree {
 
     pub fn select_all(&mut self) {
         if let Some(ref entries) = self.root_entries {
-            Self::collect_files(entries, &mut self.selected);
+            let accepted = self.accepted_extensions.clone();
+            Self::collect_files(entries, &mut self.selected, &accepted);
         }
     }
 
@@ -220,7 +261,7 @@ impl FileTree {
         let all: HashSet<PathBuf> = if let Some(ref entries) = self.root_entries
         {
             let mut set = HashSet::new();
-            Self::collect_files(entries, &mut set);
+            Self::collect_files(entries, &mut set, &self.accepted_extensions);
             set
         } else {
             HashSet::new()
@@ -231,13 +272,17 @@ impl FileTree {
         self.selected = inverted;
     }
 
-    fn collect_files(entries: &[FileTreeEntry], set: &mut HashSet<PathBuf>) {
+    fn collect_files(
+        entries: &[FileTreeEntry],
+        set: &mut HashSet<PathBuf>,
+        accepted: &[String],
+    ) {
         for entry in entries {
-            if !entry.is_dir && Self::is_supported(&entry.path) {
+            if !entry.is_dir && Self::extension_in(&entry.path, accepted) {
                 set.insert(entry.path.clone());
             }
             if let Some(ref children) = entry.children {
-                Self::collect_files(children, set);
+                Self::collect_files(children, set, accepted);
             }
         }
     }
@@ -309,7 +354,7 @@ impl FileTree {
     fn total_file_count(&self) -> usize {
         if let Some(ref entries) = self.root_entries {
             let mut set = HashSet::new();
-            Self::collect_files(entries, &mut set);
+            Self::collect_files(entries, &mut set, &self.accepted_extensions);
             set.len()
         } else {
             0
@@ -337,6 +382,7 @@ impl FileTree {
             .unwrap_or_else(|| i18n.tr("label.default_project").to_owned());
 
         let mut load_requests: Vec<PathBuf> = Vec::new();
+        let accepted = self.accepted_extensions.clone();
 
         egui::ScrollArea::both()
             .auto_shrink([false; 2])
@@ -438,7 +484,7 @@ impl FileTree {
                             ui.add_space(
                                 item.depth as f32 * INDENT + ARROW_OFFSET,
                             );
-                            if Self::is_supported(&item.path) {
+                            if Self::extension_in(&item.path, &accepted) {
                                 let mut checked =
                                     self.selected.contains(&item.path);
                                 if ui.checkbox(&mut checked, "").changed() {
@@ -470,8 +516,8 @@ impl FileTree {
 
         let show_all = self.show_all_files;
         for path in &load_requests {
+            let children = Self::scan_dir(path, 1, show_all, &accepted);
             if let Some(entry) = self.find_entry_mut(path) {
-                let children = Self::scan_dir(path, 1, show_all);
                 entry.children = Some(children);
             }
         }
@@ -492,5 +538,66 @@ impl FileTree {
                 }
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accepted_extensions_control_scanning_and_selection() {
+        let dir = std::env::temp_dir().join("aio-file-tree-ext-test");
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let names = [
+            "rig.fbx",
+            "prop.OBJ",
+            "scene.blend",
+            "note.txt",
+            "model.glb",
+        ];
+        for name in names {
+            std::fs::write(dir.join(name), b"x").expect("fixture file");
+        }
+
+        let mut converter_tree = FileTree::new();
+        converter_tree.set_accepted_extensions(vec![
+            "fbx".to_owned(),
+            "obj".to_owned(),
+            "blend".to_owned(),
+        ]);
+        converter_tree.open_folder(dir.clone());
+        converter_tree.select_all();
+        let selected: Vec<String> = converter_tree
+            .selected_files()
+            .iter()
+            .map(|path| {
+                path.file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+        assert_eq!(selected, vec!["prop.OBJ", "rig.fbx", "scene.blend"]);
+
+        let mut glb_tree = FileTree::new();
+        glb_tree.open_folder(dir.clone());
+        glb_tree.select_all();
+        let selected: Vec<String> = glb_tree
+            .selected_files()
+            .iter()
+            .map(|path| {
+                path.file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+        assert_eq!(selected, vec!["model.glb"]);
+
+        for name in names {
+            std::fs::remove_file(dir.join(name)).ok();
+        }
+        std::fs::remove_dir(&dir).ok();
     }
 }

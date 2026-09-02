@@ -20,6 +20,7 @@ menu:
 page:
   glb_editor: "GLB 编辑器"
   bvh_studio: "BVH 工作室"
+  fbx_converter: "FBX 转换器"
 bottom:
   animation: "动画"
   debug_log: "调试日志"
@@ -159,3 +160,19 @@ preferences:
 about:
   title: "关于 AIO Asset Normalizer"
   github: "GitHub"
+converter:
+  hint: "使用本机 Blender 将 FBX、OBJ、Blend 文件批量转换为标准 GLB。"
+  blender_path: "Blender："
+  blender_auto_detect: "自动检测"
+  browse: "浏览..."
+  clear: "清除"
+  blender_detected: "已找到 Blender：{path}"
+  blender_missing: "未找到 Blender。请安装 Blender 或在上方设置其路径。"
+  select_hint: "在左侧文件列表中勾选要转换的文件。"
+  converting: "正在转换..."
+  convert: "转换（已选 {count} 个）"
+  progress: "批次进度：{done} / {total}"
+  status_pending: "等待中"
+  status_running: "转换中..."
+  status_success: "完成"
+  status_failed: "失败"
