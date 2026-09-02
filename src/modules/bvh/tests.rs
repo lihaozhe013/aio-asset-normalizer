@@ -12,6 +12,23 @@ fn parses_and_trims_generic_hierarchy() {
 }
 
 #[test]
+fn authored_rest_pose_is_independent_from_first_motion_frame() {
+    let document = BvhDocument::parse(
+        "HIERARCHY\nROOT Root\n{\nOFFSET 0 1 0\nCHANNELS 6 Xposition Yposition Zposition Zrotation Xrotation Yrotation\nJOINT Child\n{\nOFFSET 0 2 0\nCHANNELS 3 Zrotation Xrotation Yrotation\nEnd Site\n{\nOFFSET 0 1 0\n}\n}\n}\nMOTION\nFrames: 2\nFrame Time: 0.1\n5 6 7 90 0 0 0 0 0\n5 6 7 90 0 0 0 0 0\n",
+    )
+    .unwrap();
+    let rest = document.rest_transforms_for_retarget().unwrap();
+    let frame = document
+        .frame_transforms_for_retarget(&document.frames[0])
+        .unwrap();
+    assert_eq!(rest[0].0, [0.0, 1.0, 0.0]);
+    assert_eq!(rest[1].0, [0.0, 3.0, 0.0]);
+    assert_eq!(frame[0].0, [5.0, 7.0, 7.0]);
+    assert_ne!(rest[0].0, frame[0].0);
+    assert_eq!(document.joints[1].end_site, Some([0.0, 1.0, 0.0]));
+}
+
+#[test]
 fn retargets_rotation_deltas_to_a_mapped_skin() {
     let document = BvhDocument::parse(SAMPLE).unwrap();
     let mapping = MappingFile {
@@ -40,8 +57,11 @@ fn retargets_rotation_deltas_to_a_mapped_skin() {
         ],
     };
     let target = SkinData {
+        index: 0,
         name: "CharacterSkin".to_owned(),
+        skeleton: None,
         joints: vec![0, 1],
+        mesh_nodes: Vec::new(),
         nodes: vec![
             super::super::glb::SkinNode {
                 index: 0,
@@ -74,8 +94,11 @@ fn retargets_rotation_deltas_to_a_mapped_skin() {
 fn mapping_suggestions_normalize_common_rig_prefixes() {
     let document = BvhDocument::parse(SAMPLE).unwrap();
     let target = SkinData {
+        index: 0,
         name: "CharacterSkin".to_owned(),
+        skeleton: None,
         joints: vec![0, 1],
+        mesh_nodes: Vec::new(),
         nodes: vec![
             super::super::glb::SkinNode {
                 index: 0,
@@ -106,8 +129,11 @@ fn mapping_suggestions_normalize_common_rig_prefixes() {
 fn mapping_report_rejects_unknown_and_duplicate_targets() {
     let document = BvhDocument::parse(SAMPLE).unwrap();
     let target = SkinData {
+        index: 0,
         name: "CharacterSkin".to_owned(),
+        skeleton: None,
         joints: vec![0, 1],
+        mesh_nodes: Vec::new(),
         nodes: vec![
             super::super::glb::SkinNode {
                 index: 0,

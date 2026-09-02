@@ -1,7 +1,7 @@
 //! GLB document loading, inspection, editing, and atomic export.
 
 use std::borrow::Cow;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -17,8 +17,11 @@ pub use self::resources::{PrimitiveTarget, TextureSlot};
 
 mod animation;
 mod animation_runtime;
+mod orientation_presets;
 mod smart_loop;
-pub use animation_runtime::{AnimationClip, AnimationRuntime};
+#[allow(unused_imports)]
+pub use animation_runtime::{AnimationClip, AnimationRuntime, RuntimeNodePose};
+pub use orientation_presets::UpAxisPreset;
 #[allow(unused_imports)]
 pub use smart_loop::{SmartLoopOptions, SmartLoopReport};
 
@@ -101,8 +104,11 @@ pub struct GlbSummary {
 
 #[derive(Debug, Clone)]
 pub struct SkinData {
+    pub index: usize,
     pub name: String,
+    pub skeleton: Option<usize>,
     pub joints: Vec<usize>,
+    pub mesh_nodes: Vec<usize>,
     pub nodes: Vec<SkinNode>,
 }
 
@@ -212,18 +218,7 @@ impl GlbDocument {
             ));
         }
         let bytes = fs::read(path)?;
-        let glb = gltf::binary::Glb::from_slice(&bytes)?;
-        let json =
-            serde_json::from_slice::<Value>(&glb.json).map_err(|error| {
-                GlbError::Invalid(format!("JSON chunk: {error}"))
-            })?;
-        gltf::Gltf::from_slice(&bytes)?;
-        Ok(Self {
-            source_path: Some(path.to_path_buf()),
-            json,
-            bin: glb.bin.map(Cow::into_owned),
-            dirty: false,
-        })
+        Self::from_bytes(&bytes, Some(path.to_path_buf()))
     }
 
     pub fn summary(&self) -> GlbSummary {
@@ -268,13 +263,20 @@ impl GlbDocument {
     }
 
     pub fn skin_data(&self) -> Result<SkinData, GlbError> {
+        self.skin_data_at(0)
+    }
+
+    pub fn skin_data_at(
+        &self,
+        skin_index: usize,
+    ) -> Result<SkinData, GlbError> {
         let skins = self
             .json
             .get("skins")
             .and_then(Value::as_array)
             .ok_or_else(|| GlbError::Invalid("GLB has no skins".to_owned()))?;
-        let skin = skins.first().ok_or_else(|| {
-            GlbError::Invalid("GLB has no Skin entries".to_owned())
+        let skin = skins.get(skin_index).ok_or_else(|| {
+            GlbError::Invalid(format!("GLB has no Skin entry {skin_index}"))
         })?;
         let joints = skin
             .get("joints")
@@ -282,11 +284,24 @@ impl GlbDocument {
             .ok_or_else(|| GlbError::Invalid("Skin has no joints".to_owned()))?
             .iter()
             .map(|value| {
-                value.as_u64().map(|index| index as usize).ok_or_else(|| {
+                let index = value.as_u64().ok_or_else(|| {
                     GlbError::Invalid("Skin joint index is invalid".to_owned())
+                })?;
+                usize::try_from(index).map_err(|_| {
+                    GlbError::Invalid(
+                        "Skin joint index is out of range".to_owned(),
+                    )
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;
+        let mut unique_joints = BTreeSet::new();
+        for joint in &joints {
+            if !unique_joints.insert(*joint) {
+                return Err(GlbError::Invalid(format!(
+                    "Skin {skin_index} lists joint {joint} more than once"
+                )));
+            }
+        }
         let node_values = self
             .json
             .get("nodes")
@@ -297,14 +312,52 @@ impl GlbDocument {
             if let Some(children) =
                 node.get("children").and_then(Value::as_array)
             {
-                for child in children.iter().filter_map(Value::as_u64) {
-                    let child = child as usize;
-                    if child < parents.len() {
-                        parents[child] = Some(index);
+                for child in children {
+                    let child = child.as_u64().ok_or_else(|| {
+                        GlbError::Invalid(format!(
+                            "Node {index} contains a non-integer child index"
+                        ))
+                    })?;
+                    let child = usize::try_from(child).map_err(|_| {
+                        GlbError::Invalid(format!(
+                            "Node {index} child index is out of range"
+                        ))
+                    })?;
+                    if child >= parents.len() {
+                        return Err(GlbError::Invalid(format!(
+                            "Node {index} references missing child {child}"
+                        )));
+                    }
+                    if parents[child].replace(index).is_some() {
+                        return Err(GlbError::Invalid(format!(
+                            "Node {child} has more than one parent"
+                        )));
                     }
                 }
             }
         }
+        for start in 0..parents.len() {
+            let mut seen = HashSet::new();
+            let mut current = Some(start);
+            while let Some(index) = current {
+                if !seen.insert(index) {
+                    return Err(GlbError::Invalid(format!(
+                        "Node hierarchy contains a cycle at node {index}"
+                    )));
+                }
+                current = parents[index];
+            }
+        }
+        if joints.iter().any(|index| *index >= node_values.len()) {
+            return Err(GlbError::Invalid(
+                "Skin joint index exceeds the node array".to_owned(),
+            ));
+        }
+        self.validate_skin_inverse_bind_matrices(
+            skin_index,
+            skin,
+            joints.len(),
+        )?;
         let nodes = node_values
             .iter()
             .enumerate()
@@ -313,11 +366,17 @@ impl GlbDocument {
                 let (translation, rotation, scale) = decompose_matrix(matrix)?;
                 Ok(SkinNode {
                     index,
-                    name: node
-                        .get("name")
-                        .and_then(Value::as_str)
-                        .map(str::to_owned)
-                        .unwrap_or_else(|| format!("Node {index}")),
+                    name: match node.get("name") {
+                        Some(value) => value
+                            .as_str()
+                            .ok_or_else(|| {
+                                GlbError::Invalid(format!(
+                                    "Node {index} name is not a string"
+                                ))
+                            })?
+                            .to_owned(),
+                        None => format!("Node {index}"),
+                    },
                     parent: parents[index],
                     translation,
                     rotation,
@@ -325,23 +384,284 @@ impl GlbDocument {
                 })
             })
             .collect::<Result<Vec<_>, GlbError>>()?;
-        Ok(SkinData {
-            name: skin
-                .get("name")
-                .and_then(Value::as_str)
-                .unwrap_or("Skin")
+        let mut mesh_nodes = Vec::new();
+        for (index, node) in node_values.iter().enumerate() {
+            if let Some(value) = node.get("skin") {
+                let node_skin = value.as_u64().ok_or_else(|| {
+                    GlbError::Invalid(format!(
+                        "Node {index} Skin reference is not an integer"
+                    ))
+                })?;
+                let node_skin = usize::try_from(node_skin).map_err(|_| {
+                    GlbError::Invalid(format!(
+                        "Node {index} Skin reference is out of range"
+                    ))
+                })?;
+                if node_skin >= skins.len() {
+                    return Err(GlbError::Invalid(format!(
+                        "Node {index} references missing Skin {node_skin}"
+                    )));
+                }
+                if node_skin == skin_index {
+                    mesh_nodes.push(index);
+                }
+            }
+        }
+        let skeleton = if let Some(value) = skin.get("skeleton") {
+            let skeleton = value.as_u64().ok_or_else(|| {
+                GlbError::Invalid(format!(
+                    "Skin {skin_index} skeleton reference is not an integer"
+                ))
+            })?;
+            let skeleton = usize::try_from(skeleton).map_err(|_| {
+                GlbError::Invalid(format!(
+                    "Skin {skin_index} skeleton reference is out of range"
+                ))
+            })?;
+            if skeleton >= node_values.len() {
+                return Err(GlbError::Invalid(format!(
+                    "Skin {skin_index} references missing skeleton node {skeleton}"
+                )));
+            }
+            Some(skeleton)
+        } else {
+            None
+        };
+        let skin_name = match skin.get("name") {
+            Some(value) => value
+                .as_str()
+                .ok_or_else(|| {
+                    GlbError::Invalid(format!(
+                        "Skin {skin_index} name is not a string"
+                    ))
+                })?
                 .to_owned(),
+            None => "Skin".to_owned(),
+        };
+        Ok(SkinData {
+            index: skin_index,
+            name: skin_name,
+            skeleton,
             joints,
+            mesh_nodes,
             nodes,
         })
+    }
+
+    fn validate_skin_inverse_bind_matrices(
+        &self,
+        skin_index: usize,
+        skin: &Value,
+        joint_count: usize,
+    ) -> Result<(), GlbError> {
+        let Some(value) = skin.get("inverseBindMatrices") else {
+            return Ok(());
+        };
+        let accessor_index = value.as_u64().ok_or_else(|| {
+            GlbError::Invalid(format!(
+                "Skin {skin_index} inverseBindMatrices is not an integer"
+            ))
+        })?;
+        let accessor_index = usize::try_from(accessor_index).map_err(|_| {
+            GlbError::Invalid(format!(
+                "Skin {skin_index} inverseBindMatrices index is out of range"
+            ))
+        })?;
+        let accessor = self.accessor(accessor_index)?;
+        if accessor.get("componentType").and_then(Value::as_u64) != Some(5126)
+            || accessor.get("type").and_then(Value::as_str) != Some("MAT4")
+        {
+            return Err(GlbError::Unsupported(format!(
+                "Skin {skin_index} inverse bind matrices must use FLOAT MAT4 values"
+            )));
+        }
+        let count =
+            accessor
+                .get("count")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| {
+                    GlbError::Invalid(format!(
+                    "Skin {skin_index} inverse bind matrix count is missing"
+                ))
+                })?;
+        let count = usize::try_from(count).map_err(|_| {
+            GlbError::Invalid(format!(
+                "Skin {skin_index} inverse bind matrix count is out of range"
+            ))
+        })?;
+        if count != joint_count {
+            return Err(GlbError::Invalid(format!(
+                "Skin {skin_index} inverse bind matrix count {count} does not match {joint_count} joints"
+            )));
+        }
+        if accessor.get("sparse").is_some() {
+            return Err(GlbError::Unsupported(format!(
+                "Skin {skin_index} sparse inverse bind matrices are not supported"
+            )));
+        }
+        let view_index = accessor
+            .get("bufferView")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| {
+                GlbError::Invalid(format!(
+                    "Skin {skin_index} inverse bind matrices have no bufferView"
+                ))
+            })?;
+        let view_index = usize::try_from(view_index).map_err(|_| {
+            GlbError::Invalid(format!(
+                "Skin {skin_index} inverse bind bufferView index is out of range"
+            ))
+        })?;
+        let view = self
+            .json
+            .get("bufferViews")
+            .and_then(Value::as_array)
+            .and_then(|views| views.get(view_index))
+            .ok_or_else(|| {
+                GlbError::Invalid(format!(
+                    "Skin {skin_index} inverse bind bufferView is missing"
+                ))
+            })?;
+        let buffer_index = json_u64_field(
+            view.get("buffer"),
+            "Skin inverse bind buffer index",
+            Some(0),
+        )?;
+        if buffer_index != 0 {
+            return Err(GlbError::Unsupported(format!(
+                "Skin {skin_index} inverse bind matrices must use the GLB BIN buffer"
+            )));
+        }
+        let view_offset = json_u64_field(
+            view.get("byteOffset"),
+            &format!("Skin {skin_index} inverse bind bufferView byteOffset"),
+            Some(0),
+        )?;
+        let view_length = json_u64_field(
+            view.get("byteLength"),
+            &format!("Skin {skin_index} inverse bind bufferView byteLength"),
+            None,
+        )?;
+        let accessor_offset = json_u64_field(
+            accessor.get("byteOffset"),
+            &format!("Skin {skin_index} inverse bind accessor byteOffset"),
+            Some(0),
+        )?;
+        let stride = json_u64_field(
+            view.get("byteStride"),
+            &format!("Skin {skin_index} inverse bind byteStride"),
+            Some(64),
+        )?;
+        if stride < 64 || stride % 4 != 0 {
+            return Err(GlbError::Invalid(format!(
+                "Skin {skin_index} inverse bind byteStride is invalid"
+            )));
+        }
+        let view_offset = usize::try_from(view_offset).map_err(|_| {
+            GlbError::Invalid(format!(
+                "Skin {skin_index} inverse bind bufferView offset is out of range"
+            ))
+        })?;
+        let view_length = usize::try_from(view_length).map_err(|_| {
+            GlbError::Invalid(format!(
+                "Skin {skin_index} inverse bind bufferView length is out of range"
+            ))
+        })?;
+        let accessor_offset =
+            usize::try_from(accessor_offset).map_err(|_| {
+                GlbError::Invalid(format!(
+                "Skin {skin_index} inverse bind accessor offset is out of range"
+            ))
+            })?;
+        let stride = usize::try_from(stride).map_err(|_| {
+            GlbError::Invalid(format!(
+                "Skin {skin_index} inverse bind byteStride is out of range"
+            ))
+        })?;
+        let view_end = view_offset.checked_add(view_length).ok_or_else(|| {
+            GlbError::Invalid(format!(
+                "Skin {skin_index} inverse bind bufferView range is out of range"
+            ))
+        })?;
+        let first =
+            view_offset.checked_add(accessor_offset).ok_or_else(|| {
+                GlbError::Invalid(format!(
+                "Skin {skin_index} inverse bind accessor range is out of range"
+            ))
+            })?;
+        let last = if count == 0 {
+            first
+        } else {
+            first
+                .checked_add((count - 1).checked_mul(stride).ok_or_else(|| {
+                    GlbError::Invalid(format!(
+                        "Skin {skin_index} inverse bind accessor range is out of range"
+                    ))
+                })?)
+                .and_then(|offset| offset.checked_add(64))
+                .ok_or_else(|| {
+                    GlbError::Invalid(format!(
+                        "Skin {skin_index} inverse bind accessor range is out of range"
+                    ))
+                })?
+        };
+        if last > view_end {
+            return Err(GlbError::Invalid(format!(
+                "Skin {skin_index} inverse bind accessor exceeds its bufferView"
+            )));
+        }
+        let bin = self.bin.as_deref().ok_or_else(|| {
+            GlbError::Invalid("Accessor requires a BIN chunk".to_owned())
+        })?;
+        if view_end > bin.len() {
+            return Err(GlbError::Invalid(format!(
+                "Skin {skin_index} inverse bind bufferView exceeds the BIN chunk"
+            )));
+        }
+        let non_finite = (0..count).any(|index| {
+            let Some(start) = first.checked_add(index.saturating_mul(stride))
+            else {
+                return true;
+            };
+            let Some(end) = start.checked_add(64) else {
+                return true;
+            };
+            bin.get(start..end).is_none_or(|bytes| {
+                bytes.chunks_exact(4).any(|chunk| {
+                    !f32::from_le_bytes([
+                        chunk[0], chunk[1], chunk[2], chunk[3],
+                    ])
+                    .is_finite()
+                })
+            })
+        });
+        if non_finite {
+            return Err(GlbError::Invalid(format!(
+                "Skin {skin_index} inverse bind matrices contain non-finite values"
+            )));
+        }
+        Ok(())
     }
 
     pub fn append_animation(
         &mut self,
         clip: &AnimationClipData,
     ) -> Result<(), GlbError> {
+        let backup = self.clone();
+        if let Err(error) = self.append_animation_inner(clip) {
+            *self = backup;
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    fn append_animation_inner(
+        &mut self,
+        clip: &AnimationClipData,
+    ) -> Result<(), GlbError> {
         if clip.times.len() < 2
             || clip.times.iter().any(|time| !time.is_finite())
+            || clip.times.windows(2).any(|pair| pair[0] >= pair[1])
         {
             return Err(GlbError::Invalid(
                 "Animation must contain at least two finite keyframe times"
@@ -376,9 +696,15 @@ impl GlbDocument {
                     channel.node
                 )));
             }
+            self.ensure_node_trs(channel.node)?;
             if channel.rotations.len() != clip.times.len()
                 || channel.rotations.iter().any(|rotation| {
                     rotation.iter().any(|value| !value.is_finite())
+                        || rotation
+                            .iter()
+                            .map(|value| value * value)
+                            .sum::<f32>()
+                            <= f32::EPSILON
                 })
             {
                 return Err(GlbError::Invalid(
@@ -400,6 +726,14 @@ impl GlbDocument {
             if let Some(translations) = &channel.translations {
                 if translations.len() != clip.times.len() {
                     return Err(GlbError::Invalid("Animation translation keyframes do not match the timeline".to_owned()));
+                }
+                if translations.iter().any(|translation| {
+                    translation.iter().any(|value| !value.is_finite())
+                }) {
+                    return Err(GlbError::Invalid(
+                        "Animation translation keyframes contain non-finite values"
+                            .to_owned(),
+                    ));
                 }
                 let output = self.append_float_accessor(
                     &translations
@@ -430,6 +764,62 @@ impl GlbDocument {
         Ok(())
     }
 
+    fn ensure_node_trs(&mut self, node_index: usize) -> Result<(), GlbError> {
+        let matrix = self
+            .json
+            .get("nodes")
+            .and_then(Value::as_array)
+            .and_then(|nodes| nodes.get(node_index))
+            .and_then(|node| node.get("matrix"))
+            .cloned();
+        let Some(matrix) = matrix else {
+            return Ok(());
+        };
+        let matrix = node_matrix(&json!({"matrix": matrix}))?;
+        let (translation, rotation, scale) = decompose_matrix(matrix)?;
+        let node = self
+            .json
+            .get_mut("nodes")
+            .and_then(Value::as_array_mut)
+            .and_then(|nodes| nodes.get_mut(node_index))
+            .ok_or_else(|| {
+                GlbError::Invalid(format!(
+                    "Animation target node {node_index} disappeared"
+                ))
+            })?;
+        let object = node.as_object_mut().ok_or_else(|| {
+            GlbError::Invalid(format!(
+                "Animation target node {node_index} is not an object"
+            ))
+        })?;
+        object.remove("matrix");
+        object.insert("translation".to_owned(), json!(translation));
+        object.insert("rotation".to_owned(), json!(rotation));
+        object.insert("scale".to_owned(), json!(scale));
+        Ok(())
+    }
+
+    /// Replace the document's animation list with one generated clip while
+    /// leaving meshes, skins, buffers, extensions, and other resources intact.
+    pub fn replace_animations(
+        &mut self,
+        clip: &AnimationClipData,
+    ) -> Result<(), GlbError> {
+        let backup = self.clone();
+        if let Some(object) = self.json.as_object_mut() {
+            object.insert("animations".to_owned(), json!([]));
+        } else {
+            return Err(GlbError::Invalid(
+                "GLB JSON root is not an object".to_owned(),
+            ));
+        }
+        if let Err(error) = self.append_animation(clip) {
+            *self = backup;
+            return Err(error);
+        }
+        Ok(())
+    }
+
     pub fn strip_render_resources(&mut self) {
         if let Some(nodes) =
             self.json.get_mut("nodes").and_then(Value::as_array_mut)
@@ -442,8 +832,14 @@ impl GlbDocument {
             }
         }
         if let Some(object) = self.json.as_object_mut() {
-            for key in ["meshes", "materials", "textures", "images", "samplers"]
-            {
+            for key in [
+                "meshes",
+                "materials",
+                "textures",
+                "images",
+                "samplers",
+                "cameras",
+            ] {
                 object.remove(key);
             }
         }
@@ -522,7 +918,7 @@ impl GlbDocument {
 
     pub fn export_atomic(&self, path: &Path) -> Result<(), GlbError> {
         let bytes = self.to_bytes()?;
-        gltf::Gltf::from_slice(&bytes).map_err(GlbError::from)?;
+        Self::from_bytes(&bytes, None)?;
         let parent = path.parent().unwrap_or_else(|| Path::new("."));
         fs::create_dir_all(parent)?;
         let temporary = path.with_extension("glb.tmp");
@@ -534,6 +930,24 @@ impl GlbDocument {
             return Err(error.into());
         }
         Ok(())
+    }
+
+    fn from_bytes(
+        bytes: &[u8],
+        source_path: Option<PathBuf>,
+    ) -> Result<Self, GlbError> {
+        let glb = gltf::binary::Glb::from_slice(bytes)?;
+        let json =
+            serde_json::from_slice::<Value>(&glb.json).map_err(|error| {
+                GlbError::Invalid(format!("JSON chunk: {error}"))
+            })?;
+        gltf::Gltf::from_slice(bytes)?;
+        Ok(Self {
+            source_path,
+            json,
+            bin: glb.bin.map(Cow::into_owned),
+            dirty: false,
+        })
     }
 
     pub fn to_bytes(&self) -> Result<Vec<u8>, GlbError> {
@@ -574,12 +988,21 @@ impl GlbDocument {
                 if let Some(nodes) =
                     scene.get("nodes").and_then(Value::as_array)
                 {
-                    roots.extend(
-                        nodes
-                            .iter()
-                            .filter_map(Value::as_u64)
-                            .map(|index| index as usize),
-                    );
+                    for value in nodes {
+                        let index = value.as_u64().ok_or_else(|| {
+                            GlbError::Invalid(
+                                "Scene root node index is not an integer"
+                                    .to_owned(),
+                            )
+                        })?;
+                        let index = usize::try_from(index).map_err(|_| {
+                            GlbError::Invalid(
+                                "Scene root node index is out of range"
+                                    .to_owned(),
+                            )
+                        })?;
+                        roots.insert(index);
+                    }
                 }
             }
         }
@@ -642,7 +1065,16 @@ impl GlbDocument {
         let count = accessor
             .get("count")
             .and_then(Value::as_u64)
-            .unwrap_or_default() as usize;
+            .ok_or_else(|| {
+                GlbError::Invalid("Accessor count is missing".to_owned())
+            })
+            .and_then(|count| {
+                usize::try_from(count).map_err(|_| {
+                    GlbError::Invalid(
+                        "Accessor count is out of range".to_owned(),
+                    )
+                })
+            })?;
         let bytes = self.accessor_bytes(accessor, 4)?;
         Ok((0..count)
             .map(|index| {
@@ -670,7 +1102,14 @@ impl GlbDocument {
                 GlbError::Unsupported(
                     "Sparse or unbound accessors are not supported".to_owned(),
                 )
-            })? as usize;
+            })
+            .and_then(|index| {
+                usize::try_from(index).map_err(|_| {
+                    GlbError::Invalid(
+                        "Accessor bufferView index is out of range".to_owned(),
+                    )
+                })
+            })?;
         let view = self
             .json
             .get("bufferViews")
@@ -679,6 +1118,16 @@ impl GlbDocument {
             .ok_or_else(|| {
                 GlbError::Invalid(format!("Missing bufferView {view_index}"))
             })?;
+        let buffer_index = json_u64_field(
+            view.get("buffer"),
+            "Animation buffer index",
+            Some(0),
+        )?;
+        if buffer_index != 0 {
+            return Err(GlbError::Unsupported(
+                "Animation accessors must use the GLB BIN buffer".to_owned(),
+            ));
+        }
         if view.get("byteStride").is_some() || accessor.get("sparse").is_some()
         {
             return Err(GlbError::Unsupported(
@@ -686,29 +1135,75 @@ impl GlbDocument {
                     .to_owned(),
             ));
         }
-        let offset = view
-            .get("byteOffset")
-            .and_then(Value::as_u64)
-            .unwrap_or_default() as usize
-            + accessor
-                .get("byteOffset")
-                .and_then(Value::as_u64)
-                .unwrap_or_default() as usize;
-        let length = accessor
-            .get("count")
-            .and_then(Value::as_u64)
-            .unwrap_or_default() as usize
-            * element_size;
-        let bin = self.bin.as_deref().ok_or_else(|| {
-            GlbError::Invalid("Animation requires a BIN chunk".to_owned())
-        })?;
-        bin.get(offset..offset + length)
-            .map(ToOwned::to_owned)
-            .ok_or_else(|| {
-                GlbError::Invalid(
-                    "Animation accessor exceeds BIN chunk".to_owned(),
+        let view_offset = json_u64_field(
+            view.get("byteOffset"),
+            "Animation bufferView byteOffset",
+            Some(0),
+        )?;
+        let view_length = json_u64_field(
+            view.get("byteLength"),
+            "Animation bufferView byteLength",
+            None,
+        )?;
+        let accessor_offset = json_u64_field(
+            accessor.get("byteOffset"),
+            "Animation accessor byteOffset",
+            Some(0),
+        )?;
+        let count =
+            json_u64_field(accessor.get("count"), "Accessor count", None)?;
+        let offset = usize::try_from(view_offset)
+            .ok()
+            .and_then(|value| {
+                usize::try_from(accessor_offset).ok().and_then(
+                    |accessor_offset| value.checked_add(accessor_offset),
                 )
             })
+            .ok_or_else(|| {
+                GlbError::Invalid(
+                    "Accessor byte offset is out of range".to_owned(),
+                )
+            })?;
+        let length = usize::try_from(count)
+            .ok()
+            .and_then(|count| count.checked_mul(element_size))
+            .ok_or_else(|| {
+                GlbError::Invalid(
+                    "Accessor byte length is out of range".to_owned(),
+                )
+            })?;
+        let end = offset.checked_add(length).ok_or_else(|| {
+            GlbError::Invalid("Accessor byte range is out of range".to_owned())
+        })?;
+        let view_end = usize::try_from(view_length)
+            .ok()
+            .and_then(|length| {
+                usize::try_from(view_offset)
+                    .ok()
+                    .and_then(|offset| offset.checked_add(length))
+            })
+            .ok_or_else(|| {
+                GlbError::Invalid(
+                    "Animation bufferView byte range is out of range"
+                        .to_owned(),
+                )
+            })?;
+        if end > view_end {
+            return Err(GlbError::Invalid(
+                "Animation accessor exceeds its bufferView".to_owned(),
+            ));
+        }
+        let bin = self.bin.as_deref().ok_or_else(|| {
+            GlbError::Invalid("Accessor requires a BIN chunk".to_owned())
+        })?;
+        if view_end > bin.len() {
+            return Err(GlbError::Invalid(
+                "Animation bufferView exceeds the BIN chunk".to_owned(),
+            ));
+        }
+        bin.get(offset..end).map(ToOwned::to_owned).ok_or_else(|| {
+            GlbError::Invalid("Animation accessor exceeds BIN chunk".to_owned())
+        })
     }
 
     fn append_float_accessor(
@@ -789,6 +1284,20 @@ impl GlbDocument {
             buffer["byteLength"] = json!(bin.len());
         }
         Ok(accessor_index)
+    }
+}
+
+fn json_u64_field(
+    value: Option<&Value>,
+    label: &str,
+    default: Option<u64>,
+) -> Result<u64, GlbError> {
+    match value {
+        Some(value) => value.as_u64().ok_or_else(|| {
+            GlbError::Invalid(format!("{label} must be a non-negative integer"))
+        }),
+        None => default
+            .ok_or_else(|| GlbError::Invalid(format!("{label} is missing"))),
     }
 }
 

@@ -1,5 +1,6 @@
 use crate::app::App;
 use crate::modules::glb::RootTransformPreview;
+use crate::reload::GlbReloadKind;
 use three_d::*;
 
 impl App {
@@ -67,6 +68,39 @@ impl App {
         } else {
             self.root_preview_error = None;
         }
+    }
+
+    /// Report loaded preview geometry bounds and frame the viewport on them
+    /// when a model was freshly opened.  Authored assets may use centimetre
+    /// or millimetre scales (for example a root node with scale 0.01), so a
+    /// fixed default camera can leave the model and skeleton sub-pixel small.
+    /// Guide overlays are scaled to the same order as the model.
+    pub(crate) fn frame_glb_preview(
+        &mut self,
+        context: &Context,
+        reload_kind: GlbReloadKind,
+    ) {
+        let part_count =
+            self.canvas.model.as_ref().map_or(0, |model| model.len());
+        let Some((minimum, maximum)) = self.canvas.preview_bounds() else {
+            self.log.append(&format!(
+                "[glb_editor] Preview bounds unavailable, parts={part_count}"
+            ));
+            return;
+        };
+        self.log.append(&format!(
+            "[glb_editor] Preview bounds parts={part_count} min=[{:.5}, {:.5}, {:.5}] max=[{:.5}, {:.5}, {:.5}]",
+            minimum[0], minimum[1], minimum[2], maximum[0], maximum[1],
+            maximum[2]
+        ));
+        if reload_kind != GlbReloadKind::OpenModel {
+            return;
+        }
+        let extent = (maximum[0] - minimum[0])
+            .max(maximum[1] - minimum[1])
+            .max(maximum[2] - minimum[2]);
+        self.canvas.set_guide_scale(context, extent.max(1.0e-5));
+        self.camera.focus_on_bounds(minimum, maximum);
     }
 }
 

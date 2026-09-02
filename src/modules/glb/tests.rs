@@ -350,6 +350,49 @@ fn appended_animation_round_trips_through_gltf_validation() {
 }
 
 #[test]
+fn appended_animation_converts_matrix_nodes_to_trs() {
+    let mut document = GlbDocument {
+        source_path: None,
+        json: json!({
+            "asset": {"version": "2.0"},
+            "scene": 0,
+            "scenes": [{"nodes": [0]}],
+            "nodes": [{
+                "name": "Root",
+                "matrix": [
+                    1.0, 0.0, 0.0, 0.0,
+                    0.0, 1.0, 0.0, 0.0,
+                    0.0, 0.0, 1.0, 0.0,
+                    2.0, 3.0, 4.0, 1.0
+                ]
+            }],
+            "buffers": [{"byteLength": 0}],
+            "bufferViews": [],
+            "accessors": []
+        }),
+        bin: Some(Vec::new()),
+        dirty: false,
+    };
+    document
+        .append_animation(&AnimationClipData {
+            name: "Matrix Node Clip".to_owned(),
+            times: vec![0.0, 1.0],
+            channels: vec![AnimationChannelData {
+                node: 0,
+                rotations: vec![[0.0, 0.0, 0.0, 1.0]; 2],
+                translations: None,
+            }],
+        })
+        .unwrap();
+    let node = &document.json["nodes"][0];
+    assert!(node.get("matrix").is_none());
+    assert_eq!(node["translation"], json!([2.0, 3.0, 4.0]));
+    assert_eq!(node["rotation"], json!([0.0, 0.0, 0.0, 1.0]));
+    assert_eq!(node["scale"], json!([1.0, 1.0, 1.0]));
+    gltf::Gltf::from_slice(&document.to_bytes().unwrap()).unwrap();
+}
+
+#[test]
 fn texture_replacement_embeds_png_and_duplicates_shared_material() {
     let mut document = GlbDocument {
         source_path: None,

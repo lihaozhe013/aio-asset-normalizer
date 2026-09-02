@@ -12,13 +12,37 @@ fn apply_glb_export_preview(
     animation_rate: Option<(usize, f32)>,
     smart_loop: Option<(usize, f32)>,
 ) -> Result<(), String> {
-    RootTransformPreview {
-        euler_degrees: orientation_euler_degrees,
-        scale: root_scale,
-        translation: root_translation,
+    apply_glb_export_preview_with_root_transform(
+        document,
+        orientation_euler_degrees,
+        root_scale,
+        root_translation,
+        trim,
+        animation_rate,
+        smart_loop,
+        true,
+    )
+}
+
+fn apply_glb_export_preview_with_root_transform(
+    document: &mut GlbDocument,
+    orientation_euler_degrees: [f32; 3],
+    root_scale: f32,
+    root_translation: [f32; 3],
+    trim: Option<(usize, f32, f32)>,
+    animation_rate: Option<(usize, f32)>,
+    smart_loop: Option<(usize, f32)>,
+    include_root_transform: bool,
+) -> Result<(), String> {
+    if include_root_transform {
+        RootTransformPreview {
+            euler_degrees: orientation_euler_degrees,
+            scale: root_scale,
+            translation: root_translation,
+        }
+        .to_matrix()
+        .map_err(|error| error.to_string())?;
     }
-    .to_matrix()
-    .map_err(|error| error.to_string())?;
 
     if let Some((animation, start, end)) = trim {
         document
@@ -29,9 +53,11 @@ fn apply_glb_export_preview(
             })
             .map_err(|error| error.to_string())?;
     }
-    if orientation_euler_degrees
-        .iter()
-        .any(|value| value.abs() > f32::EPSILON)
+
+    if include_root_transform
+        && orientation_euler_degrees
+            .iter()
+            .any(|value| value.abs() > f32::EPSILON)
     {
         document
             .apply(EditOperation::RotateRoots {
@@ -39,14 +65,15 @@ fn apply_glb_export_preview(
             })
             .map_err(|error| error.to_string())?;
     }
-    if (root_scale - 1.0).abs() > f32::EPSILON {
+    if include_root_transform && (root_scale - 1.0).abs() > f32::EPSILON {
         document
             .apply(EditOperation::ScaleRoots { factor: root_scale })
             .map_err(|error| error.to_string())?;
     }
-    if root_translation
-        .iter()
-        .any(|value| value.abs() > f32::EPSILON)
+    if include_root_transform
+        && root_translation
+            .iter()
+            .any(|value| value.abs() > f32::EPSILON)
     {
         document
             .apply(EditOperation::TranslateRoots {
@@ -54,6 +81,7 @@ fn apply_glb_export_preview(
             })
             .map_err(|error| error.to_string())?;
     }
+
     if let Some((animation, rate)) = animation_rate {
         if !rate.is_finite() || rate <= 0.0 {
             return Err("Animation rate must be finite and greater than zero"
@@ -65,6 +93,7 @@ fn apply_glb_export_preview(
                 .map_err(|error| error.to_string())?;
         }
     }
+
     if let Some((animation, transition_seconds)) = smart_loop {
         document
             .smart_loop_animation(
@@ -78,8 +107,34 @@ fn apply_glb_export_preview(
 }
 
 impl App {
+    pub(crate) fn root_transform_active(&self) -> bool {
+        self.orientation_euler_degrees
+            .iter()
+            .any(|value| value.abs() > f32::EPSILON)
+            || (self.root_scale - 1.0).abs() > f32::EPSILON
+            || self
+                .root_translation
+                .iter()
+                .any(|value| value.abs() > f32::EPSILON)
+    }
+
     pub(crate) fn build_glb_export_snapshot(
         &self,
+    ) -> Result<GlbDocument, String> {
+        self.build_glb_export_snapshot_with_root_transform(
+            self.bake_root_transform,
+        )
+    }
+
+    pub(crate) fn build_glb_retarget_source_snapshot(
+        &self,
+    ) -> Result<GlbDocument, String> {
+        self.build_glb_export_snapshot_with_root_transform(false)
+    }
+
+    fn build_glb_export_snapshot_with_root_transform(
+        &self,
+        include_root_transform: bool,
     ) -> Result<GlbDocument, String> {
         let Some(document) = self.glb.as_ref() else {
             return Err("Nothing to export".to_owned());
@@ -122,15 +177,28 @@ impl App {
         };
 
         let mut snapshot = document.clone();
-        apply_glb_export_preview(
-            &mut snapshot,
-            self.orientation_euler_degrees,
-            self.root_scale,
-            self.root_translation,
-            trim,
-            animation_rate,
-            smart_loop,
-        )?;
+        if include_root_transform {
+            apply_glb_export_preview(
+                &mut snapshot,
+                self.orientation_euler_degrees,
+                self.root_scale,
+                self.root_translation,
+                trim,
+                animation_rate,
+                smart_loop,
+            )?;
+        } else {
+            apply_glb_export_preview_with_root_transform(
+                &mut snapshot,
+                self.orientation_euler_degrees,
+                self.root_scale,
+                self.root_translation,
+                trim,
+                animation_rate,
+                smart_loop,
+                false,
+            )?;
+        }
         Ok(snapshot)
     }
 }
@@ -267,5 +335,49 @@ mod tests {
         )
         .is_err());
         assert_eq!(snapshot.to_bytes().unwrap(), original);
+    }
+
+    #[test]
+    fn skipping_root_transform_keeps_other_export_edits() {
+        let document = export_fixture();
+        let mut snapshot = document.clone();
+
+        apply_glb_export_preview_with_root_transform(
+            &mut snapshot,
+            [0.0, 0.0, 90.0],
+            2.0,
+            [3.0, 4.0, 5.0],
+            Some((0, 0.25, 0.75)),
+            None,
+            None,
+            false,
+        )
+        .unwrap();
+
+        let bytes = snapshot.to_bytes().unwrap();
+        gltf::Gltf::from_slice(&bytes).unwrap();
+        let glb = gltf::binary::Glb::from_slice(&bytes).unwrap();
+        let json: Value = serde_json::from_slice(&glb.json).unwrap();
+        assert!(json["nodes"][0].get("matrix").is_none());
+        assert_eq!(json["nodes"][0]["translation"][0].as_f64().unwrap(), 1.0);
+
+        let input = json["animations"][0]["samplers"][0]["input"]
+            .as_u64()
+            .unwrap() as usize;
+        let accessor = &json["accessors"][input];
+        assert_eq!(accessor["count"].as_u64().unwrap(), 2);
+        let view = accessor["bufferView"].as_u64().unwrap() as usize;
+        let offset = json["bufferViews"][view]
+            .get("byteOffset")
+            .and_then(Value::as_u64)
+            .unwrap_or(0) as usize;
+        let bin = glb.bin.as_ref().unwrap();
+        let times = (0..2)
+            .map(|index| {
+                let start = offset + index * 4;
+                f32::from_le_bytes(bin[start..start + 4].try_into().unwrap())
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(times, vec![0.0, 0.5]);
     }
 }

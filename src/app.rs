@@ -3,18 +3,20 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::Instant;
 
+use crate::modules::retarget::{MappingValidationReport, SkeletonMapping};
 use crate::modules::{
     bvh::{
         self, BvhDocument, MappingFile, MappingSuggestion, MappingValidation,
         RetargetPlan,
     },
     glb::{
-        AnimationClipData, EditOperation, GlbDocument, PrimitiveTarget,
+        AnimationRuntime, EditOperation, GlbDocument, PrimitiveTarget,
         SmartLoopOptions, StandardizationProfile, TextureSlot,
     },
     i18n::I18n,
     preferences::{self, UserPreferences},
     ui::{
+        bvh_file_tree::BvhFileTree,
         file_tree::FileTree,
         log_viewer::LogViewer,
         menu_bar::{MenuAction, Page},
@@ -36,6 +38,7 @@ pub struct App {
     pub canvas: ViewportCanvas,
     pub(crate) fonts_configured: bool,
     pub file_tree: FileTree,
+    pub bvh_file_tree: BvhFileTree,
     pub log: LogViewer,
     pub page: Page,
     pub glb: Option<GlbDocument>,
@@ -49,9 +52,24 @@ pub struct App {
     pub retarget_plan: Option<RetargetPlan>,
     pub mapping_report: Option<MappingValidation>,
     pub mapping_suggestions: Vec<MappingSuggestion>,
+    pub retarget_mapping: Option<SkeletonMapping>,
+    pub retarget_mapping_path: Option<PathBuf>,
+    pub retarget_validation: Option<MappingValidationReport>,
+    pub retarget_source_skin_index: usize,
+    pub retarget_target_skin_index: usize,
+    pub glb_retarget_target: Option<GlbDocument>,
+    pub glb_retarget_target_path: Option<PathBuf>,
+    pub glb_retarget_preview_active: bool,
+    pub(crate) pending_glb_retarget_runtime: Option<AnimationRuntime>,
+    pub retarget_root_motion: bool,
+    pub retarget_normalize_initial_heading: bool,
+    pub bvh_up_axis: String,
+    pub bvh_forward_axis: String,
+    pub bvh_unit: String,
     pub orientation_euler_degrees: [f32; 3],
     pub root_scale: f32,
     pub root_translation: [f32; 3],
+    pub bake_root_transform: bool,
     pub(crate) root_preview_dirty: bool,
     pub(crate) root_preview_error: Option<String>,
     pub trim_enabled: bool,
@@ -86,16 +104,18 @@ pub struct App {
     reload_request: Option<GlbReloadKind>,
     pending_auto_play: bool,
     pending_animation_selection: Option<usize>,
-    needs_bvh_skeleton_reload: bool,
+    pub(crate) needs_bvh_skeleton_reload: bool,
+    pub(crate) bvh_camera_focus_pending: bool,
+    pub(crate) needs_bvh_target_reload: bool,
     pub(crate) needs_save: bool,
     quit_requested: bool,
-    task_rx: Option<mpsc::Receiver<ExportTaskResult>>,
+    pub(crate) task_rx: Option<mpsc::Receiver<ExportTaskResult>>,
 }
 
-struct ExportTaskResult {
-    kind: String,
-    path: PathBuf,
-    result: Result<(), String>,
+pub(crate) struct ExportTaskResult {
+    pub(crate) kind: String,
+    pub(crate) path: PathBuf,
+    pub(crate) result: Result<(), String>,
 }
 
 impl App {
@@ -108,6 +128,10 @@ impl App {
         canvas.apply_view_prefs(&prefs.view);
         let mut file_tree = FileTree::new();
         file_tree.apply_prefs(&prefs.file_tree);
+        let mut bvh_file_tree = BvhFileTree::new();
+        if let Some(root) = file_tree.root().cloned() {
+            bvh_file_tree.open_folder(root);
+        }
         let mut log = LogViewer::new();
         log.apply_prefs(&prefs.log_viewer);
         Self {
@@ -116,6 +140,7 @@ impl App {
             canvas,
             fonts_configured: false,
             file_tree,
+            bvh_file_tree,
             log,
             page: Page::GlbEditor,
             glb: None,
@@ -129,9 +154,24 @@ impl App {
             retarget_plan: None,
             mapping_report: None,
             mapping_suggestions: Vec::new(),
+            retarget_mapping: None,
+            retarget_mapping_path: None,
+            retarget_validation: None,
+            retarget_source_skin_index: 0,
+            retarget_target_skin_index: 0,
+            glb_retarget_target: None,
+            glb_retarget_target_path: None,
+            glb_retarget_preview_active: false,
+            pending_glb_retarget_runtime: None,
+            retarget_root_motion: true,
+            retarget_normalize_initial_heading: false,
+            bvh_up_axis: "Y".to_owned(),
+            bvh_forward_axis: "-Z".to_owned(),
+            bvh_unit: "cm".to_owned(),
             orientation_euler_degrees: [0.0, 0.0, 0.0],
             root_scale: 1.0,
             root_translation: [0.0, 0.0, 0.0],
+            bake_root_transform: true,
             root_preview_dirty: false,
             root_preview_error: None,
             trim_enabled: false,
@@ -167,6 +207,8 @@ impl App {
             pending_auto_play: false,
             pending_animation_selection: None,
             needs_bvh_skeleton_reload: false,
+            bvh_camera_focus_pending: false,
+            needs_bvh_target_reload: false,
             needs_save: false,
             quit_requested: false,
             task_rx: None,
@@ -179,6 +221,8 @@ impl App {
 
     pub fn preview_glb(&mut self, path: &Path) {
         self.page = Page::GlbEditor;
+        self.glb_retarget_preview_active = false;
+        self.pending_glb_retarget_runtime = None;
         self.glb_path = Some(path.to_path_buf());
         self.pending_animation_selection = None;
         self.reset_root_preview();
@@ -193,7 +237,7 @@ impl App {
         self.pending_auto_play = true;
     }
 
-    fn request_glb_reload(&mut self, requested: GlbReloadKind) {
+    pub(crate) fn request_glb_reload(&mut self, requested: GlbReloadKind) {
         self.reload_request =
             Some(merge_glb_reload_kind(self.reload_request, requested));
     }
@@ -209,15 +253,20 @@ impl App {
                 match result.result {
                     Ok(()) => {
                         self.file_tree.refresh();
+                        self.bvh_file_tree.refresh();
+                        let prefix = task_log_prefix(&result.kind);
                         self.log.append(&format!(
-                            "[bvh_studio] Exported {} {}",
+                            "{prefix} Exported {} {}",
                             result.kind,
                             result.path.display()
                         ));
                     }
-                    Err(error) => self.log.append(&format!(
-                        "[bvh_studio] Export failed: {error}"
-                    )),
+                    Err(error) => {
+                        let prefix = task_log_prefix(&result.kind);
+                        self.log.append(&format!(
+                            "{prefix} Export failed: {error}"
+                        ));
+                    }
                 }
             }
             Err(mpsc::TryRecvError::Disconnected) => {
@@ -319,6 +368,19 @@ impl App {
                     match self.canvas.load_glb(context, &preview_path) {
                         Ok(()) => {
                             self.glb = Some(document);
+                            let skin_count = self
+                                .glb
+                                .as_ref()
+                                .map(|document| document.summary().skins)
+                                .unwrap_or_default();
+                            if skin_count == 0 {
+                                self.retarget_source_skin_index = 0;
+                            } else {
+                                self.retarget_source_skin_index = self
+                                    .retarget_source_skin_index
+                                    .min(skin_count - 1);
+                            }
+                            self.refresh_glb_retarget_mapping();
                             if reload_kind == GlbReloadKind::OpenModel {
                                 self.camera.reset();
                             }
@@ -349,6 +411,7 @@ impl App {
                                     ));
                                 }
                             }
+                            self.frame_glb_preview(context, reload_kind);
                             if self.pending_auto_play
                                 && !self.canvas.animation_clips().is_empty()
                             {
@@ -374,20 +437,107 @@ impl App {
             }
         }
 
+        if self.page == Page::BvhStudio {
+            self.reload_bvh_target_preview(context);
+        }
+        if let Some(runtime) = self.pending_glb_retarget_runtime.take() {
+            if let Some(path) = self.glb_retarget_target_path.as_ref() {
+                match self.canvas.load_glb_with_runtime(
+                    context,
+                    path,
+                    runtime.clone(),
+                ) {
+                    Ok(()) => {
+                        self.glb_retarget_preview_active = true;
+                        self.glb_animation_index = 0;
+                        self.glb_animation_time = 0.0;
+                        self.glb_animation_playing = false;
+                        self.log
+                            .append("[glb_retarget] Retarget preview ready");
+                        self.initialize_glb_retarget_preview_skeleton(context);
+                    }
+                    Err(error) => {
+                        self.log.append(&format!(
+                            "[glb_retarget] Target Mesh preview unavailable; using skeleton-only playback: {error}"
+                        ));
+                        self.canvas.load_skeleton_runtime(runtime);
+                        self.glb_retarget_preview_active = true;
+                        self.glb_animation_index = 0;
+                        self.glb_animation_time = 0.0;
+                        self.glb_animation_playing = false;
+                        self.initialize_glb_retarget_preview_skeleton(context);
+                    }
+                }
+            }
+        }
+
         if self.needs_bvh_skeleton_reload {
             self.needs_bvh_skeleton_reload = false;
             if let Some(document) = self.bvh.as_ref() {
                 let frame =
                     self.bvh_frame.min(document.frames.len().saturating_sub(1));
-                match document.joint_positions(frame) {
-                    Ok(positions) => {
-                        let parents = document
-                            .joints
-                            .iter()
-                            .map(|joint| joint.parent)
-                            .collect::<Vec<_>>();
-                        self.canvas
-                            .set_bvh_skeleton(context, &positions, &parents);
+                match self.bvh_preview_pose(document, frame) {
+                    Ok(pose) => {
+                        let positions = pose.positions.clone();
+                        self.canvas.set_bvh_skeleton_pose(context, &pose);
+                        self.canvas.set_guide_scale(
+                            context,
+                            self.canvas
+                                .skeleton
+                                .as_ref()
+                                .map(|skeleton| skeleton.metrics().height)
+                                .unwrap_or(1.0),
+                        );
+                        if self.bvh_camera_focus_pending {
+                            if let Some((minimum, maximum)) =
+                                self.canvas.preview_bounds()
+                            {
+                                self.camera.focus_on_bounds(minimum, maximum);
+                            } else {
+                                self.camera.focus_on_points(&positions);
+                            }
+                            self.bvh_camera_focus_pending = false;
+                            self.log.append(&format!(
+                                "[bvh_studio] Focused preview on {} converted joints (unit={})",
+                                positions.len(),
+                                self.bvh_unit
+                            ));
+                        }
+                        if self
+                            .retarget_validation
+                            .as_ref()
+                            .is_some_and(|report| report.is_valid())
+                        {
+                            if let Err(error) =
+                                self.canvas.update_glb_animation(
+                                    0,
+                                    frame as f32 * document.frame_time,
+                                )
+                            {
+                                self.log.append(&format!(
+                                    "[retarget] Target animation preview failed: {error}"
+                                ));
+                            }
+                            if let Some(target) = self.bvh_target_glb.as_ref() {
+                                if let Ok(skin) = target.skin_data_at(
+                                    self.retarget_target_skin_index,
+                                ) {
+                                    if let Err(error) = self
+                                        .canvas
+                                        .update_target_skeleton_animation(
+                                            context,
+                                            0,
+                                            frame as f32 * document.frame_time,
+                                            &skin.joints,
+                                        )
+                                    {
+                                        self.log.append(&format!(
+                                            "[retarget] Target skeleton overlay failed: {error}"
+                                        ));
+                                    }
+                                }
+                            }
+                        }
                     }
                     Err(error) => self.log.append(&format!(
                         "[bvh_studio] Skeleton preview failed: {error}"
@@ -472,9 +622,33 @@ impl App {
             MenuAction::ExportBvhAnimationClip => self.export_bvh_glb(true),
             MenuAction::ClearFileList => {
                 self.file_tree.clear();
+                self.bvh_file_tree.clear();
                 self.glb = None;
                 self.glb_path = None;
                 self.canvas.clear_glb();
+                self.canvas.clear_target_skeleton();
+                self.canvas.clear_bvh_skeleton();
+                self.bvh_target_glb = None;
+                self.bvh_target_path = None;
+                self.bvh = None;
+                self.bvh_path = None;
+                self.mapping = None;
+                self.mapping_path = None;
+                self.retarget_plan = None;
+                self.mapping_report = None;
+                self.mapping_suggestions.clear();
+                self.glb_retarget_target = None;
+                self.glb_retarget_target_path = None;
+                self.retarget_mapping = None;
+                self.retarget_mapping_path = None;
+                self.retarget_validation = None;
+                self.glb_retarget_preview_active = false;
+                self.pending_glb_retarget_runtime = None;
+                self.needs_bvh_target_reload = false;
+                self.needs_bvh_skeleton_reload = false;
+                self.bvh_camera_focus_pending = false;
+                self.bvh_playing = false;
+                self.bvh_frame = 0;
                 self.reset_root_preview();
                 self.reset_glb_animation_state();
                 self.reset_glb_animation_rate();
@@ -497,8 +671,27 @@ impl App {
             MenuAction::ToggleOrigin => {
                 self.canvas.show_origin = !self.canvas.show_origin
             }
-            MenuAction::OpenGlbEditor => self.page = Page::GlbEditor,
-            MenuAction::OpenBvhStudio => self.page = Page::BvhStudio,
+            MenuAction::OpenGlbEditor => {
+                self.page = Page::GlbEditor;
+                if self.glb_retarget_preview_active {
+                    self.exit_glb_retarget_preview();
+                } else {
+                    self.request_glb_reload(GlbReloadKind::OpenModel);
+                }
+            }
+            MenuAction::OpenBvhStudio => {
+                self.page = Page::BvhStudio;
+                self.canvas.show_origin = false;
+                if self.glb_retarget_preview_active {
+                    self.exit_glb_retarget_preview();
+                }
+                if self.bvh.is_some() {
+                    self.needs_bvh_skeleton_reload = true;
+                    self.bvh_camera_focus_pending = true;
+                }
+                self.needs_bvh_target_reload = true;
+                self.refresh_v2_retarget_mapping();
+            }
             MenuAction::About => self.show_about = true,
             MenuAction::SetLanguage(preference) => {
                 self.i18n.set_preference(*preference);
@@ -616,76 +809,6 @@ impl App {
         self.preview_glb(&path);
     }
 
-    pub(crate) fn load_bvh_target(&mut self, path: &Path) {
-        match GlbDocument::load(path) {
-            Ok(document) => {
-                self.log.append(&format!(
-                    "[bvh_studio] Loaded target GLB {}",
-                    path.display()
-                ));
-                self.bvh_target_glb = Some(document);
-                self.bvh_target_path = Some(path.to_path_buf());
-                self.refresh_retarget_plan();
-            }
-            Err(error) => self.log.append(&format!("[bvh_studio] {error}")),
-        }
-    }
-
-    fn import_bvh(&mut self) {
-        let Some(path) = rfd::FileDialog::new()
-            .add_filter("BVH", &["bvh"])
-            .pick_file()
-        else {
-            return;
-        };
-        match BvhDocument::load(&path) {
-            Ok(document) => {
-                self.bvh_trim_end =
-                    document.duration().max(document.frame_time);
-                self.log.append(&format!(
-                    "[bvh_studio] Loaded {} ({} joints, {} frames)",
-                    path.display(),
-                    document.joints.len(),
-                    document.frames.len()
-                ));
-                self.bvh = Some(document);
-                self.bvh_path = Some(path);
-                self.bvh_frame = 0;
-                self.bvh_playing = false;
-                self.needs_bvh_skeleton_reload = true;
-                self.page = Page::BvhStudio;
-                self.refresh_retarget_plan();
-            }
-            Err(error) => self.log.append(&format!("[bvh_studio] {error}")),
-        }
-    }
-
-    fn import_mapping(&mut self) {
-        let Some(path) = rfd::FileDialog::new()
-            .add_filter("Mapping JSON", &["json"])
-            .pick_file()
-        else {
-            return;
-        };
-        match bvh::load_mapping(&path) {
-            Ok(mapping) => {
-                self.log.append(&format!(
-                    "[bvh_studio] Loaded mapping {}",
-                    path.display()
-                ));
-                self.retarget_plan = self
-                    .bvh
-                    .as_ref()
-                    .and_then(|document| document.plan_retarget(&mapping).ok());
-                self.mapping = Some(mapping);
-                self.mapping_path = Some(path);
-                self.page = Page::BvhStudio;
-                self.refresh_retarget_plan();
-            }
-            Err(error) => self.log.append(&format!("[bvh_studio] {error}")),
-        }
-    }
-
     fn export_glb(&mut self) {
         if self.glb.is_none() {
             self.log.append("[glb_editor] Nothing to export");
@@ -723,8 +846,16 @@ impl App {
         match document.export_atomic(&path) {
             Ok(()) => {
                 self.file_tree.refresh();
+                self.bvh_file_tree.refresh();
+                let baked_note = if !self.bake_root_transform
+                    && self.root_transform_active()
+                {
+                    " (root transform not baked)"
+                } else {
+                    ""
+                };
                 self.log.append(&format!(
-                    "[glb_editor] Exported {}",
+                    "[glb_editor] Exported {}{baked_note}",
                     path.display()
                 ));
             }
@@ -735,6 +866,10 @@ impl App {
     }
 
     fn export_mapping(&mut self) {
+        if self.retarget_mapping.is_some() {
+            self.export_retarget_mapping();
+            return;
+        }
         let Some(mapping) = self.mapping.as_ref() else {
             self.log.append("[bvh_studio] Nothing to export");
             return;
@@ -755,6 +890,7 @@ impl App {
         match bvh::save_mapping(&path, mapping) {
             Ok(()) => {
                 self.file_tree.refresh();
+                self.bvh_file_tree.refresh();
                 self.log.append(&format!(
                     "[bvh_studio] Exported mapping {}",
                     path.display()
@@ -786,6 +922,7 @@ impl App {
         match document.write(&path) {
             Ok(()) => {
                 self.file_tree.refresh();
+                self.bvh_file_tree.refresh();
                 self.log.append(&format!(
                     "[bvh_studio] Exported {}",
                     path.display()
@@ -795,121 +932,6 @@ impl App {
                 .log
                 .append(&format!("[bvh_studio] Export failed: {error}")),
         }
-    }
-
-    fn export_bvh_glb(&mut self, clip_only: bool) {
-        if self.task_busy {
-            return;
-        }
-        let Some(source) = self.bvh.clone() else {
-            self.log
-                .append("[bvh_studio] Open a BVH before exporting GLB");
-            return;
-        };
-        let Some(mapping) = self.mapping.clone() else {
-            self.log.append(
-                "[bvh_studio] Load a Mapping JSON before exporting GLB",
-            );
-            return;
-        };
-        let Some(target) = self.bvh_target_glb.clone() else {
-            self.log
-                .append("[bvh_studio] Load a target GLB before exporting GLB");
-            return;
-        };
-        let Some(path) = rfd::FileDialog::new()
-            .add_filter("GLB", &["glb"])
-            .set_file_name(if clip_only {
-                "bvh_animation_clip.glb"
-            } else {
-                "bvh_retargeted.glb"
-            })
-            .save_file()
-        else {
-            return;
-        };
-        if is_source_path(&path, self.bvh_target_path.as_deref()) {
-            self.log.append(
-                "[bvh_studio] Refusing to overwrite the target source GLB",
-            );
-            return;
-        }
-        let (sender, receiver) = mpsc::channel();
-        self.task_rx = Some(receiver);
-        self.task_busy = true;
-        self.log.append(if clip_only {
-            "[bvh_studio] Building animation clip in background"
-        } else {
-            "[bvh_studio] Building retargeted GLB in background"
-        });
-        let kind = if clip_only {
-            "animation clip".to_owned()
-        } else {
-            "retargeted GLB".to_owned()
-        };
-        let reduce_keys = self.bvh_reduce_keys;
-        let key_tolerance = self.bvh_key_tolerance;
-        std::thread::spawn(move || {
-            let result = (|| {
-                let skin =
-                    target.skin_data().map_err(|error| error.to_string())?;
-                let clip = source
-                    .retarget_to_skin(&mapping, &skin)
-                    .map_err(|error| error.to_string())?;
-                let mut clip = clip;
-                if reduce_keys {
-                    clip.reduce_keys(key_tolerance)
-                        .map_err(|error| error.to_string())?;
-                }
-                let mut output = target;
-                output
-                    .append_animation(&AnimationClipData {
-                        name: clip.name,
-                        times: clip.times,
-                        channels: clip.channels,
-                    })
-                    .map_err(|error| error.to_string())?;
-                if clip_only {
-                    output.strip_render_resources();
-                }
-                output
-                    .export_atomic(&path)
-                    .map_err(|error| error.to_string())
-            })();
-            let _ = sender.send(ExportTaskResult { kind, path, result });
-        });
-    }
-
-    fn refresh_retarget_plan(&mut self) {
-        self.mapping_report = None;
-        self.mapping_suggestions.clear();
-        let Some(document) = self.bvh.as_ref() else {
-            self.retarget_plan = None;
-            return;
-        };
-        let Some(mapping) = self.mapping.as_ref() else {
-            self.retarget_plan = None;
-            return;
-        };
-        let Some(target) = self.bvh_target_glb.as_ref() else {
-            self.retarget_plan = None;
-            return;
-        };
-        let Ok(skin) = target.skin_data() else {
-            self.retarget_plan = None;
-            self.log.append(
-                "[bvh_studio] Target GLB does not expose a usable Skin",
-            );
-            return;
-        };
-        let report = document.mapping_report(mapping, &skin);
-        self.mapping_suggestions = document.suggest_mapping(&skin);
-        self.retarget_plan = if report.is_valid() {
-            document.plan_retarget(mapping).ok()
-        } else {
-            None
-        };
-        self.mapping_report = Some(report);
     }
 }
 
@@ -929,5 +951,15 @@ fn same_path(left: &Path, right: &Path) -> bool {
     #[cfg(not(windows))]
     {
         left == right
+    }
+}
+
+fn task_log_prefix(kind: &str) -> &'static str {
+    if kind.starts_with("GLB") {
+        "[glb_retarget]"
+    } else if kind.starts_with("Agent") {
+        "[retarget_agent]"
+    } else {
+        "[bvh_studio]"
     }
 }

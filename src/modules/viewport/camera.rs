@@ -8,6 +8,9 @@ pub struct OrbitCamera {
     phi: f32,
     min_radius: f32,
     max_radius: f32,
+    near_plane: f32,
+    far_plane: f32,
+    focused_bounds: Option<([f32; 3], [f32; 3])>,
     rotating: bool,
     panning: bool,
 }
@@ -27,7 +30,7 @@ impl OrbitCamera {
             target,
             vec3(0.0, 1.0, 0.0),
             degrees(45.0),
-            0.1,
+            0.01,
             100.0,
         );
 
@@ -37,8 +40,11 @@ impl OrbitCamera {
             radius,
             theta,
             phi,
-            min_radius: 0.5,
+            min_radius: 0.05,
             max_radius: 50.0,
+            near_plane: 0.01,
+            far_plane: 100.0,
+            focused_bounds: None,
             rotating: false,
             panning: false,
         }
@@ -48,7 +54,14 @@ impl OrbitCamera {
         if viewport.width < 1 || viewport.height < 1 {
             return;
         }
+        let changed = self.camera.viewport().width != viewport.width
+            || self.camera.viewport().height != viewport.height;
         self.camera.set_viewport(viewport);
+        if changed {
+            if let Some((minimum, maximum)) = self.focused_bounds {
+                self.focus_on_bounds(minimum, maximum);
+            }
+        }
     }
 
     pub fn handle_events(&mut self, events: &[Event], viewport: Viewport) {
@@ -136,12 +149,92 @@ impl OrbitCamera {
     }
 
     pub fn reset(&mut self) {
+        self.focused_bounds = None;
+        self.min_radius = 0.05;
+        self.max_radius = 50.0;
+        self.near_plane = 0.01;
+        self.far_plane = 100.0;
         let position = vec3(4.0, 3.0, 6.0);
         self.target = vec3(0.0, 0.5, 0.0);
         let direction = position - self.target;
         self.radius = direction.magnitude();
         self.theta = f32::atan2(direction.z, direction.x);
         self.phi = f32::acos(direction.y / self.radius);
+        self.update_camera_view();
+    }
+
+    /// Center and frame a set of world-space points.
+    ///
+    /// BVH files often contain absolute root translations and may use units
+    /// that make the skeleton much smaller or larger than the editor's
+    /// default scene. Framing the converted points keeps the first preview
+    /// useful without changing the authored coordinates or retargeting math.
+    pub fn focus_on_points(&mut self, points: &[[f32; 3]]) {
+        let mut minimum = vec3(f32::INFINITY, f32::INFINITY, f32::INFINITY);
+        let mut maximum =
+            vec3(f32::NEG_INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY);
+        let mut has_point = false;
+        for point in points {
+            if point.iter().any(|value| !value.is_finite()) {
+                continue;
+            }
+            let value = vec3(point[0], point[1], point[2]);
+            minimum.x = minimum.x.min(value.x);
+            minimum.y = minimum.y.min(value.y);
+            minimum.z = minimum.z.min(value.z);
+            maximum.x = maximum.x.max(value.x);
+            maximum.y = maximum.y.max(value.y);
+            maximum.z = maximum.z.max(value.z);
+            has_point = true;
+        }
+        if !has_point {
+            return;
+        }
+
+        self.focus_on_bounds(
+            [minimum.x, minimum.y, minimum.z],
+            [maximum.x, maximum.y, maximum.z],
+        );
+    }
+
+    /// Center and frame an axis-aligned world-space bounding box.
+    ///
+    /// The camera distance is derived from the vertical and horizontal field
+    /// of view, while clipping planes and orbit limits follow the same scale.
+    /// This keeps millimetre, metre and large mechanical skeletons equally
+    /// usable without changing their authored units.
+    pub fn focus_on_bounds(&mut self, minimum: [f32; 3], maximum: [f32; 3]) {
+        if minimum
+            .iter()
+            .chain(maximum.iter())
+            .any(|value| !value.is_finite())
+        {
+            return;
+        }
+        let minimum = vec3(minimum[0], minimum[1], minimum[2]);
+        let maximum = vec3(maximum[0], maximum[1], maximum[2]);
+        let diagonal = (maximum - minimum).magnitude().max(1.0e-7);
+        let sphere_radius = (diagonal * 0.5).max(1.0e-7);
+        self.target = (minimum + maximum) * 0.5;
+        let viewport = self.camera.viewport();
+        let aspect =
+            (viewport.width.max(1) as f32) / (viewport.height.max(1) as f32);
+        let vertical_half_fov = 45.0_f32.to_radians() * 0.5;
+        let horizontal_half_fov = (vertical_half_fov.tan() * aspect).atan();
+        let half_fov = vertical_half_fov.min(horizontal_half_fov).max(0.05);
+        let distance = (sphere_radius / half_fov.sin()) * 1.12;
+        self.min_radius = (sphere_radius * 0.002).max(1.0e-7);
+        self.max_radius = (sphere_radius * 2_000.0).max(distance * 20.0);
+        self.radius = distance.clamp(self.min_radius, self.max_radius);
+        self.near_plane = (sphere_radius * 0.01).max(self.radius * 0.0001);
+        self.far_plane = (self.radius + sphere_radius * 2.5)
+            .max(self.near_plane * 100.0)
+            .max(sphere_radius * 10.0)
+            .max(1.0e-5);
+        self.focused_bounds = Some((
+            [minimum.x, minimum.y, minimum.z],
+            [maximum.x, maximum.y, maximum.z],
+        ));
         self.update_camera_view();
     }
 
@@ -160,8 +253,8 @@ impl OrbitCamera {
             self.target,
             vec3(0.0, 1.0, 0.0),
             degrees(45.0),
-            0.1,
-            100.0,
+            self.near_plane,
+            self.far_plane,
         );
     }
 }
@@ -343,5 +436,32 @@ mod tests {
         );
 
         assert!(camera.theta > initial_theta);
+    }
+
+    #[test]
+    fn focus_on_points_centers_and_scales_the_orbit() {
+        let mut camera = OrbitCamera::new(Viewport::new_at_origo(640, 480));
+        camera.focus_on_points(&[[-2.0, 1.0, 0.0], [2.0, 5.0, 0.0]]);
+
+        assert_eq!(camera.target, vec3(0.0, 3.0, 0.0));
+        assert!(camera.radius < 9.0);
+        assert!(camera.radius > camera.min_radius);
+    }
+
+    #[test]
+    fn focus_handles_tiny_and_large_skeletons_with_scaled_clipping() {
+        let mut camera = OrbitCamera::new(Viewport::new_at_origo(640, 480));
+        camera.focus_on_points(&[[0.0, 0.0, 0.0], [0.0, 0.004, 0.0]]);
+        let tiny_radius = camera.radius;
+        let tiny_near = camera.near_plane;
+        let tiny_far = camera.far_plane;
+        assert!(tiny_radius < 0.1);
+        assert!(tiny_near > 0.0);
+        assert!(tiny_far > tiny_radius);
+
+        camera.focus_on_points(&[[0.0, 0.0, 0.0], [0.0, 100.0, 0.0]]);
+        assert!(camera.radius > tiny_radius * 1_000.0);
+        assert!(camera.far_plane > tiny_far * 1_000.0);
+        assert!(camera.near_plane > tiny_near * 1_000.0);
     }
 }

@@ -171,6 +171,34 @@ impl BvhDocument {
         self.frame_time * self.frames.len().saturating_sub(1) as f32
     }
 
+    /// Return world transforms for one motion frame to the shared retargeter.
+    ///
+    /// This deliberately exposes a crate-local tuple instead of the parser's
+    /// private transform type so BVH remains independent from GLB internals.
+    pub(crate) fn frame_transforms_for_retarget(
+        &self,
+        frame: &[f32],
+    ) -> Result<Vec<([f32; 3], [f32; 4], [f32; 3])>, BvhError> {
+        Ok(self
+            .frame_transforms(frame)?
+            .into_iter()
+            .map(|transform| {
+                (transform.position, transform.rotation, transform.scale)
+            })
+            .collect())
+    }
+
+    /// Return the authored BVH Rest Pose (OFFSET plus identity rotations).
+    ///
+    /// A motion file's first frame is not guaranteed to be its Rest Pose and
+    /// must never be used as the reference for retargeting.
+    pub(crate) fn rest_transforms_for_retarget(
+        &self,
+    ) -> Result<Vec<([f32; 3], [f32; 4], [f32; 3])>, BvhError> {
+        let zero_frame = vec![0.0; self.channel_count()];
+        self.frame_transforms_for_retarget(&zero_frame)
+    }
+
     pub fn trim(&mut self, start: f32, end: f32) -> Result<(), BvhError> {
         if !start.is_finite() || !end.is_finite() || start < 0.0 || end <= start
         {
@@ -228,182 +256,53 @@ impl BvhDocument {
         })
     }
 
+    #[allow(dead_code)]
     pub fn retarget_to_skin(
         &self,
         mapping: &MappingFile,
         target: &SkinData,
     ) -> Result<RetargetClip, BvhError> {
-        mapping.validate_contract()?;
-        if self.frames.len() < 2 {
-            return Err(BvhError::Mapping(
-                "retargeting requires at least two BVH frames".to_owned(),
-            ));
-        }
-        if target.name != mapping.target.skin {
-            return Err(BvhError::Mapping(format!(
-                "mapping targets Skin '{}', but the selected GLB has '{}'",
-                mapping.target.skin, target.name
-            )));
-        }
-        let basis = CoordinateBasis::from_mapping(
-            &mapping.source.up_axis,
-            &mapping.source.forward_axis,
-        )?;
-        let source_lookup: HashMap<&str, usize> = self
-            .joints
-            .iter()
-            .enumerate()
-            .map(|(index, joint)| (joint.name.as_str(), index))
-            .collect();
-        let target_lookup: HashMap<&str, usize> = target
-            .nodes
-            .iter()
-            .filter(|node| target.joints.contains(&node.index))
-            .map(|node| (node.name.as_str(), node.index))
-            .collect();
-        let source_root = source_lookup
-            .get(mapping.source.root.as_str())
-            .copied()
-            .ok_or_else(|| {
-                BvhError::Mapping(format!(
-                    "source root '{}' was not found",
-                    mapping.source.root
-                ))
-            })?;
-        let target_root = target_lookup
-            .get(mapping.target.root.as_str())
-            .copied()
-            .ok_or_else(|| {
-                BvhError::Mapping(format!(
-                    "target root '{}' was not found in the selected Skin",
-                    mapping.target.root
-                ))
-            })?;
-        let source_frames = self
-            .frames
-            .iter()
-            .map(|frame| self.frame_transforms(frame))
-            .map(|frame| {
-                frame.map(|transforms| {
-                    transforms
-                        .into_iter()
-                        .map(|transform| basis.convert_transform(transform))
-                        .collect::<Vec<_>>()
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        let target_world = target_world_transforms(target)?;
-        let source_rest = &source_frames[0];
-        let unit_scale = mapping::unit_scale(&mapping.source.unit)?;
-        let mut mapped = Vec::new();
-        let mut mapped_targets = HashSet::new();
-        for bone in &mapping.bones {
-            let source = source_lookup
-                .get(bone.source_joint.as_str())
-                .copied()
-                .ok_or_else(|| {
-                    BvhError::Mapping(format!(
-                        "source joint '{}' was not found",
-                        bone.source_joint
-                    ))
-                })?;
-            let target_index = target_lookup
-                .get(bone.target_node.as_str())
-                .copied()
-                .ok_or_else(|| {
-                    BvhError::Mapping(format!(
-                        "target joint '{}' was not found in the selected Skin",
-                        bone.target_node
-                    ))
-                })?;
-            if !mapped_targets.insert(target_index) {
-                return Err(BvhError::Mapping(format!(
-                    "target joint '{}' is mapped more than once",
-                    bone.target_node
-                )));
-            }
-            mapped.push((source, target_index, bone.rotation_offset_xyzw));
-        }
-        if mapped.is_empty() {
-            return Err(BvhError::Mapping(
-                "Mapping contains no usable bones".to_owned(),
-            ));
-        }
-        let report = self.mapping_report(mapping, target);
-        if !report.is_valid() {
-            return Err(BvhError::Mapping(format!(
-                "mapping validation failed: {report:?}"
-            )));
-        }
-        let times = (0..self.frames.len())
-            .map(|frame| frame as f32 * self.frame_time)
-            .collect::<Vec<_>>();
-        let mut channels = Vec::with_capacity(mapped.len());
-        for (source, target_index, rotation_offset) in mapped {
-            let target_node =
-                target.nodes.get(target_index).ok_or_else(|| {
-                    BvhError::Mapping("target node index is invalid".to_owned())
-                })?;
-            let parent_world = target_node
-                .parent
-                .and_then(|parent| target_world.get(parent))
-                .map(|transform| transform.rotation)
-                .unwrap_or(identity_quaternion());
-            let target_rest_world =
-                target_world.get(target_index).ok_or_else(|| {
-                    BvhError::Mapping(
-                        "target joint rest transform is missing".to_owned(),
-                    )
-                })?;
-            let mut rotations = Vec::with_capacity(source_frames.len());
-            let mut translations = None;
-            for source_frame in &source_frames {
-                let source_delta = quat_mul(
-                    quat_inverse(source_rest[source].rotation),
-                    source_frame[source].rotation,
-                );
-                let desired_world = quat_mul(
-                    target_rest_world.rotation,
-                    quat_mul(source_delta, rotation_offset),
-                );
-                rotations.push(quat_normalize(quat_mul(
-                    quat_inverse(parent_world),
-                    desired_world,
-                )));
-                if source == source_root && target_index == target_root {
-                    let delta = [
-                        (source_frame[source].position[0]
-                            - source_rest[source].position[0])
-                            * unit_scale,
-                        (source_frame[source].position[1]
-                            - source_rest[source].position[1])
-                            * unit_scale,
-                        (source_frame[source].position[2]
-                            - source_rest[source].position[2])
-                            * unit_scale,
-                    ];
-                    translations
-                        .get_or_insert_with(|| {
-                            Vec::with_capacity(source_frames.len())
-                        })
-                        .push([
-                            target_node.translation[0] + delta[0],
-                            target_node.translation[1] + delta[1],
-                            target_node.translation[2] + delta[2],
-                        ]);
-                }
-            }
-            channels.push(AnimationChannelData {
-                node: target_index,
-                rotations,
-                translations,
-            });
-        }
-        Ok(RetargetClip {
-            name: "BVH Retarget".to_owned(),
-            times,
-            channels,
-        })
+        let source_file_sha256 = self
+            .source_path
+            .as_deref()
+            .and_then(|path| fs::read(path).ok())
+            .map(|bytes| crate::modules::retarget::sha256_hex(&bytes))
+            .unwrap_or_default();
+        let source_descriptor =
+            crate::modules::retarget::SkeletonDescriptor::from_bvh(
+                self,
+                source_file_sha256,
+                mapping.source.up_axis.clone(),
+                mapping.source.forward_axis.clone(),
+                mapping.source.unit.clone(),
+            )
+            .map_err(|error| BvhError::Mapping(error.to_string()))?;
+        let target_descriptor =
+            crate::modules::retarget::SkeletonDescriptor::from_skin(
+                target,
+                crate::modules::retarget::SourceKind::Glb,
+                String::new(),
+                String::new(),
+                "Y",
+                "-Z",
+                "m",
+                &HashSet::new(),
+            )
+            .map_err(|error| BvhError::Mapping(error.to_string()))?;
+        let mapping_v2 = crate::modules::retarget::from_legacy_bvh_mapping(
+            mapping,
+            &source_descriptor,
+            &target_descriptor,
+        )
+        .map_err(|error| BvhError::Mapping(error.to_string()))?;
+        crate::modules::retarget::retarget_bvh(
+            self,
+            target,
+            &mapping_v2,
+            crate::modules::retarget::RetargetOptions::default(),
+            "BVH Retarget",
+        )
+        .map_err(|error| BvhError::Mapping(error.to_string()))
     }
 
     fn frame_transforms(
@@ -536,12 +435,7 @@ struct MotionTransform {
     scale: [f32; 3],
 }
 
-#[derive(Debug, Clone, Copy)]
-struct CoordinateBasis {
-    right: [f32; 3],
-    up: [f32; 3],
-    forward: [f32; 3],
-}
+struct CoordinateBasis;
 
 impl CoordinateBasis {
     fn from_mapping(
@@ -561,66 +455,12 @@ impl CoordinateBasis {
                 "source up and forward axes must be perpendicular".to_owned(),
             ));
         }
-        let right = cross(forward, up);
-        if length(right) <= f32::EPSILON {
+        if length(cross(forward, up)) <= f32::EPSILON {
             return Err(BvhError::Mapping(
                 "source coordinate basis is degenerate".to_owned(),
             ));
         }
-        Ok(Self { right, up, forward })
-    }
-
-    fn convert_transform(&self, transform: MotionTransform) -> MotionTransform {
-        MotionTransform {
-            position: self.convert_vector(transform.position),
-            rotation: self.convert_rotation(transform.rotation),
-            scale: transform.scale,
-        }
-    }
-
-    fn convert_vector(&self, vector: [f32; 3]) -> [f32; 3] {
-        let components = [
-            dot(vector, self.right),
-            dot(vector, self.up),
-            dot(vector, self.forward),
-        ];
-        [components[0], components[1], -components[2]]
-    }
-
-    fn convert_rotation(&self, quaternion: [f32; 4]) -> [f32; 4] {
-        let source_matrix = quaternion_matrix_3(quaternion);
-        let target_basis = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, -1.0]];
-        let mut target_matrix = [[0.0; 3]; 3];
-        for column in 0..3 {
-            let target_vector = target_basis[column];
-            let source_vector = [
-                self.right[0] * target_vector[0]
-                    + self.up[0] * target_vector[1]
-                    - self.forward[0] * target_vector[2],
-                self.right[1] * target_vector[0]
-                    + self.up[1] * target_vector[1]
-                    - self.forward[1] * target_vector[2],
-                self.right[2] * target_vector[0]
-                    + self.up[2] * target_vector[1]
-                    - self.forward[2] * target_vector[2],
-            ];
-            let rotated_source = [
-                source_matrix[0][0] * source_vector[0]
-                    + source_matrix[0][1] * source_vector[1]
-                    + source_matrix[0][2] * source_vector[2],
-                source_matrix[1][0] * source_vector[0]
-                    + source_matrix[1][1] * source_vector[1]
-                    + source_matrix[1][2] * source_vector[2],
-                source_matrix[2][0] * source_vector[0]
-                    + source_matrix[2][1] * source_vector[1]
-                    + source_matrix[2][2] * source_vector[2],
-            ];
-            let rotated_target = self.convert_vector(rotated_source);
-            for row in 0..3 {
-                target_matrix[row][column] = rotated_target[row];
-            }
-        }
-        quaternion_from_matrix_3(target_matrix)
+        Ok(Self)
     }
 }
 
@@ -652,125 +492,6 @@ fn length(value: [f32; 3]) -> f32 {
     dot(value, value).sqrt()
 }
 
-fn quaternion_matrix_3(q: [f32; 4]) -> [[f32; 3]; 3] {
-    let [x, y, z, w] = q;
-    [
-        [
-            1.0 - 2.0 * (y * y + z * z),
-            2.0 * (x * y - z * w),
-            2.0 * (x * z + y * w),
-        ],
-        [
-            2.0 * (x * y + z * w),
-            1.0 - 2.0 * (x * x + z * z),
-            2.0 * (y * z - x * w),
-        ],
-        [
-            2.0 * (x * z - y * w),
-            2.0 * (y * z + x * w),
-            1.0 - 2.0 * (x * x + y * y),
-        ],
-    ]
-}
-
-fn quaternion_from_matrix_3(matrix: [[f32; 3]; 3]) -> [f32; 4] {
-    let trace = matrix[0][0] + matrix[1][1] + matrix[2][2];
-    if trace > 0.0 {
-        let root = (trace + 1.0).sqrt() * 2.0;
-        return quat_normalize([
-            (matrix[2][1] - matrix[1][2]) / root,
-            (matrix[0][2] - matrix[2][0]) / root,
-            (matrix[1][0] - matrix[0][1]) / root,
-            0.25 * root,
-        ]);
-    }
-    if matrix[0][0] > matrix[1][1] && matrix[0][0] > matrix[2][2] {
-        let root =
-            (1.0 + matrix[0][0] - matrix[1][1] - matrix[2][2]).sqrt() * 2.0;
-        return quat_normalize([
-            0.25 * root,
-            (matrix[0][1] + matrix[1][0]) / root,
-            (matrix[0][2] + matrix[2][0]) / root,
-            (matrix[2][1] - matrix[1][2]) / root,
-        ]);
-    }
-    if matrix[1][1] > matrix[2][2] {
-        let root =
-            (1.0 + matrix[1][1] - matrix[0][0] - matrix[2][2]).sqrt() * 2.0;
-        return quat_normalize([
-            (matrix[0][1] + matrix[1][0]) / root,
-            0.25 * root,
-            (matrix[1][2] + matrix[2][1]) / root,
-            (matrix[0][2] - matrix[2][0]) / root,
-        ]);
-    }
-    let root = (1.0 + matrix[2][2] - matrix[0][0] - matrix[1][1]).sqrt() * 2.0;
-    quat_normalize([
-        (matrix[0][2] + matrix[2][0]) / root,
-        (matrix[1][2] + matrix[2][1]) / root,
-        0.25 * root,
-        (matrix[1][0] - matrix[0][1]) / root,
-    ])
-}
-
-fn target_world_transforms(
-    target: &SkinData,
-) -> Result<Vec<MotionTransform>, BvhError> {
-    let mut transforms = vec![None; target.nodes.len()];
-    for index in 0..target.nodes.len() {
-        resolve_target_world(target, index, &mut transforms)?;
-    }
-    transforms
-        .into_iter()
-        .map(|transform| {
-            transform.ok_or_else(|| {
-                BvhError::Mapping(
-                    "target world transform is missing".to_owned(),
-                )
-            })
-        })
-        .collect()
-}
-
-fn resolve_target_world(
-    target: &SkinData,
-    index: usize,
-    transforms: &mut [Option<MotionTransform>],
-) -> Result<MotionTransform, BvhError> {
-    if let Some(transform) = transforms.get(index).and_then(|value| *value) {
-        return Ok(transform);
-    }
-    let node = target.nodes.get(index).ok_or_else(|| {
-        BvhError::Mapping("target node index is invalid".to_owned())
-    })?;
-    let local = MotionTransform {
-        position: node.translation,
-        rotation: quat_normalize(node.rotation),
-        scale: node.scale,
-    };
-    let world = if let Some(parent) = node.parent {
-        let parent_world = resolve_target_world(target, parent, transforms)?;
-        MotionTransform {
-            position: add(
-                parent_world.position,
-                quat_rotate(
-                    parent_world.rotation,
-                    multiply_vec3(parent_world.scale, local.position),
-                ),
-            ),
-            rotation: quat_normalize(quat_mul(
-                parent_world.rotation,
-                local.rotation,
-            )),
-            scale: multiply_vec3(parent_world.scale, local.scale),
-        }
-    } else {
-        local
-    };
-    transforms[index] = Some(world);
-    Ok(world)
-}
-
 fn axis_quaternion(axis: [f32; 3], radians: f32) -> [f32; 4] {
     let half = radians * 0.5;
     let (sin, cos) = half.sin_cos();
@@ -786,20 +507,6 @@ fn quat_mul(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
     ]
 }
 
-fn quat_inverse(q: [f32; 4]) -> [f32; 4] {
-    let length = q.iter().map(|value| value * value).sum::<f32>();
-    if length <= f32::EPSILON {
-        identity_quaternion()
-    } else {
-        [
-            -q[0] / length,
-            -q[1] / length,
-            -q[2] / length,
-            q[3] / length,
-        ]
-    }
-}
-
 fn quat_normalize(q: [f32; 4]) -> [f32; 4] {
     let length = q.iter().map(|value| value * value).sum::<f32>().sqrt();
     if length <= f32::EPSILON || !length.is_finite() {
@@ -810,15 +517,24 @@ fn quat_normalize(q: [f32; 4]) -> [f32; 4] {
 }
 
 fn quat_rotate(q: [f32; 4], vector: [f32; 3]) -> [f32; 3] {
-    let rotated = quat_mul(
-        quat_mul(q, [vector[0], vector[1], vector[2], 0.0]),
-        quat_inverse(q),
-    );
-    [rotated[0], rotated[1], rotated[2]]
+    let q = quat_normalize(q);
+    let q_vector = [q[0], q[1], q[2]];
+    let twice_cross = multiply_scalar(cross(q_vector, vector), 2.0);
+    add(
+        vector,
+        add(
+            multiply_scalar(twice_cross, q[3]),
+            cross(q_vector, twice_cross),
+        ),
+    )
 }
 
 fn add(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
     [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
+}
+
+fn multiply_scalar(value: [f32; 3], scalar: f32) -> [f32; 3] {
+    [value[0] * scalar, value[1] * scalar, value[2] * scalar]
 }
 
 fn multiply_vec3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
@@ -865,9 +581,15 @@ impl<'a> Tokenizer<'a> {
 
     fn next_f32(&mut self, label: &str) -> Result<f32, BvhError> {
         let token = self.next_required(label)?;
-        token
-            .parse()
-            .map_err(|_| BvhError::Parse(format!("invalid {label}: {token}")))
+        let value = token.parse::<f32>().map_err(|_| {
+            BvhError::Parse(format!("invalid {label}: {token}"))
+        })?;
+        if !value.is_finite() {
+            return Err(BvhError::Parse(format!(
+                "{label} must be finite: {token}"
+            )));
+        }
+        Ok(value)
     }
 
     fn next_usize(&mut self, label: &str) -> Result<usize, BvhError> {

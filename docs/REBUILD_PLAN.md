@@ -162,7 +162,10 @@ UI code must not access the GLB encoder, Accessor parsing details, or BVH file w
 
 ### 6.1 Mapping JSON
 
-The initial format is versioned JSON:
+The current format is versioned Mapping v2 JSON. It identifies every node by
+name, complete hierarchy path, and index, and identifies GLB endpoints by the
+selected Skin and skeleton/file fingerprints. BVH Studio continues to read the
+legacy v1 name-only format and converts it to v2 when names are unique:
 
 ```json
 {
@@ -189,25 +192,29 @@ The initial format is versioned JSON:
 
 Constraints:
 
-- `schema_version` must be present and supported;
-- source joint names must be unique;
+- the v2 schema, version, skeleton fingerprints, axes, units, roots, and Skin
+  selections must match the loaded assets;
+- every node reference must resolve exactly once by name, path, and index;
+- repeated names are supported by v2 but are rejected during v1 conversion;
 - every target node must belong to the selected Skin's joints;
-- one target bone cannot be assigned to multiple source bones;
-- both a source root joint and target root node are required;
-- unmapped source joints leave the target in its Rest Pose;
+- one source or target bone cannot be assigned more than once;
+- both source and target roots are required and mapped hierarchy order must be
+  preserved;
+- every animated source node must be mapped or listed in `ignored_sources`;
 - automatic matching only creates suggestions and never exports directly.
 
 ### 6.2 Rest Pose Delta Retargeting
 
 For every mapped joint:
 
-1. Parse BVH offsets and channels to derive source Rest Pose local and world transforms.
+1. Parse BVH offsets and channels to derive source Rest Pose local and world transforms; the first motion frame is never used as Rest Pose.
 2. Read target GLB nodes and Skin data to derive target Rest Pose local and world transforms.
 3. For each frame, compute the source world-rotation delta relative to the source Rest Pose.
 4. Convert the delta from the source coordinate basis to the target coordinate basis.
 5. Apply the optional `rotation_offset_xyzw` from the Mapping.
 6. Apply the converted delta to the target Rest Pose world rotation.
-7. Convert the result back into target-local TRS and write animation channels.
+7. Convert the result back into target-local TRS using the already-retargeted
+   dynamic parent world rotation and write animation channels.
 
 Non-root joints retarget rotation by default. The root may additionally retarget translation. Root translation uses the source `unit_scale`, with an optional source-to-target skeleton-height scale. Different bone lengths do not directly change target bone lengths.
 
@@ -218,11 +225,15 @@ The initial release supports arbitrary naming and hierarchy for conventional Ski
 - a valid Skin exists;
 - the Skin contains joints;
 - Mesh Primitives contain `JOINTS_0` and `WEIGHTS_0`;
-- the inverse bind matrix count matches the joint count;
+- when inverse bind matrices are present, their count matches the joint count;
 - the target skeleton hierarchy can be reconstructed from node relationships;
 - the target Mesh, Accessor, and animation data can be reparsed by `gltf`.
 
-Missing Skins, invalid weights, fixed company rigid-part structures, and unverifiable compressed geometry must be rejected explicitly.
+Missing Skins, invalid weights, fixed company rigid-part structures, and
+unverifiable skeleton data must be rejected explicitly. Compressed Mesh data
+is retained for export when the skeleton and animation can be validated, but
+it receives a skeleton-only preview warning when the CPU renderer cannot decode
+it.
 
 ## 7. BVH Outputs
 
@@ -230,8 +241,7 @@ Missing Skins, invalid weights, fixed company rigid-part structures, and unverif
 
 - Copy the user-selected target GLB;
 - retain Meshes, Skin, materials, textures, and images;
-- append one user-named animation clip;
-- leave existing animations unchanged unless the user explicitly chooses to replace a same-named clip;
+- replace the target animation list with one generated animation clip;
 - validate Skin data, animation targets, and representative keyframes.
 
 ### Animation Clip
@@ -368,15 +378,18 @@ The current implementation slice is now in place:
   export;
 - BVH Studio has generic hierarchy parsing, frame trimming, versioned Mapping
   JSON loading and saving, mapping validation reports, reviewed name-match
-  suggestions, Rest Pose delta retargeting, frame-stepped skeleton playback,
-  optional redundant-key reduction, and Character Package / Animation Clip
-  GLB export;
+  suggestions, Mapping v2 identity checks, authored Rest Pose delta
+  retargeting, frame-stepped source/target Skin playback, optional
+  Root-Motion and heading controls, Agent prompt handoff, optional redundant-key
+  reduction, and Character Package / Animation Clip GLB export;
+- GLB Editor retargeting supports a selected source animation, a selected
+  source/target Skin pair, Mapping v2 import, target preview, Agent prompt
+  handoff, and one-animation GLB export;
 - the existing egui and three-d Canvas infrastructure remains the preview
   foundation;
 - the bottom dock switches between GLB animation playback and Debug Log while
   reserving the selected panel's area from the 3D Canvas;
-- complete mesh/Skinned standardization baking, optional root-motion and
-  heading controls, broader fixture validation, and optional compressed-
-  geometry support remain planned;
+- complete mesh/Skinned standardization baking, representative Mesh-bound
+  frame comparison, and GPU compressed-geometry preview remain planned;
 - CUBICSPLINE, Morph Target playback, GPU skinning, and skeleton replacement
   remain intentionally deferred.

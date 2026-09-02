@@ -1,6 +1,7 @@
 use crate::app::App;
 use crate::modules::bvh::SuggestionConfidence;
-use crate::modules::glb::TextureSlot;
+use crate::modules::glb::{TextureSlot, UpAxisPreset};
+use crate::modules::ui::skeleton_panel;
 use crate::modules::ui::{
     bottom_panel, fonts,
     menu_bar::{self, MenuAction, Page},
@@ -18,7 +19,10 @@ pub fn render_ui(
         app.fonts_configured = true;
     }
 
-    app.file_tree.handle_dropped_files(ui.ctx());
+    match app.page {
+        Page::GlbEditor => app.file_tree.handle_dropped_files(ui.ctx()),
+        Page::BvhStudio => app.bvh_file_tree.handle_dropped_files(ui.ctx()),
+    }
     app.poll_tasks();
     let actions = menu_bar::render(
         ui,
@@ -33,22 +37,36 @@ pub fn render_ui(
     }
     render_page_tabs(app, ui);
 
-    Panel::left("glb_files")
-        .resizable(true)
-        .default_size(250.0)
-        .min_size(170.0)
-        .show_inside(ui, |ui| {
-            let (changed, preview_path) = app.file_tree.render(ui, &app.i18n);
-            if changed || app.file_tree.take_root_changed() {
-                app.needs_save = true;
-            }
-            if let Some(path) = preview_path {
-                match app.page {
-                    Page::GlbEditor => app.preview_glb(&path),
-                    Page::BvhStudio => app.load_bvh_target(&path),
-                }
-            }
-        });
+    match app.page {
+        Page::GlbEditor => {
+            Panel::left("glb_files")
+                .resizable(true)
+                .default_size(250.0)
+                .min_size(170.0)
+                .show_inside(ui, |ui| {
+                    let (changed, preview_path) =
+                        app.file_tree.render(ui, &app.i18n);
+                    if changed || app.file_tree.take_root_changed() {
+                        app.needs_save = true;
+                    }
+                    if let Some(path) = preview_path {
+                        app.preview_glb(&path);
+                    }
+                });
+        }
+        Page::BvhStudio => {
+            Panel::left("bvh_files")
+                .resizable(true)
+                .default_size(250.0)
+                .min_size(170.0)
+                .show_inside(ui, |ui| {
+                    if let Some(path) = app.bvh_file_tree.render(ui, &app.i18n)
+                    {
+                        app.load_bvh_path(&path);
+                    }
+                });
+        }
+    }
 
     Panel::right("inspector")
         .resizable(true)
@@ -89,6 +107,13 @@ fn render_page_tabs(app: &mut App, ui: &mut three_d::egui::Ui) {
                     .clicked()
                 {
                     app.page = Page::GlbEditor;
+                    if app.glb_retarget_preview_active {
+                        app.exit_glb_retarget_preview();
+                    } else {
+                        app.request_glb_reload(
+                            crate::reload::GlbReloadKind::OpenModel,
+                        );
+                    }
                 }
                 if ui
                     .selectable_label(
@@ -98,6 +123,12 @@ fn render_page_tabs(app: &mut App, ui: &mut three_d::egui::Ui) {
                     .clicked()
                 {
                     app.page = Page::BvhStudio;
+                    app.canvas.show_origin = false;
+                    if app.glb_retarget_preview_active {
+                        app.exit_glb_retarget_preview();
+                    }
+                    app.needs_bvh_target_reload = true;
+                    app.refresh_v2_retarget_mapping();
                 }
             });
         });
@@ -107,6 +138,13 @@ fn render_page_tabs(app: &mut App, ui: &mut three_d::egui::Ui) {
 fn render_glb_inspector(app: &mut App, ui: &mut three_d::egui::Ui) {
     use three_d::egui::*;
     ui.heading(app.i18n.tr("page.glb_editor"));
+    if app.glb_retarget_preview_active {
+        ui.colored_label(Color32::LIGHT_BLUE, "Retarget preview is active");
+        if ui.button("Exit retarget preview").clicked() {
+            app.exit_glb_retarget_preview();
+        }
+        skeleton_panel::render(app, ui, false);
+    }
     let Some(document) = app.glb.as_ref() else {
         ui.label(app.i18n.tr("glb.open_hint"));
         return;
@@ -168,6 +206,33 @@ fn render_glb_inspector(app: &mut App, ui: &mut three_d::egui::Ui) {
     ui.collapsing(orientation_label, |ui| {
         ui.label(app.i18n.tr("glb.orientation_hint"));
         ui.label(app.i18n.tr("glb.preview_hint"));
+        let up_axis_label = app.i18n.tr("glb.up_axis").to_owned();
+        let selected_text = match UpAxisPreset::from_correction_euler_degrees(
+            app.orientation_euler_degrees,
+        ) {
+            Some(preset) => app.i18n.tr(preset.label_key()),
+            None => app.i18n.tr("glb.up_axis.custom"),
+        }
+        .to_owned();
+        ComboBox::from_label(up_axis_label)
+            .selected_text(selected_text)
+            .show_ui(ui, |ui| {
+                for preset in UpAxisPreset::ALL {
+                    let label = app.i18n.tr(preset.label_key());
+                    let is_selected =
+                        UpAxisPreset::from_correction_euler_degrees(
+                            app.orientation_euler_degrees,
+                        ) == Some(preset);
+                    if ui.selectable_label(is_selected, label).clicked() {
+                        app.orientation_euler_degrees =
+                            preset.correction_euler_degrees();
+                        app.mark_root_preview_dirty();
+                        app.log.append(&format!(
+                            "[glb_editor] Applied up-axis preset {preset:?}"
+                        ));
+                    }
+                }
+            });
         for (label, index) in [("X", 0), ("Y", 1), ("Z", 2)] {
             ui.horizontal(|ui| {
                 ui.label(label);
@@ -188,6 +253,11 @@ fn render_glb_inspector(app: &mut App, ui: &mut three_d::egui::Ui) {
         if ui.button(app.i18n.tr("glb.reset_rotation")).clicked() {
             app.reset_root_orientation();
         }
+        ui.checkbox(
+            &mut app.bake_root_transform,
+            app.i18n.tr("glb.bake_root_transform"),
+        );
+        ui.label(app.i18n.tr("glb.bake_root_transform_hint"));
     });
 
     let transform_label = app.i18n.tr("glb.transform").to_owned();
@@ -380,6 +450,96 @@ fn render_glb_inspector(app: &mut App, ui: &mut three_d::egui::Ui) {
     });
 
     ui.separator();
+    ui.collapsing("Animation retargeting", |ui| {
+        ui.label("Retarget the selected source animation onto a user-selected GLB Skin.");
+        if ui.button("Choose target GLB").clicked() {
+            app.import_glb_retarget_target();
+        }
+        if let Some(path) = app.glb_retarget_target_path.as_ref() {
+            ui.label(path.display().to_string());
+        } else {
+            ui.label("No retarget target selected");
+        }
+        if let Some(target) = app.glb_retarget_target.as_ref() {
+            let target_summary = target.summary();
+            let source_skin_count = app.glb.as_ref().map(|source| source.summary().skins).unwrap_or(0);
+            if target_summary.skins > 0 && source_skin_count > 0 {
+                let mut changed = false;
+                ComboBox::from_label("Source Skin")
+                    .selected_text(app.retarget_source_skin_index.to_string())
+                    .show_ui(ui, |ui| {
+                        for index in 0..source_skin_count {
+                            changed |= ui.selectable_value(
+                                &mut app.retarget_source_skin_index,
+                                index,
+                                format!("Skin {index}"),
+                            ).changed();
+                        }
+                    });
+                ComboBox::from_label("Target Skin")
+                    .selected_text(app.retarget_target_skin_index.to_string())
+                    .show_ui(ui, |ui| {
+                        for index in 0..target_summary.skins {
+                            changed |= ui.selectable_value(
+                                &mut app.retarget_target_skin_index,
+                                index,
+                                format!("Skin {index}"),
+                            ).changed();
+                        }
+                    });
+                if changed {
+                    app.refresh_glb_retarget_mapping();
+                }
+            }
+        }
+        ui.checkbox(&mut app.retarget_root_motion, "Root motion");
+        ui.checkbox(
+            &mut app.retarget_normalize_initial_heading,
+            "Normalize initial heading",
+        );
+        let mut root_scale_changed = false;
+        if let Some(mapping) = app.retarget_mapping.as_mut() {
+            if let Some(root_motion) = mapping.root_motion.as_mut() {
+                ui.horizontal(|ui| {
+                    ui.label("Root translation scale");
+                    root_scale_changed = ui
+                        .add(
+                            DragValue::new(&mut root_motion.translation_scale)
+                                .range(0.0001..=1000.0)
+                                .speed(0.01),
+                        )
+                        .changed();
+                });
+            }
+        }
+        if root_scale_changed {
+            app.refresh_glb_retarget_mapping();
+        }
+        if ui.button("Import Mapping").clicked() {
+            app.import_mapping();
+        }
+        if ui.button("Export Agent Mapping Prompt").clicked() {
+            app.export_glb_retarget_agent_prompt();
+        }
+        if ui.button("Preview retargeted animation").clicked() {
+            app.preview_glb_retarget();
+        }
+        if ui.button("Export retargeted GLB").clicked() {
+            app.export_glb_retarget();
+        }
+        if let Some(report) = app.retarget_validation.as_ref() {
+            if report.is_valid() {
+                ui.colored_label(Color32::LIGHT_GREEN, "Mapping v2 valid");
+            } else {
+                ui.colored_label(Color32::YELLOW, "Mapping v2 invalid");
+                for error in report.errors.iter().take(4) {
+                    ui.label(error);
+                }
+            }
+        }
+    });
+
+    ui.separator();
     if ui.button(app.i18n.tr("glb.standardize")).clicked() {
         app.standardize();
     }
@@ -407,6 +567,17 @@ fn render_named_items(
 fn render_bvh_inspector(app: &mut App, ui: &mut three_d::egui::Ui) {
     use three_d::egui::*;
     ui.heading(app.i18n.tr("page.bvh_studio"));
+    ui.horizontal(|ui| {
+        ui.checkbox(
+            &mut app.canvas.show_source_skeleton,
+            "Source BVH skeleton",
+        );
+        ui.checkbox(
+            &mut app.canvas.show_target_skeleton,
+            "Target Skin skeleton",
+        );
+    });
+    skeleton_panel::render(app, ui, true);
     if let Some(document) = app.bvh.as_ref() {
         Grid::new("bvh_summary").num_columns(2).show(ui, |ui| {
             for (label, value) in [
@@ -503,7 +674,17 @@ fn render_bvh_inspector(app: &mut App, ui: &mut three_d::egui::Ui) {
         ui.label(app.i18n.tr("bvh.open_hint"));
     }
     ui.separator();
-    ui.label(app.i18n.tr("bvh.target_glb"));
+    ui.horizontal(|ui| {
+        ui.label(app.i18n.tr("bvh.target_glb"));
+        if ui.button("Choose target GLB").clicked() {
+            if let Some(path) = rfd::FileDialog::new()
+                .add_filter("GLB", &["glb"])
+                .pick_file()
+            {
+                app.load_bvh_target(&path);
+            }
+        }
+    });
     if let Some(path) = &app.bvh_target_path {
         ui.label(path.display().to_string());
         if let Some(target) = app.bvh_target_glb.as_ref() {
@@ -520,6 +701,176 @@ fn render_bvh_inspector(app: &mut App, ui: &mut three_d::egui::Ui) {
         ui.label(app.i18n.tr("bvh.no_target_glb"));
     }
     ui.label(app.i18n.tr("bvh.target_hint"));
+    let mut axes_changed = false;
+    ComboBox::from_label("BVH up axis")
+        .selected_text(app.bvh_up_axis.clone())
+        .show_ui(ui, |ui| {
+            for axis in ["+X", "-X", "+Y", "-Y", "+Z", "-Z"] {
+                axes_changed |= ui
+                    .selectable_value(
+                        &mut app.bvh_up_axis,
+                        axis.to_owned(),
+                        axis,
+                    )
+                    .changed();
+            }
+        });
+    ComboBox::from_label("BVH forward axis")
+        .selected_text(app.bvh_forward_axis.clone())
+        .show_ui(ui, |ui| {
+            for axis in ["+X", "-X", "+Y", "-Y", "+Z", "-Z"] {
+                axes_changed |= ui
+                    .selectable_value(
+                        &mut app.bvh_forward_axis,
+                        axis.to_owned(),
+                        axis,
+                    )
+                    .changed();
+            }
+        });
+    ComboBox::from_label("BVH unit")
+        .selected_text(app.bvh_unit.clone())
+        .show_ui(ui, |ui| {
+            for unit in ["m", "cm", "mm"] {
+                axes_changed |= ui
+                    .selectable_value(&mut app.bvh_unit, unit.to_owned(), unit)
+                    .changed();
+            }
+        });
+    let unit_shortcut = app.bvh_unit.clone();
+    let bvh_diagnostic = app
+        .bvh
+        .as_ref()
+        .and_then(|document| app.bvh_span_diagnostic(document).ok());
+    if let Some((raw_span, converted_span)) = bvh_diagnostic {
+        ui.label(format!(
+            "Raw span: {:.4} / Converted span: {:.4} m",
+            raw_span, converted_span
+        ));
+        if converted_span < 0.05 || converted_span > 100.0 {
+            let hint = if converted_span < 0.05 {
+                "Try Use m if this file stores metre offsets."
+            } else {
+                "Try Use cm or Use mm if this file stores smaller offsets."
+            };
+            ui.colored_label(
+                Color32::YELLOW,
+                format!(
+                    "Current unit produces a {:.3} m skeleton. {hint}",
+                    converted_span,
+                ),
+            );
+        }
+        ui.horizontal(|ui| {
+            for unit in ["m", "cm", "mm"] {
+                if ui.button(format!("Use {unit}")).clicked()
+                    && unit_shortcut != unit
+                {
+                    app.set_bvh_unit_from_ui(unit);
+                }
+            }
+        });
+    }
+    if axes_changed {
+        let up_axis = app.bvh_up_axis.clone();
+        let forward_axis = app.bvh_forward_axis.clone();
+        let unit = app.bvh_unit.clone();
+        if let Some(mapping) = app.retarget_mapping.as_mut() {
+            if mapping.source.kind == crate::modules::retarget::SourceKind::Bvh
+            {
+                mapping.source.up_axis = up_axis;
+                mapping.source.forward_axis = forward_axis;
+                mapping.source.unit = unit;
+            }
+        }
+        if let Some(mapping) = app.mapping.as_mut() {
+            mapping.source.up_axis = app.bvh_up_axis.clone();
+            mapping.source.forward_axis = app.bvh_forward_axis.clone();
+            mapping.source.unit = app.bvh_unit.clone();
+        }
+        app.refresh_v2_retarget_mapping();
+        app.needs_bvh_skeleton_reload = true;
+        app.bvh_camera_focus_pending = true;
+        app.needs_bvh_target_reload = true;
+    }
+    if let Some(target) = app.bvh_target_glb.as_ref() {
+        let summary = target.summary();
+        if summary.skins > 0 {
+            let mut skin_changed = false;
+            ComboBox::from_label("Target Skin")
+                .selected_text(app.retarget_target_skin_index.to_string())
+                .show_ui(ui, |ui| {
+                    for index in 0..summary.skins {
+                        skin_changed |= ui
+                            .selectable_value(
+                                &mut app.retarget_target_skin_index,
+                                index,
+                                format!("Skin {index}"),
+                            )
+                            .changed();
+                    }
+                });
+            if skin_changed {
+                app.refresh_retarget_plan();
+                app.refresh_v2_retarget_mapping();
+                app.needs_bvh_target_reload = true;
+            }
+        }
+    }
+    if ui
+        .checkbox(&mut app.retarget_root_motion, "Root motion")
+        .changed()
+        || ui
+            .checkbox(
+                &mut app.retarget_normalize_initial_heading,
+                "Normalize initial heading",
+            )
+            .changed()
+    {
+        app.needs_bvh_target_reload = true;
+    }
+    let mut root_scale_changed = false;
+    if let Some(mapping) = app.retarget_mapping.as_mut() {
+        if let Some(root_motion) = mapping.root_motion.as_mut() {
+            ui.horizontal(|ui| {
+                ui.label("Root translation scale");
+                root_scale_changed = ui
+                    .add(
+                        DragValue::new(&mut root_motion.translation_scale)
+                            .range(0.0001..=1000.0)
+                            .speed(0.01),
+                    )
+                    .changed();
+            });
+        }
+    }
+    if root_scale_changed {
+        app.refresh_v2_retarget_mapping();
+        app.needs_bvh_target_reload = true;
+    }
+    ui.horizontal(|ui| {
+        if ui.button("Import Mapping").clicked() {
+            app.import_mapping();
+        }
+        if ui.button("Export Agent Mapping Prompt").clicked() {
+            app.export_retarget_agent_prompt();
+        }
+    });
+    if let Some(report) = app.retarget_validation.as_ref() {
+        ui.separator();
+        ui.label("Mapping v2 validation");
+        if report.is_valid() {
+            ui.colored_label(Color32::LIGHT_GREEN, "Valid");
+        } else {
+            ui.colored_label(Color32::YELLOW, "Invalid");
+        }
+        for error in report.errors.iter().take(6) {
+            ui.label(error);
+        }
+        for warning in report.warnings.iter().take(4) {
+            ui.colored_label(Color32::YELLOW, format!("Warning: {warning}"));
+        }
+    }
     ui.separator();
     ui.label(app.i18n.tr("bvh.mapping"));
     if let Some(path) = &app.mapping_path {
