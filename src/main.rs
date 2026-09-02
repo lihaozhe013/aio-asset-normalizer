@@ -8,6 +8,7 @@ mod app_preview;
 mod app_retarget;
 mod app_retarget_prompt;
 mod app_ui;
+mod build_info;
 mod modules;
 mod reload;
 mod window;

@@ -198,4 +198,7 @@ cargo check
 cargo test
 ```
 
+Platform packaging commands are documented in
+[`packaging/README.md`](packaging/README.md).
+
 The project is licensed under the MIT License.

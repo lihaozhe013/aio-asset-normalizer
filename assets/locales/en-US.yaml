@@ -163,6 +163,8 @@ preferences:
 about:
   title: "About AIO Asset Normalizer"
   github: "GitHub"
+  version: "Version"
+  commit: "Commit"
 converter:
   hint: "Batch-convert FBX, OBJ, and Blend files to standardized GLB using a local Blender installation."
   blender_path: "Blender:"

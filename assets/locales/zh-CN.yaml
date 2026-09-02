@@ -163,6 +163,8 @@ preferences:
 about:
   title: "关于 AIO Asset Normalizer"
   github: "GitHub"
+  version: "版本"
+  commit: "提交"
 converter:
   hint: "使用本机 Blender 将 FBX、OBJ、Blend 文件批量转换为标准 GLB。"
   blender_path: "Blender："

@@ -1,4 +1,4 @@
-use crate::app::App;
+use crate::{app::App, build_info};
 
 pub fn render(app: &mut App, ctx: &three_d::egui::Context) {
     use three_d::egui::*;
@@ -50,8 +50,17 @@ pub fn render(app: &mut App, ctx: &three_d::egui::Context) {
                             );
                         });
                 });
-                ui.heading("AIO Asset Normalizer");
-                ui.label(format!("v{}", env!("CARGO_PKG_VERSION")));
+                ui.heading(build_info::APP_NAME);
+                ui.label(format!(
+                    "{}: v{}",
+                    app.i18n.tr("about.version"),
+                    build_info::APP_VERSION
+                ));
+                ui.monospace(format!(
+                    "{}: {}",
+                    app.i18n.tr("about.commit"),
+                    build_info::GIT_COMMIT
+                ));
                 ui.separator();
                 ui.label(app.i18n.tr("label.description"));
             });
