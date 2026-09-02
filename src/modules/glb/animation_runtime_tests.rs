@@ -1,6 +1,126 @@
 use super::*;
 use std::borrow::Cow;
 
+fn meshless_hierarchy_glb(
+    include_skin: bool,
+    animation_interpolation: Option<&str>,
+) -> Vec<u8> {
+    let mut bin = Vec::new();
+    if animation_interpolation.is_some() {
+        for value in [0.0_f32, 1.0] {
+            bin.extend_from_slice(&value.to_le_bytes());
+        }
+        let half_turn = std::f32::consts::FRAC_1_SQRT_2;
+        for value in [0.0_f32, 0.0, 0.0, 1.0, 0.0, 0.0, half_turn, half_turn] {
+            bin.extend_from_slice(&value.to_le_bytes());
+        }
+    }
+    let mut json = serde_json::json!({
+        "asset": {"version": "2.0"},
+        "scene": 0,
+        "scenes": [{"nodes": [0]}],
+        "nodes": [
+            {"name": "Root", "children": [1]},
+            {"name": "Spine", "translation": [0.0, 1.0, 0.0], "children": [2]},
+            {"name": "Hand", "translation": [0.0, 1.0, 0.0]},
+            {"name": "OutsideScene"}
+        ]
+    });
+    if include_skin {
+        json["skins"] = serde_json::json!([{"name": "Rig", "joints": [2]}]);
+    }
+    if animation_interpolation.is_some() {
+        json["buffers"] = serde_json::json!([{"byteLength": bin.len()}]);
+        json["bufferViews"] = serde_json::json!([
+            {"buffer": 0, "byteOffset": 0, "byteLength": 8},
+            {"buffer": 0, "byteOffset": 8, "byteLength": 32}
+        ]);
+        json["accessors"] = serde_json::json!([
+            {"bufferView": 0, "componentType": 5126, "count": 2, "type": "SCALAR", "min": [0.0], "max": [1.0]},
+            {"bufferView": 1, "componentType": 5126, "count": 2, "type": "VEC4"}
+        ]);
+        json["animations"] = serde_json::json!([{
+            "name": "Wave",
+            "samplers": [{
+                "input": 0,
+                "output": 1,
+                "interpolation": animation_interpolation.unwrap()
+            }],
+            "channels": [{"sampler": 0, "target": {"node": 1, "path": "rotation"}}]
+        }]);
+    }
+    let mut json_bytes = serde_json::to_vec(&json).unwrap();
+    while !json_bytes.len().is_multiple_of(4) {
+        json_bytes.push(b' ');
+    }
+    while !bin.len().is_multiple_of(4) {
+        bin.push(0);
+    }
+    gltf::binary::Glb {
+        header: gltf::binary::Header {
+            magic: *b"glTF",
+            version: 2,
+            length: 0,
+        },
+        json: Cow::Owned(json_bytes),
+        bin: (!bin.is_empty()).then_some(Cow::Owned(bin)),
+    }
+    .to_vec()
+    .unwrap()
+}
+
+#[test]
+fn meshless_runtime_uses_first_scene_nodes_and_samples_animation() {
+    let bytes = meshless_hierarchy_glb(false, Some("LINEAR"));
+    let runtime = AnimationRuntime::from_bytes(&bytes, None).unwrap();
+
+    assert!(runtime.primitives.is_empty());
+    assert!(!runtime.preview_uses_skin());
+    assert_eq!(runtime.preview_skeleton_nodes(), vec![0, 1, 2]);
+
+    let rest = runtime.rest_node_poses().unwrap();
+    assert_eq!(rest[0].world_translation, [0.0, 0.0, 0.0]);
+    assert_eq!(rest[1].world_translation, [0.0, 1.0, 0.0]);
+    assert_eq!(rest[2].world_translation, [0.0, 2.0, 0.0]);
+
+    let pose = runtime.sample(0, 1.0).unwrap();
+    assert_eq!(pose.node_poses.len(), 4);
+    assert!((pose.node_poses[2].world_translation[0] + 1.0).abs() < 1e-5);
+    assert!((pose.node_poses[2].world_translation[1] - 1.0).abs() < 1e-5);
+}
+
+#[test]
+fn meshless_runtime_prefers_skin_joints_and_includes_ancestors() {
+    let bytes = meshless_hierarchy_glb(true, None);
+    let runtime = AnimationRuntime::from_bytes(&bytes, None).unwrap();
+
+    assert!(runtime.preview_uses_skin());
+    assert_eq!(runtime.preview_skeleton_nodes(), vec![0, 1, 2]);
+}
+
+#[test]
+fn static_meshless_runtime_exposes_rest_pose_without_animation() {
+    let bytes = meshless_hierarchy_glb(false, None);
+    let runtime = AnimationRuntime::from_bytes(&bytes, None).unwrap();
+
+    assert!(runtime.clips.is_empty());
+    assert_eq!(runtime.rest_node_poses().unwrap().len(), 4);
+    assert_eq!(runtime.preview_skeleton_nodes(), vec![0, 1, 2]);
+}
+
+#[test]
+fn unsupported_meshless_animation_keeps_rest_pose_available() {
+    let bytes = meshless_hierarchy_glb(false, Some("CUBICSPLINE"));
+    let runtime = AnimationRuntime::from_bytes(&bytes, None).unwrap();
+
+    assert!(!runtime.clips[0].is_playable());
+    assert!(runtime.rest_node_poses().is_ok());
+    assert!(matches!(
+        runtime.sample_nodes(0, 0.0),
+        Err(RuntimeError::Unsupported(_))
+    ));
+}
+
 #[test]
 fn linear_and_step_curves_sample_expected_values() {
     let linear = AnimationCurve {

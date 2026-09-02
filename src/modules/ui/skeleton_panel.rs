@@ -1,12 +1,18 @@
 use crate::app::App;
 use crate::modules::viewport::skeleton_visual::SkeletonDisplayMode;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SkeletonPanelContext {
+    Bvh { include_source_fit: bool },
+    Glb,
+}
+
 /// Render the shared skeleton display controls used by BVH Studio and GLB
-/// retarget previews. The source fit button is hidden for GLB-only previews.
+/// previews. Fit controls depend on the active preview context.
 pub fn render(
     app: &mut App,
     ui: &mut three_d::egui::Ui,
-    include_source_fit: bool,
+    context: SkeletonPanelContext,
 ) {
     use three_d::egui::*;
 
@@ -42,16 +48,35 @@ pub fn render(
             Slider::new(&mut config.width_scale, 0.25..=3.0).text("Bone width"),
         );
         ui.horizontal(|ui| {
+            let include_source_fit = matches!(
+                context,
+                SkeletonPanelContext::Bvh {
+                    include_source_fit: true
+                }
+            );
             if include_source_fit && ui.button("Fit source").clicked() {
                 if let Some((minimum, maximum)) = app.canvas.skeleton_bounds() {
                     app.camera.focus_on_bounds(minimum, maximum);
                 }
             }
-            if ui.button("Fit target").clicked() {
-                if let Some((minimum, maximum)) =
-                    app.canvas.target_skeleton_bounds()
-                {
-                    app.camera.focus_on_bounds(minimum, maximum);
+            match context {
+                SkeletonPanelContext::Bvh { .. } => {
+                    if ui.button("Fit target").clicked() {
+                        if let Some((minimum, maximum)) =
+                            app.canvas.target_skeleton_bounds()
+                        {
+                            app.camera.focus_on_bounds(minimum, maximum);
+                        }
+                    }
+                }
+                SkeletonPanelContext::Glb => {
+                    if ui.button("Fit skeleton").clicked() {
+                        if let Some((minimum, maximum)) =
+                            app.canvas.glb_skeleton_bounds()
+                        {
+                            app.camera.focus_on_bounds(minimum, maximum);
+                        }
+                    }
                 }
             }
             if ui.button("Fit all").clicked() {
@@ -60,10 +85,23 @@ pub fn render(
                 } else {
                     None
                 };
-                if let Some((minimum, maximum)) =
-                    app.canvas.target_skeleton_bounds()
-                {
-                    bounds = Some(merge_bounds(bounds, (minimum, maximum)));
+                match context {
+                    SkeletonPanelContext::Bvh { .. } => {
+                        if let Some((minimum, maximum)) =
+                            app.canvas.target_skeleton_bounds()
+                        {
+                            bounds =
+                                Some(merge_bounds(bounds, (minimum, maximum)));
+                        }
+                    }
+                    SkeletonPanelContext::Glb => {
+                        if let Some((minimum, maximum)) =
+                            app.canvas.glb_skeleton_bounds()
+                        {
+                            bounds =
+                                Some(merge_bounds(bounds, (minimum, maximum)));
+                        }
+                    }
                 }
                 if let Some((minimum, maximum)) = app.canvas.model_bounds() {
                     bounds = Some(merge_bounds(bounds, (minimum, maximum)));

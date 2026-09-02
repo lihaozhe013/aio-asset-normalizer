@@ -1,6 +1,6 @@
 //! Runtime sampling and CPU skinning for GLB animation preview.
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::fmt;
 use std::fs;
 use std::path::Path;
@@ -144,6 +144,7 @@ pub struct RuntimePrimitive {
 #[derive(Debug, Clone)]
 pub struct RuntimePose {
     pub node_world: Vec<Matrix4>,
+    pub node_poses: Vec<RuntimeNodePose>,
     pub skinned_positions: Vec<Option<Vec<[f32; 3]>>>,
     pub skinned_normals: Vec<Option<Vec<[f32; 3]>>>,
     pub skinned_tangents: Vec<Option<Vec<[f32; 4]>>>,
@@ -155,6 +156,13 @@ pub struct AnimationRuntime {
     pub skins: Vec<RuntimeSkin>,
     pub primitives: Vec<RuntimePrimitive>,
     pub clips: Vec<AnimationClip>,
+    scene_nodes: Vec<usize>,
+}
+
+#[derive(Debug, Clone)]
+struct SampledNodeState {
+    node_world: Vec<Matrix4>,
+    node_poses: Vec<RuntimeNodePose>,
 }
 
 #[derive(Debug)]
@@ -317,7 +325,9 @@ impl AnimationRuntime {
         let scene = document.scenes().next().ok_or_else(|| {
             RuntimeError::Invalid("GLB has no scenes".to_owned())
         })?;
+        let mut scene_nodes = Vec::new();
         for node in scene.nodes() {
+            collect_scene_nodes(&node, &mut scene_nodes);
             if decode_primitives {
                 collect_primitives(node, &get_buffer_data, &mut primitives)?;
             }
@@ -333,7 +343,50 @@ impl AnimationRuntime {
             skins,
             primitives,
             clips,
+            scene_nodes,
         })
+    }
+
+    /// Return the nodes that should be represented by the editor's skeleton
+    /// fallback. A non-empty Skin is authoritative; otherwise the complete
+    /// first-scene node hierarchy is used because a meshless node hierarchy
+    /// has no stronger skeleton marker.
+    pub fn preview_skeleton_nodes(&self) -> Vec<usize> {
+        let seeds = self
+            .skins
+            .iter()
+            .find(|skin| !skin.joints.is_empty())
+            .map(|skin| skin.joints.as_slice());
+        let mut selected = BTreeSet::new();
+        if let Some(seeds) = seeds {
+            for &seed in seeds {
+                let mut current = Some(seed);
+                let mut visited = HashSet::new();
+                while let Some(index) = current {
+                    if index >= self.nodes.len() || !visited.insert(index) {
+                        break;
+                    }
+                    selected.insert(index);
+                    current = self.nodes[index].parent;
+                }
+            }
+        } else {
+            selected.extend(self.scene_nodes.iter().copied());
+        }
+        selected.into_iter().collect()
+    }
+
+    pub fn preview_uses_skin(&self) -> bool {
+        self.skins.iter().any(|skin| !skin.joints.is_empty())
+    }
+
+    /// Resolve the authored node hierarchy without requiring an animation
+    /// clip. This is used for static meshless GLBs and as skeleton display
+    /// calibration for animated GLBs.
+    pub fn rest_node_poses(
+        &self,
+    ) -> Result<Vec<RuntimeNodePose>, RuntimeError> {
+        Ok(self.sample_node_state(None, 0.0)?.node_poses)
     }
 
     /// Sample only node transforms.  This is intentionally independent from
@@ -344,104 +397,7 @@ impl AnimationRuntime {
         clip_index: usize,
         time: f32,
     ) -> Result<Vec<RuntimeNodePose>, RuntimeError> {
-        let clip = self.clips.get(clip_index).ok_or_else(|| {
-            RuntimeError::Invalid(format!(
-                "Animation {clip_index} does not exist"
-            ))
-        })?;
-        if !clip.is_playable() {
-            return Err(RuntimeError::Unsupported(clip.unsupported.join(", ")));
-        }
-        if !time.is_finite() {
-            return Err(RuntimeError::Invalid(
-                "Animation sample time must be finite".to_owned(),
-            ));
-        }
-        let sample_time = if clip.duration > f32::EPSILON {
-            time.clamp(0.0, clip.duration)
-        } else {
-            0.0
-        };
-        let mut translations = self
-            .nodes
-            .iter()
-            .map(|node| node.translation)
-            .collect::<Vec<_>>();
-        let mut rotations = self
-            .nodes
-            .iter()
-            .map(|node| node.rotation)
-            .collect::<Vec<_>>();
-        let mut scales =
-            self.nodes.iter().map(|node| node.scale).collect::<Vec<_>>();
-        for channel in &clip.channels {
-            if channel.node >= self.nodes.len() {
-                return Err(RuntimeError::Invalid(format!(
-                    "Animation channel references missing node {}",
-                    channel.node
-                )));
-            }
-            validate_curve(&channel.curve)?;
-            let value = channel.curve.sample(sample_time);
-            if !finite_vec4(value) {
-                return Err(RuntimeError::Invalid(
-                    "Animation sample contains non-finite values".to_owned(),
-                ));
-            }
-            match channel.curve.path {
-                AnimationPath::Translation => {
-                    translations[channel.node] = [value[0], value[1], value[2]]
-                }
-                AnimationPath::Rotation => {
-                    rotations[channel.node] = normalize_quaternion(value)
-                }
-                AnimationPath::Scale => {
-                    scales[channel.node] = [value[0], value[1], value[2]]
-                }
-            }
-        }
-        let locals = (0..self.nodes.len())
-            .map(|index| RuntimeNodePose {
-                local_translation: translations[index],
-                local_rotation: normalize_quaternion(rotations[index]),
-                local_scale: scales[index],
-                world_translation: [0.0; 3],
-                world_rotation: identity_rotation(),
-                world_scale: [1.0; 3],
-            })
-            .collect::<Vec<_>>();
-        if locals.iter().any(|pose| {
-            !finite_vec3(pose.local_translation)
-                || !finite_vec4(pose.local_rotation)
-                || !finite_vec3(pose.local_scale)
-        }) {
-            return Err(RuntimeError::Invalid(
-                "Animation sample contains non-finite node transforms"
-                    .to_owned(),
-            ));
-        }
-        let mut sampled = vec![None; self.nodes.len()];
-        let mut visiting = vec![false; self.nodes.len()];
-        for index in 0..self.nodes.len() {
-            resolve_node_pose(
-                index,
-                &self.nodes,
-                &locals,
-                &mut sampled,
-                &mut visiting,
-            )?;
-        }
-        sampled
-            .into_iter()
-            .map(|pose| {
-                pose.ok_or_else(|| {
-                    RuntimeError::Invalid(
-                        "node pose resolution did not produce a value"
-                            .to_owned(),
-                    )
-                })
-            })
-            .collect()
+        Ok(self.sample_node_state(Some(clip_index), time)?.node_poses)
     }
 
     pub fn keyframe_times(
@@ -477,77 +433,8 @@ impl AnimationRuntime {
         clip_index: usize,
         time: f32,
     ) -> Result<RuntimePose, RuntimeError> {
-        let clip = self.clips.get(clip_index).ok_or_else(|| {
-            RuntimeError::Invalid(format!(
-                "Animation {clip_index} does not exist"
-            ))
-        })?;
-        if !clip.is_playable() {
-            return Err(RuntimeError::Unsupported(clip.unsupported.join(", ")));
-        }
-        if !time.is_finite() {
-            return Err(RuntimeError::Invalid(
-                "Animation sample time must be finite".to_owned(),
-            ));
-        }
-        let sample_time = if clip.duration > f32::EPSILON {
-            time.clamp(0.0, clip.duration)
-        } else {
-            0.0
-        };
-        let mut translations = self
-            .nodes
-            .iter()
-            .map(|node| node.translation)
-            .collect::<Vec<_>>();
-        let mut rotations = self
-            .nodes
-            .iter()
-            .map(|node| node.rotation)
-            .collect::<Vec<_>>();
-        let mut scales =
-            self.nodes.iter().map(|node| node.scale).collect::<Vec<_>>();
-        for channel in &clip.channels {
-            if channel.node >= self.nodes.len() {
-                return Err(RuntimeError::Invalid(format!(
-                    "Animation channel references missing node {}",
-                    channel.node
-                )));
-            }
-            validate_curve(&channel.curve)?;
-            let value = channel.curve.sample(sample_time);
-            match channel.curve.path {
-                AnimationPath::Translation => {
-                    translations[channel.node] = [value[0], value[1], value[2]]
-                }
-                AnimationPath::Rotation => {
-                    rotations[channel.node] = normalize_quaternion(value)
-                }
-                AnimationPath::Scale => {
-                    scales[channel.node] = [value[0], value[1], value[2]]
-                }
-            }
-        }
-
-        let local = translations
-            .iter()
-            .zip(rotations.iter())
-            .zip(scales.iter())
-            .map(|((translation, rotation), scale)| {
-                compose(*translation, *rotation, *scale)
-            })
-            .collect::<Vec<_>>();
-        let mut node_world = vec![identity(); self.nodes.len()];
-        let mut visiting = vec![false; self.nodes.len()];
-        for index in 0..self.nodes.len() {
-            compute_world(
-                index,
-                &self.nodes,
-                &local,
-                &mut node_world,
-                &mut visiting,
-            )?;
-        }
+        let sampled = self.sample_node_state(Some(clip_index), time)?;
+        let node_world = sampled.node_world;
 
         let skin_matrices = self
             .skins
@@ -657,10 +544,158 @@ impl AnimationRuntime {
 
         Ok(RuntimePose {
             node_world,
+            node_poses: sampled.node_poses,
             skinned_positions,
             skinned_normals,
             skinned_tangents,
         })
+    }
+
+    fn sample_node_state(
+        &self,
+        clip_index: Option<usize>,
+        time: f32,
+    ) -> Result<SampledNodeState, RuntimeError> {
+        let clip = clip_index
+            .map(|index| {
+                self.clips.get(index).ok_or_else(|| {
+                    RuntimeError::Invalid(format!(
+                        "Animation {index} does not exist"
+                    ))
+                })
+            })
+            .transpose()?;
+        if let Some(clip) = clip {
+            if !clip.is_playable() {
+                return Err(RuntimeError::Unsupported(
+                    clip.unsupported.join(", "),
+                ));
+            }
+        }
+        if !time.is_finite() {
+            return Err(RuntimeError::Invalid(
+                "Animation sample time must be finite".to_owned(),
+            ));
+        }
+        let sample_time = clip
+            .filter(|clip| clip.duration > f32::EPSILON)
+            .map(|clip| time.clamp(0.0, clip.duration))
+            .unwrap_or(0.0);
+        let mut translations = self
+            .nodes
+            .iter()
+            .map(|node| node.translation)
+            .collect::<Vec<_>>();
+        let mut rotations = self
+            .nodes
+            .iter()
+            .map(|node| node.rotation)
+            .collect::<Vec<_>>();
+        let mut scales =
+            self.nodes.iter().map(|node| node.scale).collect::<Vec<_>>();
+        if let Some(clip) = clip {
+            for channel in &clip.channels {
+                if channel.node >= self.nodes.len() {
+                    return Err(RuntimeError::Invalid(format!(
+                        "Animation channel references missing node {}",
+                        channel.node
+                    )));
+                }
+                validate_curve(&channel.curve)?;
+                let value = channel.curve.sample(sample_time);
+                if !finite_vec4(value) {
+                    return Err(RuntimeError::Invalid(
+                        "Animation sample contains non-finite values"
+                            .to_owned(),
+                    ));
+                }
+                match channel.curve.path {
+                    AnimationPath::Translation => {
+                        translations[channel.node] =
+                            [value[0], value[1], value[2]]
+                    }
+                    AnimationPath::Rotation => {
+                        rotations[channel.node] = normalize_quaternion(value)
+                    }
+                    AnimationPath::Scale => {
+                        scales[channel.node] = [value[0], value[1], value[2]]
+                    }
+                }
+            }
+        }
+
+        let locals = (0..self.nodes.len())
+            .map(|index| RuntimeNodePose {
+                local_translation: translations[index],
+                local_rotation: normalize_quaternion(rotations[index]),
+                local_scale: scales[index],
+                world_translation: [0.0; 3],
+                world_rotation: identity_rotation(),
+                world_scale: [1.0; 3],
+            })
+            .collect::<Vec<_>>();
+        if locals.iter().any(|pose| {
+            !finite_vec3(pose.local_translation)
+                || !finite_vec4(pose.local_rotation)
+                || !finite_vec3(pose.local_scale)
+        }) {
+            return Err(RuntimeError::Invalid(
+                "Animation sample contains non-finite node transforms"
+                    .to_owned(),
+            ));
+        }
+        let mut sampled = vec![None; self.nodes.len()];
+        let mut visiting = vec![false; self.nodes.len()];
+        for index in 0..self.nodes.len() {
+            resolve_node_pose(
+                index,
+                &self.nodes,
+                &locals,
+                &mut sampled,
+                &mut visiting,
+            )?;
+        }
+        let node_poses = sampled
+            .into_iter()
+            .map(|pose| {
+                pose.ok_or_else(|| {
+                    RuntimeError::Invalid(
+                        "node pose resolution did not produce a value"
+                            .to_owned(),
+                    )
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let local = translations
+            .iter()
+            .zip(rotations.iter())
+            .zip(scales.iter())
+            .map(|((translation, rotation), scale)| {
+                compose(*translation, *rotation, *scale)
+            })
+            .collect::<Vec<_>>();
+        let mut node_world = vec![identity(); self.nodes.len()];
+        let mut visiting = vec![false; self.nodes.len()];
+        for index in 0..self.nodes.len() {
+            compute_world(
+                index,
+                &self.nodes,
+                &local,
+                &mut node_world,
+                &mut visiting,
+            )?;
+        }
+        Ok(SampledNodeState {
+            node_world,
+            node_poses,
+        })
+    }
+}
+
+fn collect_scene_nodes<'a>(node: &gltf::Node<'a>, output: &mut Vec<usize>) {
+    output.push(node.index());
+    for child in node.children() {
+        collect_scene_nodes(&child, output);
     }
 }
 

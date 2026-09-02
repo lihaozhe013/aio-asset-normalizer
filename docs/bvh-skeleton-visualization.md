@@ -1,11 +1,13 @@
 # BVH Skeleton Visualization
 
-BVH Studio and GLB retarget previews share the `SkeletonVisual` renderer. The
-default display is an instanced, Blender-style octahedral bone with separate
-joint and End Site markers. Stick and Lines modes are available for topology
-debugging. Source BVH bones use orange and target Skin bones use cyan.
-The GLB retarget preview exposes the same display mode, visibility, width, and
-fit controls while the ordinary GLB editor view remains unchanged.
+BVH Studio, GLB retarget previews, and GLB Editor previews share the
+`SkeletonVisual` renderer. The default display is an instanced, Blender-style
+octahedral bone with separate joint and End Site markers. Stick and Lines modes
+are available for topology debugging. Source BVH bones use orange and target
+Skin bones use cyan; GLB previews use an amber skeleton. The GLB Editor selects
+the first non-empty Skin's joints plus their ancestors, or the first scene's
+node hierarchy when no valid Skin is present. For a meshless GLB, this skeleton
+is the complete preview object; for a GLB with a Mesh, it is an overlay.
 
 Display dimensions are calibrated from the authored Rest Pose. Sampling a
 different motion frame therefore changes transforms only; it does not change

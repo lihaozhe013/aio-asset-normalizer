@@ -2,7 +2,9 @@ use super::helpers;
 use super::skeleton_visual::{
     SkeletonPose, SkeletonVisual, SkeletonVisualConfig,
 };
-use crate::modules::glb::{AnimationClip, AnimationRuntime};
+use crate::modules::glb::{
+    AnimationClip, AnimationRuntime, RuntimeNode, RuntimeNodePose,
+};
 use crate::modules::preferences::ViewPreferences;
 use std::path::Path;
 use three_d::*;
@@ -13,8 +15,10 @@ pub struct ViewportCanvas {
     pub origin_sphere: Gm<Mesh, ColorMaterial>,
     pub skeleton: Option<SkeletonVisual>,
     pub target_skeleton: Option<SkeletonVisual>,
+    pub glb_skeleton: Option<SkeletonVisual>,
     pub model: Option<Model<PhysicalMaterial>>,
     glb_animation: Option<AnimationRuntime>,
+    glb_skeleton_nodes: Vec<usize>,
     model_base_transforms: Vec<Mat4>,
     animated_node_world: Option<Vec<Mat4>>,
     root_preview_transform: Mat4,
@@ -23,6 +27,7 @@ pub struct ViewportCanvas {
     pub show_origin: bool,
     pub show_source_skeleton: bool,
     pub show_target_skeleton: bool,
+    pub show_glb_skeleton: bool,
     pub skeleton_config: SkeletonVisualConfig,
     ambient_light: AmbientLight,
     directional_light: DirectionalLight,
@@ -36,8 +41,10 @@ impl ViewportCanvas {
             origin_sphere: helpers::build_origin_sphere(context),
             skeleton: None,
             target_skeleton: None,
+            glb_skeleton: None,
             model: None,
             glb_animation: None,
+            glb_skeleton_nodes: Vec::new(),
             model_base_transforms: Vec::new(),
             animated_node_world: None,
             root_preview_transform: Mat4::identity(),
@@ -46,6 +53,7 @@ impl ViewportCanvas {
             show_origin: true,
             show_source_skeleton: true,
             show_target_skeleton: true,
+            show_glb_skeleton: true,
             skeleton_config: SkeletonVisualConfig::default(),
             ambient_light: AmbientLight {
                 intensity: 0.3,
@@ -71,13 +79,80 @@ impl ViewportCanvas {
         self.load_glb_with_runtime(context, path, runtime)
     }
 
+    /// Load a target GLB for BVH or retarget preview without creating the GLB
+    /// Editor's skeleton overlay.
+    pub fn load_glb_for_target_preview(
+        &mut self,
+        context: &Context,
+        path: &Path,
+    ) -> Result<(), String> {
+        let runtime =
+            AnimationRuntime::load(path).map_err(|error| error.to_string())?;
+        self.load_glb_with_runtime_for_target_preview(context, path, runtime)
+    }
+
     pub fn load_glb_with_runtime(
         &mut self,
         context: &Context,
         path: &Path,
         runtime: AnimationRuntime,
     ) -> Result<(), String> {
+        self.load_glb_with_runtime_internal(context, path, runtime, true)
+    }
+
+    /// Load a target preview from a prepared runtime without creating the GLB
+    /// Editor's skeleton overlay.
+    pub fn load_glb_with_runtime_for_target_preview(
+        &mut self,
+        context: &Context,
+        path: &Path,
+        runtime: AnimationRuntime,
+    ) -> Result<(), String> {
+        self.load_glb_with_runtime_internal(context, path, runtime, false)
+    }
+
+    fn load_glb_with_runtime_internal(
+        &mut self,
+        context: &Context,
+        path: &Path,
+        runtime: AnimationRuntime,
+        initialize_skeleton: bool,
+    ) -> Result<(), String> {
         self.clear_glb();
+        let result = self.load_glb_with_runtime_unchecked(
+            context,
+            path,
+            runtime,
+            initialize_skeleton,
+        );
+        if result.is_err() {
+            self.clear_glb();
+        }
+        result
+    }
+
+    fn load_glb_with_runtime_unchecked(
+        &mut self,
+        context: &Context,
+        path: &Path,
+        runtime: AnimationRuntime,
+        initialize_skeleton: bool,
+    ) -> Result<(), String> {
+        let first_playable =
+            runtime.clips.iter().position(AnimationClip::is_playable);
+        let renderable_primitive_count = runtime.primitives.len();
+        self.glb_animation = Some(runtime);
+        if renderable_primitive_count == 0 {
+            if initialize_skeleton {
+                self.initialize_glb_skeleton(context)?;
+            }
+            if let Some(index) = first_playable {
+                self.update_glb_animation(index, 0.0)?;
+            }
+            self.show_origin = false;
+            return Ok(());
+        }
+
         let mut raw = three_d_asset::io::load(&[path])
             .map_err(|e| format!("Asset load error: {}", e))?;
 
@@ -111,17 +186,17 @@ impl ViewportCanvas {
             .as_ref()
             .map(|model| model.len())
             .unwrap_or_default();
-        if render_primitive_count != runtime.primitives.len() {
+        if render_primitive_count != renderable_primitive_count {
             self.model = None;
             return Err(format!(
                 "Preview primitive mapping mismatch: renderer has {}, runtime has {}",
                 render_primitive_count,
-                runtime.primitives.len()
+                renderable_primitive_count
             ));
         }
-        let first_playable =
-            runtime.clips.iter().position(AnimationClip::is_playable);
-        self.glb_animation = Some(runtime);
+        if initialize_skeleton {
+            self.initialize_glb_skeleton(context)?;
+        }
         if let Some(index) = first_playable {
             self.update_glb_animation(index, 0.0)?;
         }
@@ -131,6 +206,8 @@ impl ViewportCanvas {
 
     pub fn clear_glb(&mut self) {
         self.model = None;
+        self.glb_skeleton = None;
+        self.glb_skeleton_nodes.clear();
         self.glb_animation = None;
         self.model_base_transforms.clear();
         self.animated_node_world = None;
@@ -146,11 +223,60 @@ impl ViewportCanvas {
         self.show_origin = false;
     }
 
+    fn initialize_glb_skeleton(
+        &mut self,
+        context: &Context,
+    ) -> Result<(), String> {
+        let (nodes, selected_nodes, rest_poses) = {
+            let runtime = self
+                .glb_animation
+                .as_ref()
+                .ok_or_else(|| "GLB skeleton runtime is missing".to_owned())?;
+            let nodes = runtime.nodes.clone();
+            let selected_nodes = runtime.preview_skeleton_nodes();
+            let rest_poses = runtime
+                .rest_node_poses()
+                .map_err(|error| error.to_string())?;
+            (nodes, selected_nodes, rest_poses)
+        };
+        if selected_nodes.is_empty() {
+            self.clear_glb_skeleton();
+            return Ok(());
+        }
+        let rest_positions = rest_poses
+            .iter()
+            .map(|pose| pose.world_translation)
+            .collect::<Vec<_>>();
+        let pose = skeleton_pose_from_runtime(
+            &nodes,
+            &rest_poses,
+            &selected_nodes,
+            Some(&rest_positions),
+        );
+        if !pose.is_valid() {
+            return Err("GLB skeleton Rest Pose is invalid".to_owned());
+        }
+        self.glb_skeleton_nodes = selected_nodes;
+        let skeleton = self.glb_skeleton.get_or_insert_with(|| {
+            SkeletonVisual::new(
+                context,
+                Srgba::new(255, 190, 80, 255),
+                self.skeleton_config,
+            )
+        });
+        skeleton.set_transformation(self.root_preview_transform);
+        skeleton.update_pose(&pose);
+        Ok(())
+    }
+
     pub fn set_root_preview_transform(
         &mut self,
         transform: Mat4,
     ) -> Result<(), String> {
         self.root_preview_transform = transform;
+        if let Some(skeleton) = self.glb_skeleton.as_mut() {
+            skeleton.set_transformation(transform);
+        }
         if let Some(skeleton) = self.target_skeleton.as_mut() {
             skeleton.set_transformation(transform);
         }
@@ -175,6 +301,24 @@ impl ViewportCanvas {
         let pose = runtime
             .sample(animation_index, time)
             .map_err(|error| error.to_string())?;
+        let animated_node_world = pose
+            .node_world
+            .iter()
+            .copied()
+            .map(matrix_to_mat4)
+            .collect::<Vec<_>>();
+        self.animated_node_world = Some(animated_node_world.clone());
+        if self.glb_skeleton.is_some() {
+            let skeleton_pose = skeleton_pose_from_runtime(
+                &runtime.nodes,
+                &pose.node_poses,
+                &self.glb_skeleton_nodes,
+                None,
+            );
+            if let Some(skeleton) = self.glb_skeleton.as_mut() {
+                skeleton.update_pose(&skeleton_pose);
+            }
+        }
         let Some(model) = self.model.as_mut() else {
             return Ok(());
         };
@@ -184,13 +328,6 @@ impl ViewportCanvas {
                     .to_owned(),
             );
         }
-        let animated_node_world = pose
-            .node_world
-            .iter()
-            .copied()
-            .map(matrix_to_mat4)
-            .collect::<Vec<_>>();
-        self.animated_node_world = Some(animated_node_world.clone());
         let root_preview_transform = self.root_preview_transform;
         for (part, (primitive, positions, normals, tangents)) in
             model.iter_mut().zip(
@@ -309,6 +446,19 @@ impl ViewportCanvas {
         self.skeleton = None;
     }
 
+    pub fn clear_glb_skeleton(&mut self) {
+        self.glb_skeleton = None;
+        self.glb_skeleton_nodes.clear();
+    }
+
+    pub fn has_glb_skeleton(&self) -> bool {
+        self.glb_skeleton.is_some()
+    }
+
+    pub fn is_glb_skeleton_only_preview(&self) -> bool {
+        self.glb_skeleton.is_some() && self.model.is_none()
+    }
+
     pub fn animation_runtime(&self) -> Option<AnimationRuntime> {
         self.glb_animation.clone()
     }
@@ -422,6 +572,9 @@ impl ViewportCanvas {
         if let Some(skeleton) = self.target_skeleton.as_mut() {
             skeleton.set_config(config);
         }
+        if let Some(skeleton) = self.glb_skeleton.as_mut() {
+            skeleton.set_config(config);
+        }
     }
 
     pub fn set_guide_scale(&mut self, context: &Context, height: f32) {
@@ -440,6 +593,14 @@ impl ViewportCanvas {
     pub fn target_skeleton_bounds(&self) -> Option<([f32; 3], [f32; 3])> {
         let bounds = self
             .target_skeleton
+            .as_ref()
+            .and_then(SkeletonVisual::bounds)?;
+        Some(transform_bounds(bounds, self.root_preview_transform))
+    }
+
+    pub fn glb_skeleton_bounds(&self) -> Option<([f32; 3], [f32; 3])> {
+        let bounds = self
+            .glb_skeleton
             .as_ref()
             .and_then(SkeletonVisual::bounds)?;
         Some(transform_bounds(bounds, self.root_preview_transform))
@@ -470,6 +631,9 @@ impl ViewportCanvas {
 
     pub fn preview_bounds(&self) -> Option<([f32; 3], [f32; 3])> {
         let mut bounds = self.skeleton_bounds();
+        if let Some(glb_skeleton) = self.glb_skeleton_bounds() {
+            bounds = Some(merge_bounds(bounds, glb_skeleton));
+        }
         if let Some(target) = self.target_skeleton_bounds() {
             bounds = Some(merge_bounds(bounds, target));
         }
@@ -563,6 +727,28 @@ fn filter_pose(pose: &SkeletonPose, joints: &[usize]) -> SkeletonPose {
     }
 }
 
+fn skeleton_pose_from_runtime(
+    nodes: &[RuntimeNode],
+    node_poses: &[RuntimeNodePose],
+    selected_nodes: &[usize],
+    rest_positions: Option<&[[f32; 3]]>,
+) -> SkeletonPose {
+    let full_pose = SkeletonPose {
+        positions: node_poses
+            .iter()
+            .map(|pose| pose.world_translation)
+            .collect(),
+        world_rotations: node_poses
+            .iter()
+            .map(|pose| pose.world_rotation)
+            .collect(),
+        parents: nodes.iter().map(|node| node.parent).collect(),
+        end_sites: vec![None; node_poses.len()],
+        rest_positions: rest_positions.map(|positions| positions.to_vec()),
+    };
+    filter_pose(&full_pose, selected_nodes)
+}
+
 fn transform_bounds(
     bounds: ([f32; 3], [f32; 3]),
     transform: Mat4,
@@ -612,4 +798,78 @@ fn matrix_to_mat4(matrix: [f32; 16]) -> Mat4 {
         vec4(matrix[8], matrix[9], matrix[10], matrix[11]),
         vec4(matrix[12], matrix[13], matrix[14], matrix[15]),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn runtime_skeleton_pose_keeps_selected_joint_ancestors() {
+        let nodes = vec![
+            RuntimeNode {
+                parent: None,
+                translation: [0.0, 0.0, 0.0],
+                rotation: [0.0, 0.0, 0.0, 1.0],
+                scale: [1.0, 1.0, 1.0],
+            },
+            RuntimeNode {
+                parent: Some(0),
+                translation: [0.0, 1.0, 0.0],
+                rotation: [0.0, 0.0, 0.0, 1.0],
+                scale: [1.0, 1.0, 1.0],
+            },
+            RuntimeNode {
+                parent: None,
+                translation: [4.0, 0.0, 0.0],
+                rotation: [0.0, 0.0, 0.0, 1.0],
+                scale: [1.0, 1.0, 1.0],
+            },
+        ];
+        let poses = vec![
+            RuntimeNodePose {
+                local_translation: [0.0, 0.0, 0.0],
+                local_rotation: [0.0, 0.0, 0.0, 1.0],
+                local_scale: [1.0, 1.0, 1.0],
+                world_translation: [0.0, 0.0, 0.0],
+                world_rotation: [0.0, 0.0, 0.0, 1.0],
+                world_scale: [1.0, 1.0, 1.0],
+            },
+            RuntimeNodePose {
+                local_translation: [0.0, 1.0, 0.0],
+                local_rotation: [0.0, 0.0, 0.0, 1.0],
+                local_scale: [1.0, 1.0, 1.0],
+                world_translation: [0.0, 1.0, 0.0],
+                world_rotation: [0.0, 0.0, 0.0, 1.0],
+                world_scale: [1.0, 1.0, 1.0],
+            },
+            RuntimeNodePose {
+                local_translation: [4.0, 0.0, 0.0],
+                local_rotation: [0.0, 0.0, 0.0, 1.0],
+                local_scale: [1.0, 1.0, 1.0],
+                world_translation: [4.0, 0.0, 0.0],
+                world_rotation: [0.0, 0.0, 0.0, 1.0],
+                world_scale: [1.0, 1.0, 1.0],
+            },
+        ];
+        let rest_positions = poses
+            .iter()
+            .map(|pose| pose.world_translation)
+            .collect::<Vec<_>>();
+
+        let pose = skeleton_pose_from_runtime(
+            &nodes,
+            &poses,
+            &[1],
+            Some(&rest_positions),
+        );
+
+        assert!(pose.is_valid());
+        assert_eq!(pose.positions, vec![[0.0, 0.0, 0.0], [0.0, 1.0, 0.0]]);
+        assert_eq!(pose.parents, vec![None, Some(0)]);
+        assert_eq!(
+            pose.rest_positions,
+            Some(vec![[0.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+        );
+    }
 }

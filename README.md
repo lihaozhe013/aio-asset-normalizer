@@ -36,6 +36,8 @@ The product centers on `.glb` assets. It provides:
 The main page edits existing GLB files instead of converting between formats.
 
 - Load, inspect, and preview scenes, nodes, Meshes, materials, Skins, skeletons, and animations.
+- Display GLB skeleton overlays; meshless GLBs use Skin joints when available,
+  or the first scene's node hierarchy otherwise.
 - Play standard GLB node and Skinned Mesh animations with pause, looping, speed, seeking, and frame stepping.
 - Support `STEP` and `LINEAR` animation sampling; unsupported CUBICSPLINE and Morph Target clips are reported explicitly.
 - Adjust model orientation with up-axis presets for common authoring conventions
@@ -181,7 +183,7 @@ Skeleton visualization behavior and manual checks are documented in
 
 The GLB Editor and BVH Studio build and run with no Blender dependency; the
 FBX Converter page invokes a local Blender subprocess when one is available.
-The GLB Editor has a pure-Rust document layer with GLB validation, scene indexing, root transforms, interpolated animation trimming, runtime playback for node and Skinned Mesh animations, CPU skinning, PNG/JPEG PBR texture replacement, shared-material duplication, atomic reparse-validated export, and generic GLB→GLB animation retargeting. BVH Studio has generic hierarchy parsing, authored Rest Pose delta retargeting, frame-stepped source and target Skin preview, an instanced Octahedral/Stick/Lines skeleton visualizer, adaptive camera and guide geometry, explicit raw/converted unit diagnostics, Mapping v1/v2 validation and saving, reviewed name-match suggestions, external Agent prompt handoff, optional Root Motion and initial-heading normalization, redundant-key reduction, and Character Package / Animation Clip GLB export.
+The GLB Editor has a pure-Rust document layer with GLB validation, scene indexing, root transforms, interpolated animation trimming, runtime playback for node and Skinned Mesh animations, meshless skeleton-only preview, CPU skinning, PNG/JPEG PBR texture replacement, shared-material duplication, atomic reparse-validated export, and generic GLB→GLB animation retargeting. BVH Studio has generic hierarchy parsing, authored Rest Pose delta retargeting, frame-stepped source and target Skin preview, an instanced Octahedral/Stick/Lines skeleton visualizer, adaptive camera and guide geometry, explicit raw/converted unit diagnostics, Mapping v1/v2 validation and saving, reviewed name-match suggestions, external Agent prompt handoff, optional Root Motion and initial-heading normalization, redundant-key reduction, and Character Package / Animation Clip GLB export.
 
 GPU skinning, Morph Target playback, CUBICSPLINE sampling, mesh weight
 rebinding, IK/Twist processing, and skeleton replacement remain intentionally

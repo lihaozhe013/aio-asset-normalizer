@@ -27,6 +27,42 @@
 11. Resize the bottom dock and the application window. Confirm the Canvas
     boundary moves with the dock and never renders underneath it.
 
+## Meshless GLB Skeleton Playback
+
+1. Open a GLB with no Meshes, a first-scene node hierarchy, and a supported
+   node animation. Confirm the Inspector reports skeleton-only preview and the
+   skeleton is visible without a synthetic Mesh.
+2. Confirm that the first playable animation is selected and starts playing;
+   pause, toggle Loop, change the animation rate, drag the timeline, and use
+   both frame-step buttons.
+3. Confirm that a GLB with a non-empty Skin displays its Skin joints together
+   with the ancestors needed for a continuous hierarchy. A GLB without a Skin
+   displays the first scene's node hierarchy instead.
+4. Open a meshless GLB with no animations and confirm its Rest Pose remains
+   visible. Open one with an unsupported animation and confirm the animation
+   is marked unavailable while the Rest Pose remains visible.
+5. Use the Skeleton Display controls to switch Octahedral, Stick, and Lines
+   modes, toggle joints and End Sites, adjust bone width, hide/show the
+   skeleton, and use Fit skeleton. Confirm the camera frames the skeleton.
+6. Change root orientation, scale, and translation. Confirm the skeleton
+   follows the preview transform and the source GLB remains unchanged until an
+   explicit export.
+7. Switch between GLB Editor, BVH Studio, and the FBX Converter. Confirm that
+   no stale GLB skeleton appears in another page and that existing BVH source
+   and target overlays still work.
+8. Open a conventional skinned Mesh GLB and confirm the GLB skeleton overlay
+   is also visible in the GLB Editor, follows playback, and does not replace or
+   alter the rendered Mesh.
+
+For focused meshless GLB logs, use:
+
+```bash
+cargo run
+rg "\[glb_editor\]" debug.log > glb-skeleton-debug.log
+```
+
+Generated log files are local artifacts and must remain untracked.
+
 ## Inspector and Canvas Input Boundaries
 
 1. Open a GLB in the GLB Editor and resize the left resource tree, right

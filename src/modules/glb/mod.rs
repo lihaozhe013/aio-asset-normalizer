@@ -20,7 +20,9 @@ mod animation_runtime;
 mod orientation_presets;
 mod smart_loop;
 #[allow(unused_imports)]
-pub use animation_runtime::{AnimationClip, AnimationRuntime, RuntimeNodePose};
+pub use animation_runtime::{
+    AnimationClip, AnimationRuntime, RuntimeNode, RuntimeNodePose,
+};
 pub use orientation_presets::UpAxisPreset;
 #[allow(unused_imports)]
 pub use smart_loop::{SmartLoopOptions, SmartLoopReport};

@@ -1,7 +1,7 @@
 use crate::app::App;
 use crate::modules::glb::{TextureSlot, UpAxisPreset};
 use crate::modules::ui::menu_bar::MenuAction;
-use crate::modules::ui::skeleton_panel;
+use crate::modules::ui::skeleton_panel::{self, SkeletonPanelContext};
 
 pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
     use three_d::egui::*;
@@ -11,7 +11,28 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
         if ui.button("Exit retarget preview").clicked() {
             app.exit_glb_retarget_preview();
         }
-        skeleton_panel::render(app, ui, false);
+        skeleton_panel::render(
+            app,
+            ui,
+            SkeletonPanelContext::Bvh {
+                include_source_fit: false,
+            },
+        );
+    }
+    if !app.glb_retarget_preview_active && app.canvas.has_glb_skeleton() {
+        ui.colored_label(
+            Color32::LIGHT_BLUE,
+            app.i18n.tr(if app.canvas.is_glb_skeleton_only_preview() {
+                "glb.skeleton_preview"
+            } else {
+                "glb.skeleton_preview_active"
+            }),
+        );
+        ui.checkbox(
+            &mut app.canvas.show_glb_skeleton,
+            app.i18n.tr("glb.show_skeleton"),
+        );
+        skeleton_panel::render(app, ui, SkeletonPanelContext::Glb);
     }
     let Some(document) = app.glb.as_ref() else {
         ui.label(app.i18n.tr("glb.open_hint"));

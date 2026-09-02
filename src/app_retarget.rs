@@ -441,11 +441,11 @@ impl App {
         }
 
         let Some(source) = self.bvh.clone() else {
-            let _ = self.canvas.load_glb(context, &path);
+            let _ = self.canvas.load_glb_for_target_preview(context, &path);
             return;
         };
         let Some(mapping) = self.retarget_mapping.clone() else {
-            let _ = self.canvas.load_glb(context, &path);
+            let _ = self.canvas.load_glb_for_target_preview(context, &path);
             return;
         };
         let report_valid = self
@@ -453,7 +453,9 @@ impl App {
             .as_ref()
             .is_some_and(|report| report.is_valid());
         if !report_valid {
-            if let Err(error) = self.canvas.load_glb(context, &path) {
+            if let Err(error) =
+                self.canvas.load_glb_for_target_preview(context, &path)
+            {
                 self.log.append(&format!(
                     "[bvh_studio] Target GLB preview failed: {error}"
                 ));
@@ -481,7 +483,9 @@ impl App {
             Err(error) => {
                 self.log
                     .append(&format!("[retarget] BVH preview failed: {error}"));
-                if let Err(error) = self.canvas.load_glb(context, &path) {
+                if let Err(error) =
+                    self.canvas.load_glb_for_target_preview(context, &path)
+                {
                     self.log.append(&format!(
                         "[bvh_studio] Target GLB preview failed: {error}"
                     ));
@@ -512,7 +516,9 @@ impl App {
         match AnimationRuntime::from_bytes(&bytes, path.parent()) {
             Ok(runtime) => {
                 if let Err(error) =
-                    self.canvas.load_glb_with_runtime(context, &path, runtime)
+                    self.canvas.load_glb_with_runtime_for_target_preview(
+                        context, &path, runtime,
+                    )
                 {
                     self.log.append(&format!(
                         "[bvh_studio] Target character preview failed: {error}"

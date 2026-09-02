@@ -105,6 +105,37 @@ fn main() {
         }
 
         if show_scene
+            && app.page == modules::ui::menu_bar::Page::GlbEditor
+            && !app.glb_retarget_preview_active
+            && app.canvas.show_glb_skeleton
+        {
+            if let Some(skeleton) = app.canvas.glb_skeleton.as_ref() {
+                clear_rt = clear_rt.render_partially(
+                    viewport.into(),
+                    &app.camera.camera,
+                    skeleton.bone_object(),
+                    &[],
+                );
+                if skeleton.joints_visible() {
+                    clear_rt = clear_rt.render_partially(
+                        viewport.into(),
+                        &app.camera.camera,
+                        skeleton.joints_object(),
+                        &[],
+                    );
+                }
+                if skeleton.end_sites_visible() {
+                    clear_rt = clear_rt.render_partially(
+                        viewport.into(),
+                        &app.camera.camera,
+                        skeleton.end_sites_object(),
+                        &[],
+                    );
+                }
+            }
+        }
+
+        if show_scene
             && (app.page == modules::ui::menu_bar::Page::BvhStudio
                 || app.glb_retarget_preview_active)
         {

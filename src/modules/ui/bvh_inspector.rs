@@ -1,7 +1,7 @@
 use crate::app::App;
 use crate::modules::bvh::SuggestionConfidence;
 use crate::modules::ui::menu_bar::MenuAction;
-use crate::modules::ui::skeleton_panel;
+use crate::modules::ui::skeleton_panel::{self, SkeletonPanelContext};
 
 pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
     use three_d::egui::*;
@@ -16,7 +16,13 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
             "Target Skin skeleton",
         );
     });
-    skeleton_panel::render(app, ui, true);
+    skeleton_panel::render(
+        app,
+        ui,
+        SkeletonPanelContext::Bvh {
+            include_source_fit: true,
+        },
+    );
     if let Some(document) = app.bvh.as_ref() {
         Grid::new("bvh_summary").num_columns(2).show(ui, |ui| {
             for (label, value) in [

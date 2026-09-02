@@ -253,6 +253,9 @@ impl App {
         self.page = Page::GlbEditor;
         self.glb_retarget_preview_active = false;
         self.pending_glb_retarget_runtime = None;
+        self.canvas.clear_glb_skeleton();
+        self.canvas.clear_bvh_skeleton();
+        self.canvas.clear_target_skeleton();
         self.glb_path = Some(path.to_path_buf());
         self.pending_animation_selection = None;
         self.reset_root_preview();
@@ -399,6 +402,30 @@ impl App {
                     match self.canvas.load_glb(context, &preview_path) {
                         Ok(()) => {
                             self.glb = Some(document);
+                            if self.canvas.has_glb_skeleton() {
+                                let source = self
+                                    .canvas
+                                    .animation_runtime()
+                                    .map(|runtime| {
+                                        if runtime.preview_uses_skin() {
+                                            "Skin joints"
+                                        } else {
+                                            "first-scene nodes"
+                                        }
+                                    })
+                                    .unwrap_or("scene nodes");
+                                let status = if self
+                                    .canvas
+                                    .is_glb_skeleton_only_preview()
+                                {
+                                    "Skeleton-only preview ready"
+                                } else {
+                                    "GLB skeleton preview ready"
+                                };
+                                self.log.append(&format!(
+                                    "[glb_editor] {status} ({source})"
+                                ));
+                            }
                             let skin_count = self
                                 .glb
                                 .as_ref()
@@ -444,7 +471,7 @@ impl App {
                             }
                             self.frame_glb_preview(context, reload_kind);
                             if self.pending_auto_play
-                                && !self.canvas.animation_clips().is_empty()
+                                && self.first_playable_glb_animation().is_some()
                             {
                                 self.glb_animation_playing = true;
                             }
@@ -473,7 +500,7 @@ impl App {
         }
         if let Some(runtime) = self.pending_glb_retarget_runtime.take() {
             if let Some(path) = self.glb_retarget_target_path.as_ref() {
-                match self.canvas.load_glb_with_runtime(
+                match self.canvas.load_glb_with_runtime_for_target_preview(
                     context,
                     path,
                     runtime.clone(),
@@ -711,6 +738,7 @@ impl App {
             }
             MenuAction::OpenGlbEditor => {
                 self.page = Page::GlbEditor;
+                self.canvas.clear_glb_skeleton();
                 if self.glb_retarget_preview_active {
                     self.exit_glb_retarget_preview();
                 } else {
@@ -719,6 +747,7 @@ impl App {
             }
             MenuAction::OpenFbxConverter => {
                 self.page = Page::FbxConverter;
+                self.canvas.clear_glb_skeleton();
                 if self.glb_retarget_preview_active {
                     self.exit_glb_retarget_preview();
                 }
@@ -726,6 +755,7 @@ impl App {
             MenuAction::OpenBvhStudio => {
                 self.page = Page::BvhStudio;
                 self.canvas.show_origin = false;
+                self.canvas.clear_glb_skeleton();
                 if self.glb_retarget_preview_active {
                     self.exit_glb_retarget_preview();
                 }

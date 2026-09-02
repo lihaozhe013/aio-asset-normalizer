@@ -129,6 +129,7 @@ fn render_page_tabs(app: &mut App, ui: &mut three_d::egui::Ui) {
                     .clicked()
                 {
                     app.page = Page::GlbEditor;
+                    app.canvas.clear_glb_skeleton();
                     if app.glb_retarget_preview_active {
                         app.exit_glb_retarget_preview();
                     } else {
@@ -146,6 +147,7 @@ fn render_page_tabs(app: &mut App, ui: &mut three_d::egui::Ui) {
                 {
                     app.page = Page::BvhStudio;
                     app.canvas.show_origin = false;
+                    app.canvas.clear_glb_skeleton();
                     if app.glb_retarget_preview_active {
                         app.exit_glb_retarget_preview();
                     }
@@ -160,6 +162,7 @@ fn render_page_tabs(app: &mut App, ui: &mut three_d::egui::Ui) {
                     .clicked()
                 {
                     app.page = Page::FbxConverter;
+                    app.canvas.clear_glb_skeleton();
                     if app.glb_retarget_preview_active {
                         app.exit_glb_retarget_preview();
                     }
