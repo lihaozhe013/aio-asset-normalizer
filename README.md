@@ -33,7 +33,8 @@ The main page edits existing GLB files instead of converting between formats.
 - Load, inspect, and preview scenes, nodes, Meshes, materials, Skins, skeletons, and animations.
 - Play standard GLB node and Skinned Mesh animations with pause, looping, speed, seeking, and frame stepping.
 - Support `STEP` and `LINEAR` animation sampling; unsupported CUBICSPLINE and Morph Target clips are reported explicitly.
-- Adjust model orientation with XYZ `±90°` shortcuts and precise Euler input.
+- Adjust model orientation with up-axis presets for common authoring conventions
+  (Z-up, -Z-up, X-up, -X-up, Y-down) and precise per-axis Euler input.
 - Configure animation trim by start and end time with a live preview; trim is
   applied to the export copy only when enabled.
 - Apply Smart LOOP processing to close small capture drift with a configurable
@@ -43,6 +44,8 @@ The main page edits existing GLB files instead of converting between formats.
 - Replace Base Color, Normal, Metallic-Roughness, Occlusion, and Emissive textures.
 - Reserve extension points for future skeleton and Mesh replacement.
 - Export game-ready GLBs with consistent coordinates, units, grounding, and facing.
+  A "Bake corrections into exported GLB" switch keeps orientation, scale, and
+  translation as preview-only when the target engine handles the basis itself.
 
 ### BVH Studio
 

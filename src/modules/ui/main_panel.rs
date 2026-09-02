@@ -1,6 +1,6 @@
 use crate::app::App;
 use crate::modules::bvh::SuggestionConfidence;
-use crate::modules::glb::TextureSlot;
+use crate::modules::glb::{TextureSlot, UpAxisPreset};
 use crate::modules::ui::skeleton_panel;
 use crate::modules::ui::{
     bottom_panel, fonts,
@@ -206,6 +206,33 @@ fn render_glb_inspector(app: &mut App, ui: &mut three_d::egui::Ui) {
     ui.collapsing(orientation_label, |ui| {
         ui.label(app.i18n.tr("glb.orientation_hint"));
         ui.label(app.i18n.tr("glb.preview_hint"));
+        let up_axis_label = app.i18n.tr("glb.up_axis").to_owned();
+        let selected_text = match UpAxisPreset::from_correction_euler_degrees(
+            app.orientation_euler_degrees,
+        ) {
+            Some(preset) => app.i18n.tr(preset.label_key()),
+            None => app.i18n.tr("glb.up_axis.custom"),
+        }
+        .to_owned();
+        ComboBox::from_label(up_axis_label)
+            .selected_text(selected_text)
+            .show_ui(ui, |ui| {
+                for preset in UpAxisPreset::ALL {
+                    let label = app.i18n.tr(preset.label_key());
+                    let is_selected =
+                        UpAxisPreset::from_correction_euler_degrees(
+                            app.orientation_euler_degrees,
+                        ) == Some(preset);
+                    if ui.selectable_label(is_selected, label).clicked() {
+                        app.orientation_euler_degrees =
+                            preset.correction_euler_degrees();
+                        app.mark_root_preview_dirty();
+                        app.log.append(&format!(
+                            "[glb_editor] Applied up-axis preset {preset:?}"
+                        ));
+                    }
+                }
+            });
         for (label, index) in [("X", 0), ("Y", 1), ("Z", 2)] {
             ui.horizontal(|ui| {
                 ui.label(label);
@@ -226,6 +253,11 @@ fn render_glb_inspector(app: &mut App, ui: &mut three_d::egui::Ui) {
         if ui.button(app.i18n.tr("glb.reset_rotation")).clicked() {
             app.reset_root_orientation();
         }
+        ui.checkbox(
+            &mut app.bake_root_transform,
+            app.i18n.tr("glb.bake_root_transform"),
+        );
+        ui.label(app.i18n.tr("glb.bake_root_transform_hint"));
     });
 
     let transform_label = app.i18n.tr("glb.transform").to_owned();

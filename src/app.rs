@@ -69,6 +69,7 @@ pub struct App {
     pub orientation_euler_degrees: [f32; 3],
     pub root_scale: f32,
     pub root_translation: [f32; 3],
+    pub bake_root_transform: bool,
     pub(crate) root_preview_dirty: bool,
     pub(crate) root_preview_error: Option<String>,
     pub trim_enabled: bool,
@@ -170,6 +171,7 @@ impl App {
             orientation_euler_degrees: [0.0, 0.0, 0.0],
             root_scale: 1.0,
             root_translation: [0.0, 0.0, 0.0],
+            bake_root_transform: true,
             root_preview_dirty: false,
             root_preview_error: None,
             trim_enabled: false,
@@ -845,8 +847,15 @@ impl App {
             Ok(()) => {
                 self.file_tree.refresh();
                 self.bvh_file_tree.refresh();
+                let baked_note = if !self.bake_root_transform
+                    && self.root_transform_active()
+                {
+                    " (root transform not baked)"
+                } else {
+                    ""
+                };
                 self.log.append(&format!(
-                    "[glb_editor] Exported {}",
+                    "[glb_editor] Exported {}{baked_note}",
                     path.display()
                 ));
             }
