@@ -25,8 +25,15 @@ investigations, and manual test cases belong in dedicated documents under
 - The supported asset format is `.glb`. Do not add FBX, OBJ, Blend, or other
   general-purpose format conversion paths unless the product scope is
   explicitly changed.
-- Runtime functionality MUST NOT depend on Blender, the Blender API, a Blender
-  installation, or an external conversion process.
+- The GLB Editor and BVH Studio core MUST NOT depend on Blender, the Blender
+  API, a Blender installation, or an external conversion process; they MUST
+  remain fully functional when Blender is absent.
+- The FBX Converter workflow is the single sanctioned exception: it MAY invoke
+  an external Blender installation as a headless subprocess to convert
+  FBX/OBJ/Blend inputs to GLB. It MUST degrade to a clear, actionable error
+  when Blender is unavailable, MUST NOT block other pages, and MUST NOT become
+  a dependency for building, testing, or developing the rest of the
+  application.
 - BVH functionality belongs to an independent workflow. It MUST remain
   generic: no fixed company model, fixed skeleton size, fixed rest pose,
   device protocol, IMU mapping, or hardcoded proprietary asset dependency.
