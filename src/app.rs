@@ -409,6 +409,7 @@ impl App {
                                     ));
                                 }
                             }
+                            self.frame_glb_preview(context, reload_kind);
                             if self.pending_auto_play
                                 && !self.canvas.animation_clips().is_empty()
                             {
