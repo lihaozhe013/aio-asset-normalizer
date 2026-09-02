@@ -515,20 +515,18 @@ fn render_glb_inspector(app: &mut App, ui: &mut three_d::egui::Ui) {
         if root_scale_changed {
             app.refresh_glb_retarget_mapping();
         }
-        ui.horizontal(|ui| {
-            if ui.button("Import Mapping").clicked() {
-                app.import_mapping();
-            }
-            if ui.button("Export Agent Mapping Prompt").clicked() {
-                app.export_glb_retarget_agent_prompt();
-            }
-            if ui.button("Preview retargeted animation").clicked() {
-                app.preview_glb_retarget();
-            }
-            if ui.button("Export retargeted GLB").clicked() {
-                app.export_glb_retarget();
-            }
-        });
+        if ui.button("Import Mapping").clicked() {
+            app.import_mapping();
+        }
+        if ui.button("Export Agent Mapping Prompt").clicked() {
+            app.export_glb_retarget_agent_prompt();
+        }
+        if ui.button("Preview retargeted animation").clicked() {
+            app.preview_glb_retarget();
+        }
+        if ui.button("Export retargeted GLB").clicked() {
+            app.export_glb_retarget();
+        }
         if let Some(report) = app.retarget_validation.as_ref() {
             if report.is_valid() {
                 ui.colored_label(Color32::LIGHT_GREEN, "Mapping v2 valid");
