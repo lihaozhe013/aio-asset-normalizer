@@ -76,6 +76,7 @@ impl App {
             return;
         }
         self.glb_animation_index = index;
+        self.glb_export_estimate = None;
         self.refresh_glb_retarget_mapping();
         self.glb_animation_time = 0.0;
         self.glb_animation_accumulator = 0.0;
@@ -158,5 +159,6 @@ impl App {
 
     pub(crate) fn reset_glb_animation_rate(&mut self) {
         self.glb_animation_rate = 1.0;
+        self.glb_export_estimate = None;
     }
 }

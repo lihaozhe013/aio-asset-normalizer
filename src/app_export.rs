@@ -1,7 +1,24 @@
-use crate::app::App;
+use std::collections::BTreeSet;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::mpsc;
+
+use crate::app::{App, ExportTaskResult};
+use crate::modules::bvh;
 use crate::modules::glb::{
-    EditOperation, GlbDocument, RootTransformPreview, SmartLoopOptions,
+    AnimationOutputMode, EditOperation, GlbDocument, GlbExportPreset,
+    GlbExportReport, GlbExportSelection, RootTransformPreview,
+    SmartLoopOptions,
 };
+
+#[cfg(test)]
+use crate::modules::glb::{AnimationChannelData, AnimationClipData};
+
+struct GlbExportJob {
+    document: GlbDocument,
+    selection: GlbExportSelection,
+    path: PathBuf,
+}
 
 fn apply_glb_export_preview(
     document: &mut GlbDocument,
@@ -383,17 +400,96 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(times, vec![0.0, 0.5]);
     }
+
+    #[test]
+    fn split_export_uses_sanitized_animation_file_names() {
+        let document = export_fixture();
+        let selection = GlbExportSelection {
+            preset: GlbExportPreset::CharacterPackage,
+            selected_animations: BTreeSet::from([0]),
+            animation_output: AnimationOutputMode::Split,
+            ..GlbExportSelection::default()
+        };
+        let jobs = build_glb_export_jobs(
+            &document,
+            &selection,
+            &std::env::temp_dir().join("character.glb"),
+        )
+        .unwrap();
+        assert_eq!(jobs.len(), 1);
+        assert_eq!(
+            jobs[0].path,
+            std::env::temp_dir().join("character--Clip.glb")
+        );
+        assert_eq!(jobs[0].selection.selected_animations, BTreeSet::from([0]));
+        assert_eq!(
+            jobs[0].selection.animation_output,
+            AnimationOutputMode::Combined
+        );
+    }
+
+    #[test]
+    fn split_export_disambiguates_sanitized_and_case_colliding_names() {
+        let mut document = export_fixture();
+        let clip = |name: &str| AnimationClipData {
+            name: name.to_owned(),
+            times: vec![0.0, 1.0],
+            channels: vec![AnimationChannelData {
+                node: 0,
+                rotations: vec![[0.0, 0.0, 0.0, 1.0]; 2],
+                translations: None,
+            }],
+        };
+        document.replace_animations(&clip("Walk/Run")).unwrap();
+        document.append_animation(&clip("walk:run")).unwrap();
+        let selection = GlbExportSelection {
+            preset: GlbExportPreset::CharacterPackage,
+            selected_animations: BTreeSet::from([0, 1]),
+            animation_output: AnimationOutputMode::Split,
+            ..GlbExportSelection::default()
+        };
+        let base_path = std::env::temp_dir().join("character.glb");
+
+        let jobs =
+            build_glb_export_jobs(&document, &selection, &base_path).unwrap();
+
+        assert_eq!(
+            jobs[0].path,
+            std::env::temp_dir().join("character--Walk_Run.glb")
+        );
+        assert_eq!(
+            jobs[1].path,
+            std::env::temp_dir().join("character--walk_run-2.glb")
+        );
+    }
 }
-
-use std::fs;
-use std::path::Path;
-
-use crate::modules::bvh;
 
 impl App {
     pub(crate) fn export_glb(&mut self) {
+        if self.task_busy {
+            self.log
+                .append("[glb_export] Wait for the current background task");
+            return;
+        }
         if self.glb.is_none() {
-            self.log.append("[glb_editor] Nothing to export");
+            self.log.append("[glb_export] Nothing to export");
+            return;
+        }
+        let selection = self.glb_export_selection.clone();
+        let Some(document) = self.glb.as_ref() else {
+            return;
+        };
+        let validation = document.validate_export_selection(&selection);
+        if !validation.is_valid() {
+            for error in validation.errors {
+                self.log.append(&format!(
+                    "[glb_export] Selection invalid: {error}"
+                ));
+            }
+            return;
+        }
+        if let Err(error) = self.validate_glb_export_settings(&selection) {
+            self.log.append(&format!("[glb_export] {error}"));
             return;
         }
         let Some(path) = rfd::FileDialog::new()
@@ -412,39 +508,130 @@ impl App {
         else {
             return;
         };
-        if is_source_path(&path, self.glb_path.as_deref()) {
-            self.log
-                .append("[glb_editor] Refusing to overwrite the source GLB");
-            return;
-        }
         let document = match self.build_glb_export_snapshot() {
             Ok(document) => document,
             Err(error) => {
                 self.log
-                    .append(&format!("[glb_editor] Export failed: {error}"));
+                    .append(&format!("[glb_export] Export failed: {error}"));
                 return;
             }
         };
-        match document.export_atomic(&path) {
-            Ok(()) => {
-                self.file_tree.refresh();
-                self.bvh_file_tree.refresh();
-                let baked_note = if !self.bake_root_transform
-                    && self.root_transform_active()
-                {
-                    " (root transform not baked)"
-                } else {
-                    ""
-                };
-                self.log.append(&format!(
-                    "[glb_editor] Exported {}{baked_note}",
-                    path.display()
-                ));
+        let jobs = match build_glb_export_jobs(&document, &selection, &path) {
+            Ok(jobs) => jobs,
+            Err(error) => {
+                self.log.append(&format!("[glb_export] {error}"));
+                return;
             }
-            Err(error) => self
-                .log
-                .append(&format!("[glb_editor] Export failed: {error}")),
+        };
+        for job in &jobs {
+            if is_source_path(&job.path, self.glb_path.as_deref()) {
+                self.log.append(
+                    "[glb_export] Refusing to overwrite the source GLB",
+                );
+                return;
+            }
         }
+        self.start_glb_export_task(jobs);
+    }
+
+    fn validate_glb_export_settings(
+        &self,
+        selection: &GlbExportSelection,
+    ) -> Result<(), String> {
+        if selection.animation_output == AnimationOutputMode::Split
+            && selection.preset == GlbExportPreset::PreserveAll
+        {
+            return Err(
+                "Split animation output requires Character Package or Skeleton Animation"
+                    .to_owned(),
+            );
+        }
+        if selection.animation_output == AnimationOutputMode::Split
+            && selection.selected_animations.is_empty()
+        {
+            return Err(
+                "Split animation output requires at least one selected animation"
+                    .to_owned(),
+            );
+        }
+        if selection.preset == GlbExportPreset::PreserveAll {
+            return Ok(());
+        }
+        if self.trim_enabled
+            && !selection.selected_animations.contains(&self.trim_animation)
+        {
+            return Err(format!(
+                "Trim animation {} must be included in the export selection",
+                self.trim_animation
+            ));
+        }
+        if self.smart_loop_enabled
+            && !selection
+                .selected_animations
+                .contains(&self.glb_animation_index)
+        {
+            return Err(format!(
+                "Smart LOOP animation {} must be included in the export selection",
+                self.glb_animation_index
+            ));
+        }
+        if (self.glb_animation_rate - 1.0).abs() > f32::EPSILON
+            && !selection
+                .selected_animations
+                .contains(&self.glb_animation_index)
+        {
+            return Err(format!(
+                "Animation rate target {} must be included in the export selection",
+                self.glb_animation_index
+            ));
+        }
+        Ok(())
+    }
+
+    fn start_glb_export_task(&mut self, jobs: Vec<GlbExportJob>) {
+        let (sender, receiver) = mpsc::channel();
+        self.task_rx = Some(receiver);
+        self.task_busy = true;
+        let baked_note =
+            if !self.bake_root_transform && self.root_transform_active() {
+                " (root transform not baked)"
+            } else {
+                ""
+            };
+        self.log.append(&format!(
+            "[glb_export] Building {} output{} in background{baked_note}",
+            jobs.len(),
+            if jobs.len() == 1 { "" } else { "s" }
+        ));
+        std::thread::spawn(move || {
+            let mut paths = Vec::new();
+            let mut details = Vec::new();
+            let result = (|| {
+                for job in jobs {
+                    let mut output = job.document;
+                    let report =
+                        output.prune_for_export(&job.selection).map_err(
+                            |error| format!("{}: {error}", job.path.display()),
+                        )?;
+                    details.push(format!(
+                        "Export report {}: {}",
+                        job.path.display(),
+                        format_export_report(&report)
+                    ));
+                    output.export_atomic(&job.path).map_err(|error| {
+                        format!("{}: {error}", job.path.display())
+                    })?;
+                    paths.push(job.path);
+                }
+                Ok(())
+            })();
+            let _ = sender.send(ExportTaskResult {
+                kind: "GLB export".to_owned(),
+                paths,
+                details,
+                result,
+            });
+        });
     }
 
     pub(crate) fn export_mapping(&mut self) {
@@ -534,4 +721,104 @@ fn same_path(left: &Path, right: &Path) -> bool {
     {
         left == right
     }
+}
+
+fn build_glb_export_jobs(
+    document: &GlbDocument,
+    selection: &GlbExportSelection,
+    base_path: &Path,
+) -> Result<Vec<GlbExportJob>, String> {
+    if selection.animation_output == AnimationOutputMode::Combined {
+        return Ok(vec![GlbExportJob {
+            document: document.clone(),
+            selection: selection.clone(),
+            path: base_path.to_path_buf(),
+        }]);
+    }
+
+    if selection.selected_animations.is_empty() {
+        return Err(
+            "Split animation output requires at least one selected animation"
+                .to_owned(),
+        );
+    }
+    let names = document.animation_names();
+    let stem = base_path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.is_empty())
+        .unwrap_or("animation");
+    let parent = base_path.parent().unwrap_or_else(|| Path::new("."));
+    let mut used_names = BTreeSet::new();
+    let mut jobs = Vec::new();
+    for animation_index in &selection.selected_animations {
+        let animation_name = names
+            .get(*animation_index)
+            .cloned()
+            .unwrap_or_else(|| format!("animation-{animation_index}"));
+        let cleaned = clean_filename_component(&animation_name);
+        let mut suffix = cleaned.clone();
+        let mut count = 1;
+        while !used_names.insert(suffix.to_lowercase()) {
+            count += 1;
+            suffix = format!("{cleaned}-{count}");
+        }
+        let path = parent.join(format!("{stem}--{suffix}.glb"));
+        let mut split_selection = selection.clone();
+        split_selection.selected_animations =
+            BTreeSet::from([*animation_index]);
+        split_selection.animation_output = AnimationOutputMode::Combined;
+        jobs.push(GlbExportJob {
+            document: document.clone(),
+            selection: split_selection,
+            path,
+        });
+    }
+    Ok(jobs)
+}
+
+fn clean_filename_component(value: &str) -> String {
+    let cleaned = value
+        .chars()
+        .map(|character| {
+            if character.is_control()
+                || matches!(
+                    character,
+                    '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'
+                )
+            {
+                '_'
+            } else {
+                character
+            }
+        })
+        .collect::<String>();
+    let trimmed =
+        cleaned.trim_matches(|character| character == ' ' || character == '.');
+    if trimmed.is_empty() {
+        "animation".to_owned()
+    } else {
+        trimmed.to_owned()
+    }
+}
+
+pub(crate) fn format_export_report(report: &GlbExportReport) -> String {
+    format!(
+        "scenes {} -> {}, nodes {} -> {}, meshes {} -> {}, skins {} -> {}, animations {} -> {}, removed channels {}, BIN {} -> {} bytes, GLB {} -> {} bytes",
+        report.source.scenes,
+        report.output.scenes,
+        report.source.nodes,
+        report.output.nodes,
+        report.source.meshes,
+        report.output.meshes,
+        report.source.skins,
+        report.output.skins,
+        report.source.animations,
+        report.output.animations,
+        report.removed_animation_channels,
+        report.source_bin_bytes,
+        report.output_bin_bytes,
+        report.source_glb_bytes,
+        report.output_glb_bytes,
+    )
 }

@@ -105,7 +105,8 @@ impl App {
             })();
             let _ = sender.send(ExportTaskResult {
                 kind: "Agent BVH mapping prompt".to_owned(),
-                path: result_path,
+                paths: vec![result_path],
+                details: Vec::new(),
                 result,
             });
         });
@@ -238,7 +239,8 @@ impl App {
             })();
             let _ = sender.send(ExportTaskResult {
                 kind: "Agent GLB mapping prompt".to_owned(),
-                path: result_path,
+                paths: vec![result_path],
+                details: Vec::new(),
                 result,
             });
         });

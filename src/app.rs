@@ -12,8 +12,9 @@ use crate::modules::{
         RetargetPlan,
     },
     glb::{
-        AnimationRuntime, EditOperation, GlbDocument, PrimitiveTarget,
-        SmartLoopOptions, StandardizationProfile, TextureSlot,
+        AnimationRuntime, EditOperation, GlbDocument, GlbExportReport,
+        GlbExportSelection, PrimitiveTarget, SmartLoopOptions,
+        StandardizationProfile, TextureSlot,
     },
     i18n::I18n,
     preferences::{self, UserPreferences},
@@ -45,8 +46,12 @@ pub struct App {
     pub page: Page,
     pub glb: Option<GlbDocument>,
     pub glb_path: Option<PathBuf>,
+    pub(crate) glb_export_selection: GlbExportSelection,
+    pub(crate) glb_export_estimate:
+        Option<(GlbExportSelection, Result<GlbExportReport, String>)>,
     pub bvh_target_glb: Option<GlbDocument>,
     pub bvh_target_path: Option<PathBuf>,
+    pub(crate) bvh_export_selection: GlbExportSelection,
     pub bvh: Option<BvhDocument>,
     pub bvh_path: Option<PathBuf>,
     pub mapping: Option<MappingFile>,
@@ -61,6 +66,7 @@ pub struct App {
     pub retarget_target_skin_index: usize,
     pub glb_retarget_target: Option<GlbDocument>,
     pub glb_retarget_target_path: Option<PathBuf>,
+    pub(crate) glb_retarget_export_selection: GlbExportSelection,
     pub glb_retarget_preview_active: bool,
     pub(crate) pending_glb_retarget_runtime: Option<AnimationRuntime>,
     pub retarget_root_motion: bool,
@@ -121,7 +127,8 @@ pub struct App {
 
 pub(crate) struct ExportTaskResult {
     pub(crate) kind: String,
-    pub(crate) path: PathBuf,
+    pub(crate) paths: Vec<PathBuf>,
+    pub(crate) details: Vec<String>,
     pub(crate) result: Result<(), String>,
 }
 
@@ -170,8 +177,11 @@ impl App {
             page: Page::GlbEditor,
             glb: None,
             glb_path: None,
+            glb_export_selection: GlbExportSelection::default(),
+            glb_export_estimate: None,
             bvh_target_glb: None,
             bvh_target_path: None,
+            bvh_export_selection: GlbExportSelection::default(),
             bvh: None,
             bvh_path: None,
             mapping: None,
@@ -186,6 +196,7 @@ impl App {
             retarget_target_skin_index: 0,
             glb_retarget_target: None,
             glb_retarget_target_path: None,
+            glb_retarget_export_selection: GlbExportSelection::default(),
             glb_retarget_preview_active: false,
             pending_glb_retarget_runtime: None,
             retarget_root_motion: true,
@@ -289,14 +300,29 @@ impl App {
                         self.file_tree.refresh();
                         self.bvh_file_tree.refresh();
                         let prefix = task_log_prefix(&result.kind);
-                        self.log.append(&format!(
-                            "{prefix} Exported {} {}",
-                            result.kind,
-                            result.path.display()
-                        ));
+                        for detail in &result.details {
+                            self.log.append(&format!("{prefix} {detail}"));
+                        }
+                        for path in &result.paths {
+                            self.log.append(&format!(
+                                "{prefix} Exported {} {}",
+                                result.kind,
+                                path.display()
+                            ));
+                        }
                     }
                     Err(error) => {
                         let prefix = task_log_prefix(&result.kind);
+                        for detail in &result.details {
+                            self.log.append(&format!("{prefix} {detail}"));
+                        }
+                        for path in &result.paths {
+                            self.log.append(&format!(
+                                "{prefix} Exported {} {} before failure",
+                                result.kind,
+                                path.display()
+                            ));
+                        }
                         self.log.append(&format!(
                             "{prefix} Export failed: {error}"
                         ));
@@ -319,17 +345,19 @@ impl App {
                 self.canvas.clear_glb();
                 self.canvas.clear_bvh_skeleton();
                 self.glb = None;
+                self.glb_export_selection = GlbExportSelection::default();
+                self.glb_export_estimate = None;
                 self.bottom_panel_tab = BottomPanelTab::DebugLog;
                 self.reset_glb_animation_state();
                 return;
             };
-            let document = match self.glb.take() {
+            let (document, reused_document) = match self.glb.take() {
                 Some(document)
                     if document.source_path.as_ref() == Some(&path) =>
                 {
-                    Ok(document)
+                    (Ok(document), true)
                 }
-                _ => GlbDocument::load(&path),
+                _ => (GlbDocument::load(&path), false),
             };
             match document {
                 Ok(document) => {
@@ -402,6 +430,18 @@ impl App {
                     match self.canvas.load_glb(context, &preview_path) {
                         Ok(()) => {
                             self.glb = Some(document);
+                            self.glb_export_estimate = None;
+                            if reload_kind == GlbReloadKind::OpenModel
+                                && !reused_document
+                            {
+                                self.glb_export_selection = self
+                                    .glb
+                                    .as_ref()
+                                    .and_then(|document| {
+                                        document.default_export_selection().ok()
+                                    })
+                                    .unwrap_or_default();
+                            }
                             if self.canvas.has_glb_skeleton() {
                                 let source = self
                                     .canvas
@@ -695,11 +735,13 @@ impl App {
                 self.converter_results.clear();
                 self.glb = None;
                 self.glb_path = None;
+                self.glb_export_estimate = None;
                 self.canvas.clear_glb();
                 self.canvas.clear_target_skeleton();
                 self.canvas.clear_bvh_skeleton();
                 self.bvh_target_glb = None;
                 self.bvh_target_path = None;
+                self.bvh_export_selection = GlbExportSelection::default();
                 self.bvh = None;
                 self.bvh_path = None;
                 self.mapping = None;
@@ -709,6 +751,8 @@ impl App {
                 self.mapping_suggestions.clear();
                 self.glb_retarget_target = None;
                 self.glb_retarget_target_path = None;
+                self.glb_retarget_export_selection =
+                    GlbExportSelection::default();
                 self.retarget_mapping = None;
                 self.retarget_mapping_path = None;
                 self.retarget_validation = None;
@@ -799,11 +843,13 @@ impl App {
 
     pub(crate) fn trim_setting_changed(&mut self) {
         self.pending_animation_selection = Some(self.glb_animation_index);
+        self.glb_export_estimate = None;
         self.request_glb_reload(GlbReloadKind::EditedModel);
     }
 
     pub(crate) fn smart_loop_setting_changed(&mut self) {
         self.pending_animation_selection = Some(self.glb_animation_index);
+        self.glb_export_estimate = None;
         self.request_glb_reload(GlbReloadKind::EditedModel);
     }
 
@@ -890,7 +936,9 @@ impl App {
 }
 
 fn task_log_prefix(kind: &str) -> &'static str {
-    if kind.starts_with("GLB") {
+    if kind.starts_with("GLB export") {
+        "[glb_export]"
+    } else if kind.starts_with("GLB") {
         "[glb_retarget]"
     } else if kind.starts_with("Agent") {
         "[retarget_agent]"

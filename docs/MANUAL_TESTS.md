@@ -123,3 +123,47 @@ Generated log files are local artifacts and must remain untracked.
 3. Confirm the exported file can be opened again and no `.tmp` file remains.
 4. Select the original input file as the export destination and confirm the
    application refuses to overwrite the source file.
+
+## GLB Resource Selection and Package Export
+
+Use a mixed GLB containing several model parts, one or more Skins, multiple
+animations, a camera, a punctual light, and some unreferenced resources.
+
+1. Open the file in GLB Editor and expand `Export Selection`. Confirm the
+   default `Preserve All` preset is available and the source resource counts
+   are shown.
+2. Choose `Character Package`, select one model node, and confirm its node
+   subtree and Mesh primitive checkboxes are available. Uncheck one Primitive
+   and confirm the selected Mesh is still represented by its remaining
+   Primitive.
+3. Select one Scene, one Skin, and one animation. Export with `Combined`,
+   reopen the output, and confirm it contains one Scene, the selected model,
+   the Skin joints and inverse bind matrices, and the selected animation.
+4. Clear the animation checkboxes and export again. Confirm the output is a
+   model-plus-skeleton GLB with no animation array and that the source file is
+   unchanged.
+5. Choose `Skeleton Animation`, select a Skin and one animation, and export.
+   Confirm the output has a node hierarchy, Skin, inverse bind matrices, and
+   animation, but no Mesh, Material, Texture, Image, Camera, or punctual-light
+   resource.
+6. Choose multiple animations and `Split`. Confirm one output is written per
+   selected animation, names are derived from sanitized animation names, and
+   duplicate names receive numeric suffixes.
+7. Confirm the Debug Log reports source/output counts and BIN sizes. Compare
+   the output file sizes and confirm unused BIN ranges are not retained.
+8. Repeat the package and Skeleton Animation exports from BVH Studio and
+   GLB-to-GLB retargeting. Confirm the target GLB's selection is independent
+   from the source GLB's selection.
+9. Try a selection with no model node, multiple incompatible Skins, an
+   external buffer, an external image URI, an unsupported extension, and a
+   Skeleton Animation Morph Target channel. Confirm the UI reports a clear
+   validation error and does not write a partial output.
+
+For focused package-export logs, use:
+
+```bash
+cargo run
+rg "\[glb_export\]" debug.log > glb-export-debug.log
+```
+
+Generated log files are local artifacts and must remain untracked.

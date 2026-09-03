@@ -7,6 +7,7 @@ impl App {
     pub(crate) fn mark_root_preview_dirty(&mut self) {
         self.root_preview_dirty = true;
         self.root_preview_error = None;
+        self.glb_export_estimate = None;
     }
 
     pub(crate) fn root_preview_error(&self) -> Option<&str> {
@@ -19,6 +20,7 @@ impl App {
         self.root_translation = [0.0, 0.0, 0.0];
         self.root_preview_error = None;
         self.root_preview_dirty = true;
+        self.glb_export_estimate = None;
     }
 
     pub(crate) fn reset_root_orientation(&mut self) {

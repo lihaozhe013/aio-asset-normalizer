@@ -15,6 +15,14 @@ use self::transform::*;
 mod resources;
 pub use self::resources::{PrimitiveTarget, TextureSlot};
 
+mod export_selection;
+#[allow(unused_imports)]
+pub use self::export_selection::{
+    AnimationOutputMode, GlbExportAnimation, GlbExportCatalog, GlbExportMesh,
+    GlbExportNode, GlbExportPreset, GlbExportPrimitive, GlbExportReport,
+    GlbExportScene, GlbExportSelection, GlbExportSkin, GlbExportValidation,
+};
+
 mod animation;
 mod animation_runtime;
 mod orientation_presets;
@@ -822,6 +830,9 @@ impl GlbDocument {
         Ok(())
     }
 
+    /// Legacy coarse render-resource removal kept for compatibility. Compact
+    /// exports use `prune_for_export` so references and BIN data are rebuilt.
+    #[allow(dead_code)]
     pub fn strip_render_resources(&mut self) {
         if let Some(nodes) =
             self.json.get_mut("nodes").and_then(Value::as_array_mut)

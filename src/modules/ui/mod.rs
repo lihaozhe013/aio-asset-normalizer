@@ -5,6 +5,7 @@ pub mod bvh_inspector;
 pub mod fbx_converter_panel;
 pub mod file_tree;
 pub mod fonts;
+pub mod glb_export_panel;
 pub mod glb_inspector;
 pub mod log_viewer;
 pub mod main_panel;

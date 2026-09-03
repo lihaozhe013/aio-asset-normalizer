@@ -1,10 +1,14 @@
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::fs;
 use std::path::Path;
 use std::sync::mpsc;
 
 use crate::app::{App, ExportTaskResult};
-use crate::modules::glb::{AnimationClipData, AnimationRuntime, GlbDocument};
+use crate::app_export::format_export_report;
+use crate::modules::glb::{
+    AnimationClipData, AnimationOutputMode, AnimationRuntime, GlbDocument,
+    GlbExportPreset,
+};
 use crate::modules::retarget::{
     self, RetargetOptions, SkeletonDescriptor, SkeletonMapping, SourceKind,
 };
@@ -51,8 +55,12 @@ impl App {
         };
         match GlbDocument::load(&path) {
             Ok(document) => {
+                let mut export_selection =
+                    document.default_export_selection().unwrap_or_default();
+                export_selection.preset = GlbExportPreset::CharacterPackage;
                 self.glb_retarget_target = Some(document);
                 self.glb_retarget_target_path = Some(path.clone());
+                self.glb_retarget_export_selection = export_selection;
                 self.retarget_target_skin_index = 0;
                 self.refresh_glb_retarget_mapping();
                 self.log.append(&format!(
@@ -295,6 +303,7 @@ impl App {
                 .append("[bvh_studio] Load a target GLB before exporting GLB");
             return;
         };
+        let mut export_selection = self.bvh_export_selection.clone();
         let Some(path) = rfd::FileDialog::new()
             .add_filter("GLB", &["glb"])
             .set_file_name(if clip_only {
@@ -331,7 +340,17 @@ impl App {
         let key_tolerance = self.bvh_key_tolerance;
         let options = self.retarget_options();
         let target_skin_index = self.retarget_target_skin_index;
+        export_selection.skin_index = Some(target_skin_index);
+        export_selection.preset = if clip_only {
+            GlbExportPreset::SkeletonAnimation
+        } else {
+            GlbExportPreset::CharacterPackage
+        };
+        export_selection.selected_animations = BTreeSet::from([0]);
+        export_selection.animation_output = AnimationOutputMode::Combined;
         std::thread::spawn(move || {
+            let mut paths = Vec::new();
+            let mut details = Vec::new();
             let result = (|| {
                 let skin = target
                     .skin_data_at(target_skin_index)
@@ -357,14 +376,22 @@ impl App {
                         channels: clip.channels,
                     })
                     .map_err(|error| error.to_string())?;
-                if clip_only {
-                    output.strip_render_resources();
-                }
+                let report = output
+                    .prune_for_export(&export_selection)
+                    .map_err(|error| error.to_string())?;
+                details.push(format_export_report(&report));
                 output
                     .export_atomic(&path)
-                    .map_err(|error| error.to_string())
+                    .map_err(|error| error.to_string())?;
+                paths.push(path.clone());
+                Ok(())
             })();
-            let _ = sender.send(ExportTaskResult { kind, path, result });
+            let _ = sender.send(ExportTaskResult {
+                kind,
+                paths,
+                details,
+                result,
+            });
         });
     }
 
@@ -639,6 +666,10 @@ impl App {
         };
         let source_clip_index = self.glb_animation_index;
         let target_skin_index = self.retarget_target_skin_index;
+        let mut export_selection = self.glb_retarget_export_selection.clone();
+        export_selection.skin_index = Some(target_skin_index);
+        export_selection.selected_animations = BTreeSet::from([0]);
+        export_selection.animation_output = AnimationOutputMode::Combined;
         let options = match self.glb_retarget_options() {
             Ok(options) => options,
             Err(error) => {
@@ -670,6 +701,8 @@ impl App {
             "[glb_retarget] Building the selected animation in background",
         );
         std::thread::spawn(move || {
+            let mut paths = Vec::new();
+            let mut details = Vec::new();
             let result = (|| {
                 let source_bytes =
                     source.to_bytes().map_err(|error| error.to_string())?;
@@ -710,13 +743,20 @@ impl App {
                         channels: clip.channels,
                     })
                     .map_err(|error| error.to_string())?;
+                let report = output
+                    .prune_for_export(&export_selection)
+                    .map_err(|error| error.to_string())?;
+                details.push(format_export_report(&report));
                 output
                     .export_atomic(&output_path)
-                    .map_err(|error| error.to_string())
+                    .map_err(|error| error.to_string())?;
+                paths.push(output_path.clone());
+                Ok(())
             })();
             let _ = sender.send(crate::app::ExportTaskResult {
                 kind: "GLB retargeted animation".to_owned(),
-                path: output_path,
+                paths,
+                details,
                 result,
             });
         });

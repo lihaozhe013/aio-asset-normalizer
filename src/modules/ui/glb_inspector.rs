@@ -1,6 +1,6 @@
 use crate::app::App;
 use crate::modules::glb::{TextureSlot, UpAxisPreset};
-use crate::modules::ui::menu_bar::MenuAction;
+use crate::modules::ui::glb_export_panel;
 use crate::modules::ui::skeleton_panel::{self, SkeletonPanelContext};
 
 pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
@@ -142,10 +142,15 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
         if ui.button(app.i18n.tr("glb.reset_rotation")).clicked() {
             app.reset_root_orientation();
         }
-        ui.checkbox(
-            &mut app.bake_root_transform,
-            app.i18n.tr("glb.bake_root_transform"),
-        );
+        if ui
+            .checkbox(
+                &mut app.bake_root_transform,
+                app.i18n.tr("glb.bake_root_transform"),
+            )
+            .changed()
+        {
+            app.glb_export_estimate = None;
+        }
         ui.label(app.i18n.tr("glb.bake_root_transform_hint"));
     });
 
@@ -220,12 +225,17 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
                 }
                 ui.horizontal(|ui| {
                     ui.label(app.i18n.tr("glb.animation_rate"));
-                    ui.add(
-                        DragValue::new(&mut app.glb_animation_rate)
-                            .range(0.05..=8.0)
-                            .speed(0.05)
-                            .suffix("x"),
-                    );
+                    if ui
+                        .add(
+                            DragValue::new(&mut app.glb_animation_rate)
+                                .range(0.05..=8.0)
+                                .speed(0.05)
+                                .suffix("x"),
+                        )
+                        .changed()
+                    {
+                        app.glb_export_estimate = None;
+                    }
                     let can_reset =
                         (app.glb_animation_rate - 1.0).abs() > f32::EPSILON;
                     if ui
@@ -431,12 +441,25 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
         }
     });
 
+    if let Some(target) = app.glb_retarget_target.as_ref() {
+        if let Ok(catalog) = target.export_catalog() {
+            let i18n = app.i18n.clone();
+            glb_export_panel::render_selection_controls(
+                ui,
+                &i18n,
+                &catalog,
+                &mut app.glb_retarget_export_selection,
+                false,
+                false,
+            );
+        }
+    }
+
+    ui.separator();
+    glb_export_panel::render(app, ui);
     ui.separator();
     if ui.button(app.i18n.tr("glb.standardize")).clicked() {
         app.standardize();
-    }
-    if ui.button(app.i18n.tr("menu.export")).clicked() {
-        app.dispatch_action(&MenuAction::Export);
     }
 }
 

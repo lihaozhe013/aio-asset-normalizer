@@ -2,7 +2,7 @@ use std::path::Path;
 
 use crate::app::App;
 use crate::modules::bvh::{self, BvhDocument};
-use crate::modules::glb::GlbDocument;
+use crate::modules::glb::{GlbDocument, GlbExportPreset};
 use crate::modules::retarget;
 use crate::modules::ui::menu_bar::Page;
 use crate::modules::viewport::skeleton_visual::SkeletonPose;
@@ -30,12 +30,16 @@ impl App {
     pub(crate) fn load_bvh_target(&mut self, path: &Path) {
         match GlbDocument::load(path) {
             Ok(document) => {
+                let mut export_selection =
+                    document.default_export_selection().unwrap_or_default();
+                export_selection.preset = GlbExportPreset::CharacterPackage;
                 self.log.append(&format!(
                     "[bvh_studio] Loaded target GLB {}",
                     path.display()
                 ));
                 self.bvh_target_glb = Some(document);
                 self.bvh_target_path = Some(path.to_path_buf());
+                self.bvh_export_selection = export_selection;
                 self.retarget_target_skin_index = 0;
                 self.needs_bvh_target_reload = true;
                 self.refresh_retarget_plan();

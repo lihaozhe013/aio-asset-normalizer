@@ -1,5 +1,6 @@
 use crate::app::App;
 use crate::modules::bvh::SuggestionConfidence;
+use crate::modules::ui::glb_export_panel;
 use crate::modules::ui::menu_bar::MenuAction;
 use crate::modules::ui::skeleton_panel::{self, SkeletonPanelContext};
 
@@ -260,6 +261,21 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
                 app.refresh_v2_retarget_mapping();
                 app.needs_bvh_target_reload = true;
             }
+        }
+    }
+    if let Some(target) = app.bvh_target_glb.as_ref() {
+        if let Ok(catalog) = target.export_catalog() {
+            let i18n = app.i18n.clone();
+            app.bvh_export_selection.skin_index =
+                Some(app.retarget_target_skin_index);
+            glb_export_panel::render_selection_controls(
+                ui,
+                &i18n,
+                &catalog,
+                &mut app.bvh_export_selection,
+                false,
+                false,
+            );
         }
     }
     if ui

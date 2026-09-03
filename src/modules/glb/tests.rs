@@ -1,5 +1,7 @@
 use super::*;
 
+use std::collections::BTreeMap;
+
 fn animation_rate_document() -> GlbDocument {
     let mut bin = Vec::new();
     for value in [0.0_f32, 1.0, 2.0] {
@@ -553,4 +555,428 @@ fn animation_trim_interpolates_boundaries_and_rebases_time() {
     assert!((boundary[1] - 0.38268343).abs() < 1e-4);
     assert!((boundary[3] - 0.9238795).abs() < 1e-4);
     gltf::Gltf::from_slice(&document.to_bytes().unwrap()).unwrap();
+}
+
+fn compact_export_fixture() -> GlbDocument {
+    let mut bin = Vec::new();
+    for value in [
+        [0.0_f32, 0.0, 0.0],
+        [1.0_f32, 0.0, 0.0],
+        [0.0_f32, 1.0, 0.0],
+    ] {
+        for component in value {
+            bin.extend_from_slice(&component.to_le_bytes());
+        }
+    }
+    for value in [0.0_f32, 1.0] {
+        bin.extend_from_slice(&value.to_le_bytes());
+    }
+    for value in [[0.0_f32, 0.0, 0.0], [1.0_f32, 0.0, 0.0]] {
+        for component in value {
+            bin.extend_from_slice(&component.to_le_bytes());
+        }
+    }
+    for matrix in [
+        [
+            1.0_f32, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0,
+            0.0, 0.0, 0.0, 1.0,
+        ],
+        [
+            1.0_f32, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0,
+            0.0, 0.0, 0.0, 1.0,
+        ],
+    ] {
+        for component in matrix {
+            bin.extend_from_slice(&component.to_le_bytes());
+        }
+    }
+    bin.extend_from_slice(&[0_u8, 0, 0, 0]);
+    let byte_length = bin.len();
+    GlbDocument {
+        source_path: None,
+        json: json!({
+            "asset": {"version": "2.0"},
+            "scene": 0,
+            "scenes": [
+                {"name": "Character", "nodes": [0]},
+                {"name": "Unused", "nodes": [5]}
+            ],
+            "nodes": [
+                {"name": "Root", "children": [1, 2, 3], "extras": {"keep": true}},
+                {"name": "Body", "mesh": 0, "skin": 0},
+                {"name": "Unused mesh", "mesh": 1},
+                {"name": "Hip", "children": [4]},
+                {"name": "Knee"},
+                {"name": "Camera node", "camera": 0}
+            ],
+            "meshes": [
+                {"name": "Body mesh", "primitives": [{"attributes": {"POSITION": 0}, "material": 0}]},
+                {"name": "Unused mesh", "primitives": [{"attributes": {"POSITION": 0}, "material": 1}]}
+            ],
+            "materials": [
+                {"name": "Body material", "pbrMetallicRoughness": {"baseColorFactor": [1.0, 0.0, 0.0, 1.0]}},
+                {"name": "Unused material", "pbrMetallicRoughness": {"baseColorFactor": [0.0, 1.0, 0.0, 1.0]}}
+            ],
+            "cameras": [{"name": "Unused camera", "type": "perspective", "perspective": {"yfov": 1.0, "znear": 0.1}}],
+            "skins": [{"name": "Character skin", "skeleton": 3, "joints": [3, 4], "inverseBindMatrices": 3}],
+            "buffers": [{"byteLength": byte_length}],
+            "bufferViews": [
+                {"buffer": 0, "byteOffset": 0, "byteLength": 36},
+                {"buffer": 0, "byteOffset": 36, "byteLength": 8},
+                {"buffer": 0, "byteOffset": 44, "byteLength": 24},
+                {"buffer": 0, "byteOffset": 68, "byteLength": 128},
+                {"buffer": 0, "byteOffset": 196, "byteLength": 4}
+            ],
+            "accessors": [
+                {"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0.0, 0.0, 0.0], "max": [1.0, 1.0, 0.0]},
+                {"bufferView": 1, "componentType": 5126, "count": 2, "type": "SCALAR", "min": [0.0], "max": [1.0]},
+                {"bufferView": 2, "componentType": 5126, "count": 2, "type": "VEC3"},
+                {"bufferView": 3, "componentType": 5126, "count": 2, "type": "MAT4"},
+                {"bufferView": 4, "componentType": 5126, "count": 1, "type": "SCALAR"}
+            ],
+            "animations": [
+                {"name": "Walk", "samplers": [{"input": 1, "output": 2, "interpolation": "LINEAR"}], "channels": [{"sampler": 0, "target": {"node": 3, "path": "translation"}}]},
+                {"name": "Unused", "samplers": [{"input": 1, "output": 2, "interpolation": "LINEAR"}], "channels": [{"sampler": 0, "target": {"node": 2, "path": "translation"}}]}
+            ]
+        }),
+        bin: Some(bin),
+        dirty: false,
+    }
+}
+
+fn character_export_selection() -> GlbExportSelection {
+    GlbExportSelection {
+        preset: GlbExportPreset::CharacterPackage,
+        scene_index: 0,
+        skin_index: Some(0),
+        selected_nodes: BTreeSet::from([1]),
+        selected_primitives: BTreeMap::from([(0, BTreeSet::from([0]))]),
+        selected_animations: BTreeSet::from([0]),
+        animation_output: AnimationOutputMode::Combined,
+    }
+}
+
+#[test]
+fn character_package_prunes_scene_graph_resources_and_reindexes_references() {
+    let mut document = compact_export_fixture();
+    let original = document.to_bytes().unwrap();
+    let report = document
+        .prune_for_export(&character_export_selection())
+        .unwrap();
+
+    assert_eq!(report.source.scenes, 2);
+    assert_eq!(report.output.scenes, 1);
+    assert_eq!(report.output.nodes, 4);
+    assert_eq!(report.output.meshes, 1);
+    assert_eq!(report.output.materials, 1);
+    assert_eq!(report.output.skins, 1);
+    assert_eq!(report.output.animations, 1);
+    assert!(report.output_bin_bytes < report.source_bin_bytes);
+    assert!(report.output_glb_bytes < report.source_glb_bytes);
+    assert_eq!(document.json["scene"], 0);
+    assert_eq!(document.json["scenes"].as_array().unwrap().len(), 1);
+    assert_eq!(document.json["nodes"][0]["children"], json!([1, 2]));
+    assert_eq!(document.json["nodes"][1]["mesh"], 0);
+    assert_eq!(document.json["nodes"][1]["skin"], 0);
+    assert!(document.json["nodes"][2].get("mesh").is_none());
+    assert_eq!(
+        document.json["animations"][0]["channels"][0]["target"]["node"],
+        2
+    );
+    assert_eq!(
+        document.json["buffers"][0]["byteLength"],
+        report.output_bin_bytes
+    );
+    assert!(report.output_bin_bytes.is_multiple_of(4));
+    assert!(document.json["bufferViews"].as_array().unwrap().iter().all(
+        |view| {
+            view.get("byteOffset")
+                .and_then(Value::as_u64)
+                .unwrap_or(0)
+                .is_multiple_of(4)
+        }
+    ));
+    assert_eq!(document.json["nodes"][0]["extras"]["keep"], true);
+    assert!(document.json.get("cameras").is_none());
+    assert_eq!(document.json["meshes"][0]["name"], "Body mesh");
+    assert_eq!(document.json["materials"][0]["name"], "Body material");
+    assert!(document.to_bytes().unwrap() != original);
+    gltf::Gltf::from_slice(&document.to_bytes().unwrap()).unwrap();
+    assert_eq!(document.to_bytes().unwrap().len(), report.output_glb_bytes);
+    let runtime = AnimationRuntime::from_bytes_skeleton_only(
+        &document.to_bytes().unwrap(),
+        None,
+    )
+    .unwrap();
+    assert_eq!(runtime.clips.len(), 1);
+    let mesh_runtime =
+        AnimationRuntime::from_bytes(&document.to_bytes().unwrap(), None)
+            .unwrap();
+    assert_eq!(mesh_runtime.primitives.len(), 1);
+}
+
+#[test]
+fn character_package_without_animations_is_a_model_and_skin_package() {
+    let mut document = compact_export_fixture();
+    let mut selection = character_export_selection();
+    selection.selected_animations.clear();
+    let report = document.prune_for_export(&selection).unwrap();
+
+    assert_eq!(report.output.animations, 0);
+    assert_eq!(report.output.meshes, 1);
+    assert_eq!(report.output.skins, 1);
+    assert!(document.json.get("animations").is_none());
+    assert!(document.json.get("bufferViews").is_some());
+    gltf::Gltf::from_slice(&document.to_bytes().unwrap()).unwrap();
+}
+
+#[test]
+fn preserve_all_keeps_the_document_and_reports_serialized_size() {
+    let mut document = compact_export_fixture();
+    let original = document.to_bytes().unwrap();
+    let selection = GlbExportSelection::default();
+
+    let report = document.prune_for_export(&selection).unwrap();
+
+    assert_eq!(document.to_bytes().unwrap(), original);
+    assert_eq!(report.source, report.output);
+    assert_eq!(report.source_glb_bytes, original.len());
+    assert_eq!(report.output_glb_bytes, original.len());
+}
+
+#[test]
+fn character_package_prunes_selected_mesh_primitives() {
+    let mut document = compact_export_fixture();
+    document.json["meshes"][0]["primitives"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({
+            "attributes": {"POSITION": 0},
+            "material": 0
+        }));
+
+    let report = document
+        .prune_for_export(&character_export_selection())
+        .unwrap();
+
+    assert_eq!(report.source.meshes, 2);
+    assert_eq!(
+        document.json["meshes"][0]["primitives"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    gltf::Gltf::from_slice(&document.to_bytes().unwrap()).unwrap();
+}
+
+#[test]
+fn compact_export_combines_selected_animations_and_reachable_targets() {
+    let mut document = compact_export_fixture();
+    let mut selection = character_export_selection();
+    selection.selected_animations = BTreeSet::from([0, 1]);
+
+    let report = document.prune_for_export(&selection).unwrap();
+
+    assert_eq!(report.output.animations, 2);
+    assert_eq!(report.output.nodes, 5);
+    assert!(document.json["nodes"][2].get("mesh").is_none());
+    gltf::Gltf::from_slice(&document.to_bytes().unwrap()).unwrap();
+}
+
+#[test]
+fn skeleton_animation_removes_render_resources_but_keeps_skin_and_animation_targets(
+) {
+    let mut document = compact_export_fixture();
+    let mut selection = character_export_selection();
+    selection.preset = GlbExportPreset::SkeletonAnimation;
+    selection.selected_nodes.clear();
+    let report = document.prune_for_export(&selection).unwrap();
+
+    assert_eq!(report.output.meshes, 0);
+    assert_eq!(report.output.materials, 0);
+    assert_eq!(report.output.skins, 1);
+    assert_eq!(report.output.animations, 1);
+    assert_eq!(report.output.scenes, 1);
+    assert!(document.json.get("meshes").is_none());
+    assert_eq!(document.json["scenes"][0]["nodes"], json!([0]));
+    assert_eq!(document.json["nodes"][0]["children"], json!([1]));
+    assert!(document.json["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|node| {
+            node.get("mesh").is_none() && node.get("camera").is_none()
+        }));
+    gltf::Gltf::from_slice(&document.to_bytes().unwrap()).unwrap();
+}
+
+#[test]
+fn compact_export_rejects_a_selected_node_from_another_skin() {
+    let mut document = compact_export_fixture();
+    document.json["nodes"][1]["skin"] = json!(1);
+    document.json["skins"] = json!([
+        {"name": "Character skin", "skeleton": 3, "joints": [3, 4], "inverseBindMatrices": 3},
+        {"name": "Other skin", "skeleton": 3, "joints": [3, 4], "inverseBindMatrices": 3}
+    ]);
+
+    let error = document
+        .prune_for_export(&character_export_selection())
+        .unwrap_err();
+
+    assert!(error.to_string().contains("references Skin 1"));
+}
+
+#[test]
+fn compact_export_removes_cameras_and_punctual_lights() {
+    let mut document = compact_export_fixture();
+    document.json["extensionsUsed"] = json!(["KHR_lights_punctual"]);
+    document.json["extensions"] =
+        json!({"KHR_lights_punctual": {"lights": [{"type": "point"}]} });
+    document.json["nodes"][0]["extensions"] =
+        json!({"KHR_lights_punctual": {"light": 0}});
+
+    document
+        .prune_for_export(&character_export_selection())
+        .unwrap();
+
+    assert!(document.json.get("cameras").is_none());
+    assert!(document.json.get("extensions").is_none());
+    assert!(document.json.get("extensionsUsed").is_none());
+    assert!(document.json["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|node| node
+            .get("extensions")
+            .and_then(Value::as_object)
+            .is_none_or(
+                |extensions| !extensions.contains_key("KHR_lights_punctual")
+            )));
+}
+
+#[test]
+fn compact_export_rejects_external_buffers_and_unknown_extensions() {
+    let mut external_buffer = compact_export_fixture();
+    external_buffer.json["buffers"][0]["uri"] = json!("mesh.bin");
+    let error = external_buffer
+        .prune_for_export(&character_export_selection())
+        .unwrap_err();
+    assert!(error.to_string().contains("embedded GLB buffer"));
+
+    let mut unknown_extension = compact_export_fixture();
+    unknown_extension.json["nodes"][0]["extensions"] =
+        json!({"VENDOR_node_extension": {"index": 0}});
+    let error = unknown_extension
+        .prune_for_export(&character_export_selection())
+        .unwrap_err();
+    assert!(error.to_string().contains("VENDOR_node_extension"));
+
+    let mut extras_extension = compact_export_fixture();
+    extras_extension.json["nodes"][0]["extras"]["metadata"] =
+        json!({"extensions": {"VENDOR_data": {"index": 99}}});
+    extras_extension
+        .prune_for_export(&character_export_selection())
+        .unwrap();
+    assert_eq!(
+        extras_extension.json["nodes"][0]["extras"]["metadata"]["extensions"]
+            ["VENDOR_data"]["index"],
+        99
+    );
+
+    let mut unknown_material_extension = compact_export_fixture();
+    unknown_material_extension.json["materials"][0]["extensions"] =
+        json!({"KHR_materials_future": {"value": true}});
+    let error = unknown_material_extension
+        .prune_for_export(&character_export_selection())
+        .unwrap_err();
+    assert!(error.to_string().contains("KHR_materials_future"));
+}
+
+#[test]
+fn compact_export_validates_empty_and_out_of_range_selection() {
+    let document = compact_export_fixture();
+    let mut empty_nodes = character_export_selection();
+    empty_nodes.selected_nodes.clear();
+    let validation = document.validate_export_selection(&empty_nodes);
+    assert!(!validation.is_valid());
+    assert!(validation.errors[0].contains("at least one selected node"));
+
+    let mut invalid_primitive = character_export_selection();
+    invalid_primitive
+        .selected_primitives
+        .insert(0, BTreeSet::from([9]));
+    let validation = document.validate_export_selection(&invalid_primitive);
+    assert!(!validation.is_valid());
+    assert!(validation.errors[0].contains("Primitive 9"));
+
+    let mut invalid_split = character_export_selection();
+    invalid_split.selected_animations.clear();
+    invalid_split.animation_output = AnimationOutputMode::Split;
+    let mut document = compact_export_fixture();
+    let error = document.prune_for_export(&invalid_split).unwrap_err();
+    assert!(error.to_string().contains("Split animation output"));
+}
+
+#[test]
+fn compact_export_reindexes_material_texture_image_and_sampler_references() {
+    let mut document = compact_export_fixture();
+    document.json["materials"][0]["pbrMetallicRoughness"]["baseColorTexture"] =
+        json!({"index": 1});
+    document.json["textures"] = json!([
+        {"name": "Unused texture", "source": 0, "sampler": 0},
+        {"name": "Body texture", "source": 1, "sampler": 1}
+    ]);
+    document.json["images"] = json!([
+        {"name": "Unused image", "uri": "data:image/png;base64,AA=="},
+        {"name": "Body image", "uri": "data:image/png;base64,AA=="}
+    ]);
+    document.json["samplers"] =
+        json!([{"magFilter": 9728}, {"magFilter": 9729}]);
+
+    let report = document
+        .prune_for_export(&character_export_selection())
+        .unwrap();
+
+    assert_eq!(report.output.materials, 1);
+    assert_eq!(report.output.images, 1);
+    assert_eq!(
+        document.json["materials"][0]["pbrMetallicRoughness"]
+            ["baseColorTexture"]["index"],
+        0
+    );
+    assert_eq!(document.json["textures"][0]["name"], "Body texture");
+    assert_eq!(document.json["textures"][0]["source"], 0);
+    assert_eq!(document.json["textures"][0]["sampler"], 0);
+    assert_eq!(document.json["images"][0]["name"], "Body image");
+    assert_eq!(document.json["samplers"][0]["magFilter"], 9729);
+    gltf::Gltf::from_slice(&document.to_bytes().unwrap()).unwrap();
+}
+
+#[test]
+fn compact_export_rejects_external_image_uris() {
+    let mut document = compact_export_fixture();
+    document.json["materials"][0]["pbrMetallicRoughness"]["baseColorTexture"] =
+        json!({"index": 0});
+    document.json["textures"] = json!([{"source": 0}]);
+    document.json["images"] = json!([{"uri": "textures/body.png"}]);
+
+    let error = document
+        .prune_for_export(&character_export_selection())
+        .unwrap_err();
+    assert!(error.to_string().contains("external URI"));
+}
+
+#[test]
+fn skeleton_animation_rejects_morph_target_channels() {
+    let mut document = compact_export_fixture();
+    document.json["animations"][0]["channels"][0]["target"]["path"] =
+        json!("weights");
+    let mut selection = character_export_selection();
+    selection.preset = GlbExportPreset::SkeletonAnimation;
+    selection.selected_nodes.clear();
+
+    let error = document.prune_for_export(&selection).unwrap_err();
+
+    assert!(error.to_string().contains("Morph Target"));
 }
