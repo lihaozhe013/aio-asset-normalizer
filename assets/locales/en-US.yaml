@@ -61,7 +61,7 @@ glb:
   reset_scale: "Reset scale"
   reset_translation: "Reset translation"
   animation: "Animation trim"
-  no_animations: "No animations found."
+  no_animations: "No animations found; displaying the authored Rest Pose."
   timeline: "GLB Animation"
   timeline_hint: "Playback controls are available in the timeline below the viewport."
   clip: "Playback clip"

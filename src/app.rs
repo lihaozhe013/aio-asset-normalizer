@@ -443,6 +443,11 @@ impl App {
                                 self.camera.reset();
                             }
                             self.reset_glb_animation_state();
+                            if self.first_playable_glb_animation().is_none() {
+                                self.log.append(
+                                    "[glb_editor] Applied authored Rest Pose for static preview",
+                                );
+                            }
                             if !self.canvas.animation_clips().is_empty() {
                                 self.bottom_panel_tab =
                                     BottomPanelTab::Animation;

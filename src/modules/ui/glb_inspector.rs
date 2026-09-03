@@ -192,7 +192,10 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
     let animation_label = app.i18n.tr("glb.animation").to_owned();
     ui.collapsing(animation_label, |ui| {
         if summary.animations == 0 {
-            ui.label(app.i18n.tr("glb.no_animations"));
+            ui.colored_label(
+                Color32::LIGHT_BLUE,
+                app.i18n.tr("glb.no_animations"),
+            );
         } else {
             ui.label(app.i18n.tr("glb.timeline_hint"));
             let entries = app.glb_animation_entries();

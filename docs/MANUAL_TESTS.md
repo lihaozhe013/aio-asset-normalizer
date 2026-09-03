@@ -21,10 +21,16 @@
    current document and preview controls remain available for further edits.
 8. Switch to the `Debug Log` tab and confirm log controls are visible while
    animation playback state is preserved. Switch back to `Animation`.
-9. Open a GLB with no animations and confirm only the `Debug Log` tab is shown.
-10. Open a GLB with an unsupported CUBICSPLINE or Morph Target clip and confirm
+9. Open a GLB with no animations and confirm the Inspector reports
+   `Animations: 0`, the authored Rest Pose is visible, and only the `Debug Log`
+   tab is shown.
+10. Open a static Skinned GLB with a root-node scale (for example,
+    `Pete.glb`). Confirm the authored Rest Pose is visible at the expected
+    size, Skeleton Display and Fit work, and changing Root Transform does not
+    modify the source GLB.
+11. Open a GLB with an unsupported CUBICSPLINE or Morph Target clip and confirm
    the clip is listed as unavailable with an explanatory message.
-11. Resize the bottom dock and the application window. Confirm the Canvas
+12. Resize the bottom dock and the application window. Confirm the Canvas
     boundary moves with the dock and never renders underneath it.
 
 ## Meshless GLB Skeleton Playback

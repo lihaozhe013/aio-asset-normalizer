@@ -3,7 +3,7 @@ use super::skeleton_visual::{
     SkeletonPose, SkeletonVisual, SkeletonVisualConfig,
 };
 use crate::modules::glb::{
-    AnimationClip, AnimationRuntime, RuntimeNode, RuntimeNodePose,
+    AnimationClip, AnimationRuntime, RuntimeNode, RuntimeNodePose, RuntimePose,
 };
 use crate::modules::preferences::ViewPreferences;
 use std::path::Path;
@@ -20,7 +20,7 @@ pub struct ViewportCanvas {
     glb_animation: Option<AnimationRuntime>,
     glb_skeleton_nodes: Vec<usize>,
     model_base_transforms: Vec<Mat4>,
-    animated_node_world: Option<Vec<Mat4>>,
+    sampled_node_world: Option<Vec<Mat4>>,
     root_preview_transform: Mat4,
     pub show_axes: bool,
     pub show_grid: bool,
@@ -46,7 +46,7 @@ impl ViewportCanvas {
             glb_animation: None,
             glb_skeleton_nodes: Vec::new(),
             model_base_transforms: Vec::new(),
-            animated_node_world: None,
+            sampled_node_world: None,
             root_preview_transform: Mat4::identity(),
             show_axes: true,
             show_grid: true,
@@ -148,6 +148,8 @@ impl ViewportCanvas {
             }
             if let Some(index) = first_playable {
                 self.update_glb_animation(index, 0.0)?;
+            } else {
+                self.update_glb_rest_pose()?;
             }
             self.show_origin = false;
             return Ok(());
@@ -179,7 +181,7 @@ impl ViewportCanvas {
         self.model_base_transforms =
             model.iter().map(|part| part.transformation()).collect();
         self.model = Some(model);
-        self.animated_node_world = None;
+        self.sampled_node_world = None;
         self.root_preview_transform = Mat4::identity();
         let render_primitive_count = self
             .model
@@ -199,6 +201,8 @@ impl ViewportCanvas {
         }
         if let Some(index) = first_playable {
             self.update_glb_animation(index, 0.0)?;
+        } else {
+            self.update_glb_rest_pose()?;
         }
         self.show_origin = false;
         Ok(())
@@ -210,7 +214,7 @@ impl ViewportCanvas {
         self.glb_skeleton_nodes.clear();
         self.glb_animation = None;
         self.model_base_transforms.clear();
-        self.animated_node_world = None;
+        self.sampled_node_world = None;
         self.root_preview_transform = Mat4::identity();
     }
 
@@ -295,23 +299,49 @@ impl ViewportCanvas {
         animation_index: usize,
         time: f32,
     ) -> Result<(), String> {
-        let Some(runtime) = self.glb_animation.as_ref() else {
-            return Ok(());
+        let pose = {
+            let Some(runtime) = self.glb_animation.as_ref() else {
+                return Ok(());
+            };
+            runtime
+                .sample(animation_index, time)
+                .map_err(|error| error.to_string())?
         };
-        let pose = runtime
-            .sample(animation_index, time)
-            .map_err(|error| error.to_string())?;
-        let animated_node_world = pose
-            .node_world
+        self.apply_sampled_pose(pose)
+    }
+
+    pub fn update_glb_rest_pose(&mut self) -> Result<(), String> {
+        let pose = {
+            let Some(runtime) = self.glb_animation.as_ref() else {
+                return Ok(());
+            };
+            runtime.sample_rest().map_err(|error| error.to_string())?
+        };
+        self.apply_sampled_pose(pose)
+    }
+
+    fn apply_sampled_pose(&mut self, pose: RuntimePose) -> Result<(), String> {
+        let RuntimePose {
+            node_world,
+            node_poses,
+            skinned_positions,
+            skinned_normals,
+            skinned_tangents,
+        } = pose;
+        let sampled_node_world = node_world
             .iter()
             .copied()
             .map(matrix_to_mat4)
             .collect::<Vec<_>>();
-        self.animated_node_world = Some(animated_node_world.clone());
+        self.sampled_node_world = Some(sampled_node_world.clone());
+        let runtime = self
+            .glb_animation
+            .as_ref()
+            .ok_or_else(|| "GLB preview runtime is missing".to_owned())?;
         if self.glb_skeleton.is_some() {
             let skeleton_pose = skeleton_pose_from_runtime(
                 &runtime.nodes,
-                &pose.node_poses,
+                &node_poses,
                 &self.glb_skeleton_nodes,
                 None,
             );
@@ -334,17 +364,17 @@ impl ViewportCanvas {
                 runtime
                     .primitives
                     .iter()
-                    .zip(pose.skinned_positions.iter())
-                    .zip(pose.skinned_normals.iter())
-                    .zip(pose.skinned_tangents.iter())
+                    .zip(skinned_positions.iter())
+                    .zip(skinned_normals.iter())
+                    .zip(skinned_tangents.iter())
                     .map(|(((primitive, positions), normals), tangents)| {
                         (primitive, positions, normals, tangents)
                     }),
             )
         {
             let node_world =
-                animated_node_world.get(primitive.node).ok_or_else(|| {
-                    "Animation references a missing node".to_owned()
+                sampled_node_world.get(primitive.node).ok_or_else(|| {
+                    "Sampled pose references a missing node".to_owned()
                 })?;
             part.set_transformation(root_preview_transform * *node_world);
             // Indexed meshes expose the element count as `vertex_count`; partial
@@ -378,18 +408,18 @@ impl ViewportCanvas {
     }
 
     fn apply_model_transforms(&mut self) -> Result<(), String> {
-        let transforms = if let Some(animated_node_world) =
-            self.animated_node_world.as_ref()
+        let transforms = if let Some(sampled_node_world) =
+            self.sampled_node_world.as_ref()
         {
             let runtime = self.glb_animation.as_ref().ok_or_else(|| {
-                "Animated preview runtime is missing".to_owned()
+                "Sampled GLB preview runtime is missing".to_owned()
             })?;
             runtime
                 .primitives
                 .iter()
                 .map(|primitive| {
-                    animated_node_world.get(primitive.node).copied().ok_or_else(
-                        || "Animation references a missing node".to_owned(),
+                    sampled_node_world.get(primitive.node).copied().ok_or_else(
+                        || "Sampled pose references a missing node".to_owned(),
                     )
                 })
                 .collect::<Result<Vec<_>, _>>()?

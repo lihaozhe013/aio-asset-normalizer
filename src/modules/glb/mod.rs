@@ -21,7 +21,7 @@ mod orientation_presets;
 mod smart_loop;
 #[allow(unused_imports)]
 pub use animation_runtime::{
-    AnimationClip, AnimationRuntime, RuntimeNode, RuntimeNodePose,
+    AnimationClip, AnimationRuntime, RuntimeNode, RuntimeNodePose, RuntimePose,
 };
 pub use orientation_presets::UpAxisPreset;
 #[allow(unused_imports)]

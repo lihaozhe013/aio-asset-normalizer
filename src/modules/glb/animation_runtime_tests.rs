@@ -69,6 +69,78 @@ fn meshless_hierarchy_glb(
     .unwrap()
 }
 
+fn static_skinned_glb(root_scale: [f32; 3]) -> Vec<u8> {
+    let mut bin = Vec::new();
+    for value in [
+        [0.0_f32, 0.0, 0.0],
+        [1.0_f32, 0.0, 0.0],
+        [0.0_f32, 1.0, 0.0],
+    ]
+    .into_iter()
+    .flatten()
+    {
+        bin.extend_from_slice(&value.to_le_bytes());
+    }
+    for _ in 0..3 {
+        bin.extend_from_slice(&[0, 0, 0, 0]);
+    }
+    for _ in 0..3 {
+        for value in [1.0_f32, 0.0, 0.0, 0.0] {
+            bin.extend_from_slice(&value.to_le_bytes());
+        }
+    }
+    for value in [
+        0.5_f32, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, -1.5,
+        -1.0, 0.0, 1.0,
+    ] {
+        bin.extend_from_slice(&value.to_le_bytes());
+    }
+
+    let json = serde_json::json!({
+        "asset": {"version": "2.0"},
+        "scene": 0,
+        "scenes": [{"nodes": [0]}],
+        "nodes": [
+            {"name": "Root", "translation": [3.0, 0.0, 0.0], "scale": root_scale, "children": [1, 2]},
+            {"name": "Mesh", "mesh": 0, "skin": 0},
+            {"name": "Joint", "translation": [0.0, 1.0, 0.0]}
+        ],
+        "meshes": [{"primitives": [{
+            "attributes": {"POSITION": 0, "JOINTS_0": 1, "WEIGHTS_0": 2},
+            "mode": 4
+        }]}],
+        "skins": [{"joints": [2], "inverseBindMatrices": 3}],
+        "buffers": [{"byteLength": bin.len()}],
+        "bufferViews": [
+            {"buffer": 0, "byteOffset": 0, "byteLength": 36},
+            {"buffer": 0, "byteOffset": 36, "byteLength": 12},
+            {"buffer": 0, "byteOffset": 48, "byteLength": 48},
+            {"buffer": 0, "byteOffset": 96, "byteLength": 64}
+        ],
+        "accessors": [
+            {"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0.0, 0.0, 0.0], "max": [1.0, 1.0, 0.0]},
+            {"bufferView": 1, "componentType": 5121, "count": 3, "type": "VEC4"},
+            {"bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC4"},
+            {"bufferView": 3, "componentType": 5126, "count": 1, "type": "MAT4"}
+        ]
+    });
+    let mut json_bytes = serde_json::to_vec(&json).unwrap();
+    while !json_bytes.len().is_multiple_of(4) {
+        json_bytes.push(b' ');
+    }
+    gltf::binary::Glb {
+        header: gltf::binary::Header {
+            magic: *b"glTF",
+            version: 2,
+            length: 0,
+        },
+        json: Cow::Owned(json_bytes),
+        bin: Some(Cow::Owned(bin)),
+    }
+    .to_vec()
+    .unwrap()
+}
+
 #[test]
 fn meshless_runtime_uses_first_scene_nodes_and_samples_animation() {
     let bytes = meshless_hierarchy_glb(false, Some("LINEAR"));
@@ -109,12 +181,70 @@ fn static_meshless_runtime_exposes_rest_pose_without_animation() {
 }
 
 #[test]
+fn static_skinned_runtime_samples_rest_pose_in_mesh_local_space() {
+    let bytes = static_skinned_glb([2.0, 2.0, 2.0]);
+    let runtime = AnimationRuntime::from_bytes(&bytes, None).unwrap();
+
+    assert!(runtime.clips.is_empty());
+    let pose = runtime.sample_rest().unwrap();
+    let positions = pose.skinned_positions[0].as_ref().unwrap();
+    let expected_local = [
+        [-1.5_f32, 0.0, 0.0],
+        [-1.0_f32, 0.0, 0.0],
+        [-1.5_f32, 0.5, 0.0],
+    ];
+    for (actual, expected) in positions.iter().zip(expected_local) {
+        for (actual, expected) in actual.iter().zip(expected) {
+            assert!((actual - expected).abs() < 1e-5);
+        }
+    }
+
+    let mesh_world = pose.node_world[1];
+    let expected_world = [
+        [0.0_f32, 0.0, 0.0],
+        [1.0_f32, 0.0, 0.0],
+        [0.0_f32, 1.0, 0.0],
+    ];
+    for (position, expected) in positions.iter().zip(expected_world) {
+        let world = transform_point(mesh_world, *position);
+        for (actual, expected) in world.iter().zip(expected) {
+            assert!((actual - expected).abs() < 1e-5);
+        }
+    }
+}
+
+#[test]
+fn static_skinned_runtime_rejects_non_invertible_mesh_transform() {
+    let bytes = static_skinned_glb([0.0, 2.0, 2.0]);
+    let runtime = AnimationRuntime::from_bytes(&bytes, None).unwrap();
+
+    assert!(matches!(
+        runtime.sample_rest(),
+        Err(RuntimeError::Invalid(message))
+            if message.contains("Mesh node transform is non-invertible")
+    ));
+}
+
+#[test]
+fn affine_inverse_handles_rotation_scale_and_translation() {
+    let matrix =
+        compose([3.0, -2.0, 1.0], [0.3, -0.2, 0.4, 0.8], [2.0, 3.0, 4.0]);
+    let inverse = invert_affine(matrix).unwrap();
+    let product = multiply(matrix, inverse);
+    for (index, value) in product.iter().enumerate() {
+        let expected = if index % 5 == 0 { 1.0 } else { 0.0 };
+        assert!((value - expected).abs() < 1e-5);
+    }
+}
+
+#[test]
 fn unsupported_meshless_animation_keeps_rest_pose_available() {
     let bytes = meshless_hierarchy_glb(false, Some("CUBICSPLINE"));
     let runtime = AnimationRuntime::from_bytes(&bytes, None).unwrap();
 
     assert!(!runtime.clips[0].is_playable());
     assert!(runtime.rest_node_poses().is_ok());
+    assert!(runtime.sample_rest().is_ok());
     assert!(matches!(
         runtime.sample_nodes(0, 0.0),
         Err(RuntimeError::Unsupported(_))

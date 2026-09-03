@@ -433,22 +433,24 @@ impl AnimationRuntime {
         clip_index: usize,
         time: f32,
     ) -> Result<RuntimePose, RuntimeError> {
-        let sampled = self.sample_node_state(Some(clip_index), time)?;
+        self.sample_pose(Some(clip_index), time)
+    }
+
+    /// Sample the authored node transforms and Skin data without requiring an
+    /// animation clip. Skinned output is kept in the corresponding mesh
+    /// node's local space so the renderer applies that node transform once.
+    pub fn sample_rest(&self) -> Result<RuntimePose, RuntimeError> {
+        self.sample_pose(None, 0.0)
+    }
+
+    fn sample_pose(
+        &self,
+        clip_index: Option<usize>,
+        time: f32,
+    ) -> Result<RuntimePose, RuntimeError> {
+        let sampled = self.sample_node_state(clip_index, time)?;
         let node_world = sampled.node_world;
 
-        let skin_matrices = self
-            .skins
-            .iter()
-            .map(|skin| {
-                skin.joints
-                    .iter()
-                    .zip(skin.inverse_bind_matrices.iter())
-                    .map(|(joint, inverse_bind)| {
-                        multiply(node_world[*joint], *inverse_bind)
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>();
         let mut skinned_positions = Vec::with_capacity(self.primitives.len());
         let mut skinned_normals = Vec::with_capacity(self.primitives.len());
         let mut skinned_tangents = Vec::with_capacity(self.primitives.len());
@@ -459,11 +461,36 @@ impl AnimationRuntime {
                 skinned_tangents.push(None);
                 continue;
             };
-            let matrices = skin_matrices.get(skin_index).ok_or_else(|| {
+            let mesh_world =
+                node_world.get(primitive.node).ok_or_else(|| {
+                    RuntimeError::Invalid(format!(
+                        "Primitive references missing node {}",
+                        primitive.node
+                    ))
+                })?;
+            let mesh_world_inverse = invert_affine(*mesh_world)?;
+            let skin = self.skins.get(skin_index).ok_or_else(|| {
                 RuntimeError::Invalid(format!(
                     "Primitive references missing Skin {skin_index}"
                 ))
             })?;
+            let matrices = skin
+                .joints
+                .iter()
+                .zip(skin.inverse_bind_matrices.iter())
+                .map(|(joint, inverse_bind)| {
+                    let joint_world =
+                        node_world.get(*joint).ok_or_else(|| {
+                            RuntimeError::Invalid(format!(
+                            "Skin {skin_index} references missing joint {joint}"
+                        ))
+                        })?;
+                    Ok(multiply(
+                        mesh_world_inverse,
+                        multiply(*joint_world, *inverse_bind),
+                    ))
+                })
+                .collect::<Result<Vec<_>, RuntimeError>>()?;
             let joints = primitive.joints.as_ref().ok_or_else(|| {
                 RuntimeError::Invalid(
                     "Skinned primitive is missing JOINTS_0".to_owned(),
@@ -496,7 +523,7 @@ impl AnimationRuntime {
                     *position,
                     joints[index],
                     weights[index],
-                    matrices,
+                    &matrices,
                 )?;
                 positions.push(if total_weight > f32::EPSILON {
                     skinned_position
@@ -510,7 +537,7 @@ impl AnimationRuntime {
                         source_normals[index],
                         joints[index],
                         weights[index],
-                        matrices,
+                        &matrices,
                     )?;
                     output_normals.push(if total_weight > f32::EPSILON {
                         normalize_vec3(normal)
@@ -526,7 +553,7 @@ impl AnimationRuntime {
                         [tangent[0], tangent[1], tangent[2]],
                         joints[index],
                         weights[index],
-                        matrices,
+                        &matrices,
                     )?;
                     let value = if total_weight > f32::EPSILON {
                         normalize_vec3(value)
@@ -1151,6 +1178,86 @@ pub fn multiply(a: Matrix4, b: Matrix4) -> Matrix4 {
         }
     }
     result
+}
+
+fn invert_affine(matrix: Matrix4) -> Result<Matrix4, RuntimeError> {
+    if matrix.iter().any(|value| !value.is_finite()) {
+        return Err(RuntimeError::Invalid(
+            "Mesh node transform contains non-finite values".to_owned(),
+        ));
+    }
+    if matrix[3].abs() > f32::EPSILON
+        || matrix[7].abs() > f32::EPSILON
+        || matrix[11].abs() > f32::EPSILON
+        || (matrix[15] - 1.0).abs() > f32::EPSILON
+    {
+        return Err(RuntimeError::Invalid(
+            "Mesh node transform is not affine".to_owned(),
+        ));
+    }
+
+    let a00 = matrix[0];
+    let a01 = matrix[4];
+    let a02 = matrix[8];
+    let a10 = matrix[1];
+    let a11 = matrix[5];
+    let a12 = matrix[9];
+    let a20 = matrix[2];
+    let a21 = matrix[6];
+    let a22 = matrix[10];
+    let c00 = a11 * a22 - a12 * a21;
+    let c01 = a02 * a21 - a01 * a22;
+    let c02 = a01 * a12 - a02 * a11;
+    let c10 = a12 * a20 - a10 * a22;
+    let c11 = a00 * a22 - a02 * a20;
+    let c12 = a02 * a10 - a00 * a12;
+    let c20 = a10 * a21 - a11 * a20;
+    let c21 = a01 * a20 - a00 * a21;
+    let c22 = a00 * a11 - a01 * a10;
+    let determinant = a00 * c00 + a01 * c10 + a02 * c20;
+    if !determinant.is_finite() || determinant.abs() <= f32::EPSILON {
+        return Err(RuntimeError::Invalid(
+            "Mesh node transform is non-invertible".to_owned(),
+        ));
+    }
+
+    let inverse_determinant = 1.0 / determinant;
+    let inv00 = c00 * inverse_determinant;
+    let inv01 = c01 * inverse_determinant;
+    let inv02 = c02 * inverse_determinant;
+    let inv10 = c10 * inverse_determinant;
+    let inv11 = c11 * inverse_determinant;
+    let inv12 = c12 * inverse_determinant;
+    let inv20 = c20 * inverse_determinant;
+    let inv21 = c21 * inverse_determinant;
+    let inv22 = c22 * inverse_determinant;
+    let tx = matrix[12];
+    let ty = matrix[13];
+    let tz = matrix[14];
+    let inverse = [
+        inv00,
+        inv10,
+        inv20,
+        0.0,
+        inv01,
+        inv11,
+        inv21,
+        0.0,
+        inv02,
+        inv12,
+        inv22,
+        0.0,
+        -(inv00 * tx + inv01 * ty + inv02 * tz),
+        -(inv10 * tx + inv11 * ty + inv12 * tz),
+        -(inv20 * tx + inv21 * ty + inv22 * tz),
+        1.0,
+    ];
+    if inverse.iter().any(|value| !value.is_finite()) {
+        return Err(RuntimeError::Invalid(
+            "Mesh node transform inverse contains non-finite values".to_owned(),
+        ));
+    }
+    Ok(inverse)
 }
 
 fn transform_point(matrix: Matrix4, point: [f32; 3]) -> [f32; 3] {

@@ -61,7 +61,7 @@ glb:
   reset_scale: "重置缩放"
   reset_translation: "重置位移"
   animation: "动画裁剪"
-  no_animations: "未找到动画。"
+  no_animations: "未找到动画，当前显示素材的 Rest Pose。"
   timeline: "GLB 动画"
   timeline_hint: "播放控件位于视口下方的时间轴中。"
   clip: "播放片段"
