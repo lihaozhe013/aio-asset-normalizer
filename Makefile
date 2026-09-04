@@ -1,15 +1,24 @@
-.PHONY: run build clean
+.PHONY: run build clean dev
 
-default: run
+default: dev
 
-# One-shot build
+dev:
+	cargo run
+
 build:
 	cargo build --release
 
-# One-shot run
 run:
 	cargo run --release
 
-# Clean build artifacts
 clean:
 	cargo clean
+
+build-mac:
+	cargo build --release && uv run ./packaging/build-mac-app.py
+
+build-win:
+	cargo build --release && uv run ./packaging/build-windows.py
+
+build-appimage:
+	cargo build --release && uv run ./packaging/build-appimage.py
