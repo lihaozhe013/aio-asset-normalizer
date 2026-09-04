@@ -271,8 +271,10 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
             glb_export_panel::render_selection_controls(
                 ui,
                 &i18n,
+                target,
                 &catalog,
                 &mut app.bvh_export_selection,
+                false,
                 false,
                 false,
             );

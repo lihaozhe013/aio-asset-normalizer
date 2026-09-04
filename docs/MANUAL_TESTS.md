@@ -168,10 +168,26 @@ animations, a camera, a punctual light, and some unreferenced resources.
    duplicate names receive numeric suffixes.
 7. Confirm the Debug Log reports source/output counts and BIN sizes. Compare
    the output file sizes and confirm unused BIN ranges are not retained.
-8. Repeat the package and Skeleton Animation exports from BVH Studio and
+8. Enable `Remove Root Motion` for a selected Character Package animation.
+   Confirm the Root Motion Node control offers `Automatic` and the selected
+   animation's translation-channel nodes. Export and sample the output at
+   multiple times; the resolved root's local translation must equal its first
+   keyframe while other channels remain unchanged.
+9. Choose a manual Root Motion Node and repeat the export. Confirm the source
+   GLB and the current viewport remain unchanged, the export report contains
+   the number of rewritten channels, and Split output applies the setting to
+   each selected animation independently.
+10. Confirm Remove Root Motion is disabled and cleared by `Preserve All`.
+    Select an animation without a translation channel on the resolved node and
+    confirm export succeeds with a warning and zero modified channels. Try a
+    CUBICSPLINE root translation accessor, a sparse accessor, and an
+    interleaved accessor; confirm each produces a validation error without
+    changing the source document. Enable Smart LOOP together with Remove Root
+    Motion and confirm the compact export is rejected.
+11. Repeat the package and Skeleton Animation exports from BVH Studio and
    GLB-to-GLB retargeting. Confirm the target GLB's selection is independent
    from the source GLB's selection.
-9. Try a selection with no model node, multiple incompatible Skins, an
+12. Try a selection with no model node, multiple incompatible Skins, an
    external buffer, an external image URI, an unsupported extension, and a
    Skeleton Animation Morph Target channel. Confirm the UI reports a clear
    validation error and does not write a partial output.

@@ -2,34 +2,35 @@ use std::collections::BTreeSet;
 
 use crate::app::App;
 use crate::modules::glb::{
-    AnimationOutputMode, GlbExportCatalog, GlbExportPreset, GlbExportSelection,
+    AnimationOutputMode, GlbDocument, GlbExportCatalog, GlbExportPreset,
+    GlbExportSelection,
 };
 use crate::modules::i18n::I18n;
 
 pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
     use three_d::egui::*;
 
-    let catalog = {
-        let Some(document) = app.glb.as_ref() else {
+    let Some(document) = app.glb.as_ref() else {
+        return;
+    };
+    let catalog = match document.export_catalog() {
+        Ok(catalog) => catalog,
+        Err(error) => {
+            ui.colored_label(
+                three_d::egui::Color32::YELLOW,
+                format!("{}: {error}", app.i18n.tr("glb.export_selection")),
+            );
             return;
-        };
-        match document.export_catalog() {
-            Ok(catalog) => catalog,
-            Err(error) => {
-                ui.colored_label(
-                    Color32::YELLOW,
-                    format!("{}: {error}", app.i18n.tr("glb.export_selection")),
-                );
-                return;
-            }
         }
     };
     let mut selection = app.glb_export_selection.clone();
     render_selection_controls(
         ui,
         &app.i18n,
+        document,
         &catalog,
         &mut selection,
+        true,
         true,
         true,
     );
@@ -37,7 +38,17 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
         let Some(document) = app.glb.as_ref() else {
             return;
         };
-        let validation = document.validate_export_selection(&selection);
+        let mut validation = document.validate_export_selection(&selection);
+        if selection.preset != GlbExportPreset::PreserveAll
+            && selection.remove_root_motion
+            && app.smart_loop_enabled
+        {
+            validation.errors.push(
+                app.i18n
+                    .tr("glb.export_root_motion_smart_loop_error")
+                    .to_owned(),
+            );
+        }
         let summary = document.summary();
         let bin_size = document.binary_size();
         let needs_estimate = app
@@ -112,10 +123,12 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
 pub fn render_selection_controls(
     ui: &mut three_d::egui::Ui,
     i18n: &I18n,
+    document: &GlbDocument,
     catalog: &GlbExportCatalog,
     selection: &mut GlbExportSelection,
     show_skin: bool,
     show_animations: bool,
+    show_root_motion: bool,
 ) {
     use three_d::egui::*;
 
@@ -140,6 +153,8 @@ pub fn render_selection_controls(
         if previous_preset != selection.preset {
             if selection.preset == GlbExportPreset::PreserveAll {
                 selection.animation_output = AnimationOutputMode::Combined;
+                selection.remove_root_motion = false;
+                selection.root_motion_node_override = None;
             }
             if selection.preset != GlbExportPreset::PreserveAll
                 && selection.selected_nodes.is_empty()
@@ -226,6 +241,9 @@ pub fn render_selection_controls(
 
         if show_animations {
             render_animation_selection(ui, i18n, catalog, selection);
+        }
+        if show_root_motion {
+            render_root_motion_controls(ui, i18n, document, catalog, selection);
         }
     });
 }
@@ -481,6 +499,102 @@ fn render_animation_selection(
     if !enabled {
         ui.label(i18n.tr("glb.export_preserve_hint"));
     }
+}
+
+fn render_root_motion_controls(
+    ui: &mut three_d::egui::Ui,
+    i18n: &I18n,
+    document: &GlbDocument,
+    catalog: &GlbExportCatalog,
+    selection: &mut GlbExportSelection,
+) {
+    use three_d::egui::*;
+
+    if selection.preset == GlbExportPreset::PreserveAll {
+        selection.remove_root_motion = false;
+        selection.root_motion_node_override = None;
+    }
+    let enabled = selection.preset != GlbExportPreset::PreserveAll
+        && !selection.selected_animations.is_empty();
+    ui.separator();
+    ui.add_enabled(
+        enabled,
+        Checkbox::new(
+            &mut selection.remove_root_motion,
+            i18n.tr("glb.export_remove_root_motion"),
+        ),
+    );
+    if !enabled || !selection.remove_root_motion {
+        if selection.preset == GlbExportPreset::PreserveAll {
+            ui.label(i18n.tr("glb.export_root_motion_preserve_hint"));
+        } else if selection.selected_animations.is_empty() {
+            ui.label(i18n.tr("glb.export_root_motion_animation_hint"));
+        }
+        return;
+    }
+
+    let info = document.root_motion_info(selection);
+    let mut candidates = info
+        .as_ref()
+        .map(|info| info.candidates.clone())
+        .unwrap_or_else(|_| {
+            catalog.nodes.iter().map(|node| node.index).collect()
+        });
+    if let Some(override_node) = selection.root_motion_node_override {
+        candidates.push(override_node);
+    }
+    candidates.sort_unstable();
+    candidates.dedup();
+
+    let automatic_text = info
+        .as_ref()
+        .ok()
+        .and_then(|info| info.resolved_node)
+        .and_then(|node| catalog.nodes.get(node))
+        .map(|node| {
+            format!(
+                "{} ({})",
+                i18n.tr("glb.export_root_motion_auto"),
+                node_label(node)
+            )
+        })
+        .unwrap_or_else(|| i18n.tr("glb.export_root_motion_auto").to_owned());
+    let selected_text = selection
+        .root_motion_node_override
+        .and_then(|node| catalog.nodes.get(node).map(node_label))
+        .unwrap_or(automatic_text);
+    ComboBox::from_label(i18n.tr("glb.export_root_motion_node"))
+        .selected_text(selected_text)
+        .show_ui(ui, |ui| {
+            ui.selectable_value(
+                &mut selection.root_motion_node_override,
+                None,
+                i18n.tr("glb.export_root_motion_auto"),
+            );
+            for node_index in &candidates {
+                let label = catalog
+                    .nodes
+                    .get(*node_index)
+                    .map(node_label)
+                    .unwrap_or_else(|| format!("Node {node_index}"));
+                ui.selectable_value(
+                    &mut selection.root_motion_node_override,
+                    Some(*node_index),
+                    label,
+                );
+            }
+        });
+    ui.label(i18n.tr("glb.export_root_motion_hint"));
+    if let Err(error) = info {
+        ui.colored_label(
+            Color32::YELLOW,
+            format!("{}: {error}", i18n.tr("glb.export_root_motion_node")),
+        );
+    }
+}
+
+fn node_label(node: &crate::modules::glb::GlbExportNode) -> String {
+    format!("{} [{}]", node.name, node.index)
 }
 
 fn render_validation(

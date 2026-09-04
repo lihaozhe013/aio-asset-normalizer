@@ -26,6 +26,7 @@ pub use self::export_selection::{
 mod animation;
 mod animation_runtime;
 mod orientation_presets;
+mod root_motion;
 mod smart_loop;
 #[allow(unused_imports)]
 pub use animation_runtime::{

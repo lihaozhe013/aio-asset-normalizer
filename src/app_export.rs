@@ -409,6 +409,8 @@ mod tests {
             preset: GlbExportPreset::CharacterPackage,
             selected_animations: BTreeSet::from([0]),
             animation_output: AnimationOutputMode::Split,
+            remove_root_motion: true,
+            root_motion_node_override: Some(0),
             ..GlbExportSelection::default()
         };
         let jobs = build_glb_export_jobs(
@@ -427,6 +429,8 @@ mod tests {
             jobs[0].selection.animation_output,
             AnimationOutputMode::Combined
         );
+        assert!(jobs[0].selection.remove_root_motion);
+        assert_eq!(jobs[0].selection.root_motion_node_override, Some(0));
     }
 
     #[test]
@@ -565,8 +569,17 @@ impl App {
         {
             return Err(
                 "Split animation output requires at least one selected animation"
-                    .to_owned(),
+                .to_owned(),
             );
+        }
+        if selection.preset != GlbExportPreset::PreserveAll
+            && selection.remove_root_motion
+            && self.smart_loop_enabled
+        {
+            return Err(self
+                .i18n
+                .tr("glb.export_root_motion_smart_loop_error")
+                .to_owned());
         }
         if selection.preset == GlbExportPreset::PreserveAll {
             return Ok(());
@@ -835,7 +848,7 @@ fn clean_filename_component(value: &str) -> String {
 
 pub(crate) fn format_export_report(report: &GlbExportReport) -> String {
     format!(
-        "scenes {} -> {}, nodes {} -> {}, meshes {} -> {}, skins {} -> {}, animations {} -> {}, removed channels {}, BIN {} -> {} bytes, GLB {} -> {} bytes",
+        "scenes {} -> {}, nodes {} -> {}, meshes {} -> {}, skins {} -> {}, animations {} -> {}, removed channels {}, root motion channels {}, BIN {} -> {} bytes, GLB {} -> {} bytes",
         report.source.scenes,
         report.output.scenes,
         report.source.nodes,
@@ -847,6 +860,7 @@ pub(crate) fn format_export_report(report: &GlbExportReport) -> String {
         report.source.animations,
         report.output.animations,
         report.removed_animation_channels,
+        report.root_motion_channels_modified,
         report.source_bin_bytes,
         report.output_bin_bytes,
         report.source_glb_bytes,

@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use serde_json::{json, Value};
 
+use super::root_motion::RootMotionPlan;
 use super::{GlbDocument, GlbError, GlbSummary};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,6 +29,8 @@ pub struct GlbExportSelection {
     pub selected_primitives: BTreeMap<usize, BTreeSet<usize>>,
     pub selected_animations: BTreeSet<usize>,
     pub animation_output: AnimationOutputMode,
+    pub remove_root_motion: bool,
+    pub root_motion_node_override: Option<usize>,
 }
 
 impl Default for GlbExportSelection {
@@ -40,6 +43,8 @@ impl Default for GlbExportSelection {
             selected_primitives: BTreeMap::new(),
             selected_animations: BTreeSet::new(),
             animation_output: AnimationOutputMode::Combined,
+            remove_root_motion: false,
+            root_motion_node_override: None,
         }
     }
 }
@@ -117,6 +122,7 @@ pub struct GlbExportReport {
     pub source_glb_bytes: usize,
     pub output_glb_bytes: usize,
     pub removed_animation_channels: usize,
+    pub root_motion_channels_modified: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -127,6 +133,7 @@ struct SelectionContext {
     skin_index: Option<usize>,
     mesh_primitives: BTreeMap<usize, BTreeSet<usize>>,
     animation_indices: Vec<usize>,
+    root_motion_plan: Option<RootMotionPlan>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -316,6 +323,8 @@ impl GlbDocument {
                 .map(|animation| animation.index)
                 .collect(),
             animation_output: AnimationOutputMode::Combined,
+            remove_root_motion: false,
+            root_motion_node_override: None,
         })
     }
 
@@ -345,7 +354,12 @@ impl GlbDocument {
             return validation;
         }
         match self.prepare_selection(selection) {
-            Ok(_) => validation,
+            Ok(context) => {
+                if let Some(plan) = context.root_motion_plan {
+                    validation.warnings.extend(plan.warnings);
+                }
+                validation
+            }
             Err(error) => {
                 validation.errors.push(error.to_string());
                 validation
@@ -375,13 +389,21 @@ impl GlbDocument {
                 source_glb_bytes,
                 output_glb_bytes: source_glb_bytes,
                 removed_animation_channels: 0,
+                root_motion_channels_modified: 0,
             });
         }
 
         let context = self.prepare_selection(selection)?;
+        let mut working = self.clone();
+        let root_motion_channels_modified = context
+            .root_motion_plan
+            .as_ref()
+            .map(|plan| working.apply_root_motion(plan))
+            .transpose()?
+            .unwrap_or_default();
         let (json, bin, removed_animation_channels) =
-            self.build_compacted_document(&context)?;
-        let mut candidate = self.clone();
+            working.build_compacted_document(&context)?;
+        let mut candidate = working;
         candidate.json = json;
         candidate.bin = bin;
         candidate.dirty = true;
@@ -406,6 +428,7 @@ impl GlbDocument {
             source_glb_bytes,
             output_glb_bytes: bytes.len(),
             removed_animation_channels,
+            root_motion_channels_modified,
         })
     }
 
@@ -682,6 +705,9 @@ impl GlbDocument {
             }
         }
 
+        let root_motion_plan =
+            self.plan_root_motion(selection, &animation_indices, skin_index)?;
+
         Ok(SelectionContext {
             scene_index: selection.scene_index,
             render_nodes,
@@ -689,6 +715,7 @@ impl GlbDocument {
             skin_index,
             mesh_primitives,
             animation_indices,
+            root_motion_plan,
         })
     }
 

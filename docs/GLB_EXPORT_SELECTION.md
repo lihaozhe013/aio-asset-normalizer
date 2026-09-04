@@ -35,10 +35,35 @@ numeric suffix when names collide. Split output is available for compact
 presets; Preserve All always produces one complete document.
 
 Existing orientation, root transform, trim, animation-rate, and Smart LOOP
-settings are applied to an export clone before resource pruning. Background
-export reports resource counts, BIN sizes, and serialized GLB sizes, and a
-failure after one or more files have been written reports the completed paths
-separately.
+settings are applied to an export clone before resource pruning. Remove Root
+Motion is also applied to that clone before compaction, so its generated
+accessors and samplers participate in normal resource collection and BIN
+packing. Background export reports resource counts, BIN sizes, serialized GLB
+sizes, and the number of root-motion channels rewritten; a failure after one
+or more files have been written reports the completed paths separately.
+
+## Remove Root Motion
+
+Remove Root Motion is available only for Character Package and Skeleton
+Animation compact exports. It affects only the selected animations and freezes
+the selected root node's local translation at the first keyframe, preserving
+the initial XYZ offset while removing subsequent local translation motion.
+Root rotation, child motion, mesh vertices, and world-space reconstruction are
+outside this version's scope.
+
+Automatic root selection uses the selected Skin's `skeleton` first, then the
+common ancestor of Skin joints or selected model nodes. Among valid common
+ancestors, the node nearest the scene root with a translation channel is
+preferred. The Root Motion Node dropdown can override this choice. Ambiguous
+hierarchies require an explicit node selection.
+
+An animation without a translation channel on the resolved node remains
+exportable with a warning and contributes zero modified channels. Shared
+samplers are copied before their output is rewritten so other channels retain
+their original values. FLOAT/VEC3, non-sparse, non-interleaved translation
+accessors are required; CUBICSPLINE root translation channels are currently
+reported as unsupported. Remove Root Motion cannot be combined with Smart
+LOOP. Preserve All disables and clears this configuration.
 
 ## Safety boundaries
 
@@ -52,9 +77,10 @@ file. Common texture, material, Draco, and material-variant extensions are
 preserved when their references can be remapped.
 
 Skeleton Animation rejects Morph Target (`weights`) channels because their
-meaning depends on a mesh. CUBICSPLINE and other resources that are not edited
-by the application remain available to the GLB parser, but are not expanded
-into the editor's preview controls.
+meaning depends on a mesh. CUBICSPLINE root translation channels are rejected
+by Remove Root Motion; other CUBICSPLINE resources that are not edited by the
+application remain available to the GLB parser, but are not expanded into the
+editor's preview controls.
 
 BVH Studio uses Character Package semantics for retargeted model exports and
 Skeleton Animation semantics for Animation Clip exports. GLB-to-GLB retargeting
