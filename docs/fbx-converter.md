@@ -21,8 +21,9 @@ development flows must keep working with Blender absent.
 - Central panel: Blender discovery row (text field, Browse, Clear, detected
   path status), the Convert button, and a per-file status list with pending /
   converting / done / failed states and short error text.
-- Bottom dock: the shared Debug Log tab receives all Blender output lines,
-  prefixed with `[fbx_converter]`.
+- Bottom dock: the shared Debug Log tab receives all Blender output lines with
+  task_id, stream=stdout|stderr, and a safe input-file label. The same records
+  are retained in fbx-converter.log.
 - The right inspector panel is hidden on this page.
 
 ## Conversion behavior
@@ -46,6 +47,10 @@ For each checked file, in sorted order, sequentially:
 All work runs on one background worker thread that reports to the UI through
 an `mpsc` channel of `ConverterMessage` items, drained each frame by
 `App::poll_tasks`.
+
+Blender stdout and stderr are written to the feature log with a shared
+task_id, stream=stdout or stream=stderr, and a safe input-file label. The
+aggregate and feature-specific logs retain the same records.
 
 ## Fixed normalization profile
 
@@ -106,11 +111,13 @@ Blender and must be verified in the GUI on each maintained platform:
    expected orientation, scale, skin, and animations.
 4. Failure path: point the Blender override at a non-executable value or
    run without Blender; the page must show "Blender not found", conversion
-   must be refused with `[fbx_converter]` log lines, and no source file may
+   must be refused with fbx_converter log records, and no source file may
    be modified.
 5. Focused log capture:
 
 ```bash
 cargo run
-rg "\[fbx_converter\]" debug.log > fbx-converter-debug.log
+rg "\[fbx_converter\]" \
+  "/path/to/aio-asset-normalizer/logs/fbx-converter.log" \
+  > fbx-converter-debug.log
 ```

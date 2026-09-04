@@ -3,12 +3,13 @@ use std::fs;
 use std::path::Path;
 use std::sync::mpsc;
 
-use crate::app::{App, ExportTaskResult};
+use crate::app::{App, ExportTaskResult, TaskKind};
 use crate::app_export::format_export_report;
 use crate::modules::glb::{
     AnimationClipData, AnimationOutputMode, AnimationRuntime, GlbDocument,
     GlbExportPreset,
 };
+use crate::modules::logging::{next_task_id, safe_path_label};
 use crate::modules::retarget::{
     self, RetargetOptions, SkeletonDescriptor, SkeletonMapping, SourceKind,
 };
@@ -32,9 +33,11 @@ impl App {
             0.0,
             &skin.joints,
         ) {
-            self.log.append(&format!(
-                "[glb_retarget] Target skeleton preview failed: {error}"
-            ));
+            tracing::error!(
+                target: "glb_retarget",
+                error = %error,
+                "Target skeleton preview failed"
+            );
         }
         self.canvas.set_guide_scale(
             context,
@@ -63,14 +66,17 @@ impl App {
                 self.glb_retarget_export_selection = export_selection;
                 self.retarget_target_skin_index = 0;
                 self.refresh_glb_retarget_mapping();
-                self.log.append(&format!(
-                    "[glb_retarget] Loaded target GLB {}",
-                    path.display()
-                ));
+                tracing::info!(
+                    target: "glb_retarget",
+                    input = %safe_path_label(&path),
+                    "Loaded target GLB"
+                );
             }
-            Err(error) => self.log.append(&format!(
-                "[glb_retarget] Target GLB load failed: {error}"
-            )),
+            Err(error) => tracing::error!(
+                target: "glb_retarget",
+                error = %error,
+                "Target GLB load failed"
+            ),
         }
     }
 
@@ -279,14 +285,17 @@ impl App {
             return;
         }
         let Some(source) = self.bvh.clone() else {
-            self.log
-                .append("[bvh_studio] Open a BVH before exporting GLB");
+            tracing::warn!(
+                target: "bvh_studio",
+                "Open a BVH before exporting GLB"
+            );
             return;
         };
         self.refresh_v2_retarget_mapping();
         let Some(mapping) = self.retarget_mapping.clone() else {
-            self.log.append(
-                "[bvh_studio] Load a valid Mapping JSON before exporting GLB",
+            tracing::warn!(
+                target: "bvh_studio",
+                "Load a valid Mapping JSON before exporting GLB"
             );
             return;
         };
@@ -295,12 +304,17 @@ impl App {
             .as_ref()
             .is_none_or(|report| !report.is_valid())
         {
-            self.log.append("[bvh_studio] Mapping v2 validation failed");
+            tracing::error!(
+                target: "bvh_studio",
+                "Mapping v2 validation failed"
+            );
             return;
         }
         let Some(target) = self.bvh_target_glb.clone() else {
-            self.log
-                .append("[bvh_studio] Load a target GLB before exporting GLB");
+            tracing::warn!(
+                target: "bvh_studio",
+                "Load a target GLB before exporting GLB"
+            );
             return;
         };
         let mut export_selection = self.bvh_export_selection.clone();
@@ -318,24 +332,24 @@ impl App {
         if same_path(&path, self.bvh_target_path.as_deref())
             || same_path(&path, self.bvh_path.as_deref())
         {
-            self.log.append(
-                "[bvh_studio] Refusing to overwrite a source BVH or target GLB",
+            tracing::error!(
+                target: "bvh_studio",
+                output = %safe_path_label(&path),
+                "Refusing to overwrite a source BVH or target GLB"
             );
             return;
         }
         let (sender, receiver) = mpsc::channel();
         self.task_rx = Some(receiver);
         self.task_busy = true;
-        self.log.append(if clip_only {
-            "[bvh_studio] Building animation clip in background"
-        } else {
-            "[bvh_studio] Building retargeted GLB in background"
-        });
-        let kind = if clip_only {
-            "animation clip".to_owned()
-        } else {
-            "retargeted GLB".to_owned()
-        };
+        let task_id = next_task_id();
+        self.active_task_id = Some(task_id);
+        tracing::info!(
+            target: "bvh_studio",
+            task_id,
+            clip_only,
+            "Building retargeted GLB in background"
+        );
         let reduce_keys = self.bvh_reduce_keys;
         let key_tolerance = self.bvh_key_tolerance;
         let options = self.retarget_options();
@@ -387,7 +401,8 @@ impl App {
                 Ok(())
             })();
             let _ = sender.send(ExportTaskResult {
-                kind,
+                task_id,
+                kind: TaskKind::BvhExport,
                 paths,
                 details,
                 result,
@@ -412,9 +427,11 @@ impl App {
         let skin = match target.skin_data_at(skin_index) {
             Ok(skin) => skin,
             Err(error) => {
-                self.log.append(&format!(
-                    "[bvh_studio] Target Skin preview unavailable: {error}"
-                ));
+                tracing::warn!(
+                    target: "bvh_studio",
+                    error = %error,
+                    "Target Skin preview unavailable"
+                );
                 self.canvas.clear_glb();
                 self.canvas.clear_target_skeleton();
                 return;
@@ -432,9 +449,11 @@ impl App {
         ) {
             Ok(descriptor) => descriptor,
             Err(error) => {
-                self.log.append(&format!(
-                    "[bvh_studio] Target skeleton preview unavailable: {error}"
-                ));
+                tracing::warn!(
+                    target: "bvh_studio",
+                    error = %error,
+                    "Target skeleton preview unavailable"
+                );
                 return;
             }
         };
@@ -462,9 +481,11 @@ impl App {
                         .unwrap_or(1.0),
                 );
             }
-            Err(error) => self.log.append(&format!(
-                "[bvh_studio] Target skeleton preview unavailable: {error}"
-            )),
+            Err(error) => tracing::warn!(
+                target: "bvh_studio",
+                error = %error,
+                "Target skeleton preview unavailable"
+            ),
         }
 
         let Some(source) = self.bvh.clone() else {
@@ -483,9 +504,11 @@ impl App {
             if let Err(error) =
                 self.canvas.load_glb_for_target_preview(context, &path)
             {
-                self.log.append(&format!(
-                    "[bvh_studio] Target GLB preview failed: {error}"
-                ));
+                tracing::error!(
+                    target: "bvh_studio",
+                    error = %error,
+                    "Target GLB preview failed"
+                );
             }
             return;
         }
@@ -500,22 +523,29 @@ impl App {
                 if self.bvh_reduce_keys {
                     if let Err(error) = clip.reduce_keys(self.bvh_key_tolerance)
                     {
-                        self.log.append(&format!(
-                            "[retarget] Key reduction skipped: {error}"
-                        ));
+                        tracing::warn!(
+                            target: "retarget",
+                            error = %error,
+                            "Key reduction skipped"
+                        );
                     }
                 }
                 clip
             }
             Err(error) => {
-                self.log
-                    .append(&format!("[retarget] BVH preview failed: {error}"));
+                tracing::error!(
+                    target: "retarget",
+                    error = %error,
+                    "BVH preview failed"
+                );
                 if let Err(error) =
                     self.canvas.load_glb_for_target_preview(context, &path)
                 {
-                    self.log.append(&format!(
-                        "[bvh_studio] Target GLB preview failed: {error}"
-                    ));
+                    tracing::error!(
+                        target: "bvh_studio",
+                        error = %error,
+                        "Target GLB preview failed"
+                    );
                 }
                 return;
             }
@@ -526,17 +556,21 @@ impl App {
             times: clip.times.clone(),
             channels: clip.channels.clone(),
         }) {
-            self.log.append(&format!(
-                "[retarget] BVH preview animation failed: {error}"
-            ));
+            tracing::error!(
+                target: "retarget",
+                error = %error,
+                "BVH preview animation failed"
+            );
             return;
         }
         let bytes = match generated.to_bytes() {
             Ok(bytes) => bytes,
             Err(error) => {
-                self.log.append(&format!(
-                    "[retarget] BVH preview serialization failed: {error}"
-                ));
+                tracing::error!(
+                    target: "retarget",
+                    error = %error,
+                    "BVH preview serialization failed"
+                );
                 return;
             }
         };
@@ -547,46 +581,54 @@ impl App {
                         context, &path, runtime,
                     )
                 {
-                    self.log.append(&format!(
-                        "[bvh_studio] Target character preview failed: {error}"
-                    ));
+                    tracing::error!(
+                        target: "bvh_studio",
+                        error = %error,
+                        "Target character preview failed"
+                    );
                 } else {
                     let _ = self.canvas.update_glb_animation(
                         0,
                         self.bvh_frame as f32 * source.frame_time,
                     );
-                    self.log.append(
-                        "[retarget] BVH target character preview ready",
+                    tracing::info!(
+                        target: "retarget",
+                        "BVH target character preview ready"
                     );
                 }
             }
             Err(error) => {
-                self.log.append(&format!(
-                    "[bvh_studio] Target Mesh preview unavailable; using skeleton-only playback: {error}"
-                ));
+                tracing::warn!(
+                    target: "bvh_studio",
+                    error = %error,
+                    "Target Mesh preview unavailable; using skeleton-only playback"
+                );
                 match AnimationRuntime::from_bytes_skeleton_only(
                     &bytes,
                     path.parent(),
                 ) {
                     Ok(runtime) => {
                         self.canvas.load_skeleton_runtime(runtime);
-                        if let Err(error) = self
-                            .canvas
-                            .update_target_skeleton_animation(
+                        if let Err(error) =
+                            self.canvas.update_target_skeleton_animation(
                                 context,
                                 0,
                                 self.bvh_frame as f32 * source.frame_time,
                                 &skin.joints,
                             )
                         {
-                            self.log.append(&format!(
-                                "[retarget] Skeleton-only target preview failed: {error}"
-                            ));
+                            tracing::error!(
+                                target: "retarget",
+                                error = %error,
+                                "Skeleton-only target preview failed"
+                            );
                         }
                     }
-                    Err(skeleton_error) => self.log.append(&format!(
-                        "[retarget] Skeleton-only target preview failed: {skeleton_error}"
-                    )),
+                    Err(skeleton_error) => tracing::error!(
+                        target: "retarget",
+                        error = %skeleton_error,
+                        "Skeleton-only target preview failed"
+                    ),
                 }
             }
         }
@@ -594,7 +636,7 @@ impl App {
 
     pub(crate) fn export_retarget_mapping(&mut self) {
         let Some(mapping) = self.retarget_mapping.as_ref() else {
-            self.log.append("[retarget] No Mapping v2 is available");
+            tracing::warn!(target: "retarget", "No Mapping v2 is available");
             return;
         };
         let Some(path) = rfd::FileDialog::new()
@@ -609,22 +651,28 @@ impl App {
             .as_deref()
             .or(self.mapping_path.as_deref());
         if same_path(&path, original_mapping_path) {
-            self.log
-                .append("[retarget] Refusing to overwrite the source mapping");
+            tracing::error!(
+                target: "retarget",
+                output = %safe_path_label(&path),
+                "Refusing to overwrite the source mapping"
+            );
             return;
         }
         match retarget::save_mapping(&path, mapping) {
             Ok(()) => {
                 self.file_tree.refresh();
                 self.bvh_file_tree.refresh();
-                self.log.append(&format!(
-                    "[retarget] Exported Mapping v2 {}",
-                    path.display()
-                ));
+                tracing::info!(
+                    target: "retarget",
+                    output = %safe_path_label(&path),
+                    "Exported Mapping v2"
+                );
             }
-            Err(error) => self
-                .log
-                .append(&format!("[retarget] Mapping export failed: {error}")),
+            Err(error) => tracing::error!(
+                target: "retarget",
+                error = %error,
+                "Mapping export failed"
+            ),
         }
     }
 
@@ -633,14 +681,20 @@ impl App {
             return;
         }
         let Some(target) = self.glb_retarget_target.clone() else {
-            self.log.append("[glb_retarget] Choose a target GLB first");
+            tracing::warn!(
+                target: "glb_retarget",
+                "Choose a target GLB first"
+            );
             return;
         };
         let Some(target_path) = self.glb_retarget_target_path.clone() else {
             return;
         };
         let Some(mapping) = self.retarget_mapping.clone() else {
-            self.log.append("[glb_retarget] Load a Mapping v2 first");
+            tracing::warn!(
+                target: "glb_retarget",
+                "Load a Mapping v2 first"
+            );
             return;
         };
         self.refresh_glb_retarget_mapping();
@@ -649,19 +703,28 @@ impl App {
             .as_ref()
             .is_none_or(|report| !report.is_valid())
         {
-            self.log.append("[glb_retarget] Mapping validation failed");
+            tracing::error!(
+                target: "glb_retarget",
+                "Mapping validation failed"
+            );
             return;
         }
         let source = match self.build_glb_retarget_source_snapshot() {
             Ok(source) => source,
             Err(error) => {
-                self.log.append(&format!("[glb_retarget] {error}"));
+                tracing::error!(
+                    target: "glb_retarget",
+                    error = %error,
+                    "Failed to build retarget source snapshot"
+                );
                 return;
             }
         };
         let Some(source_path) = self.glb_path.clone() else {
-            self.log
-                .append("[glb_retarget] Source GLB path is unavailable");
+            tracing::error!(
+                target: "glb_retarget",
+                "Source GLB path is unavailable"
+            );
             return;
         };
         let source_clip_index = self.glb_animation_index;
@@ -673,7 +736,11 @@ impl App {
         let options = match self.glb_retarget_options() {
             Ok(options) => options,
             Err(error) => {
-                self.log.append(&format!("[glb_retarget] {error}"));
+                tracing::error!(
+                    target: "glb_retarget",
+                    error = %error,
+                    "Invalid GLB retarget options"
+                );
                 return;
             }
         };
@@ -689,16 +756,22 @@ impl App {
         if same_path(&output_path, Some(&source_path))
             || same_path(&output_path, Some(&target_path))
         {
-            self.log.append(
-                "[glb_retarget] Refusing to overwrite a source or target GLB",
+            tracing::error!(
+                target: "glb_retarget",
+                output = %safe_path_label(&output_path),
+                "Refusing to overwrite a source or target GLB"
             );
             return;
         }
         let (sender, receiver) = std::sync::mpsc::channel();
         self.task_rx = Some(receiver);
         self.task_busy = true;
-        self.log.append(
-            "[glb_retarget] Building the selected animation in background",
+        let task_id = next_task_id();
+        self.active_task_id = Some(task_id);
+        tracing::info!(
+            target: "glb_retarget",
+            task_id,
+            "Building the selected animation in background"
         );
         std::thread::spawn(move || {
             let mut paths = Vec::new();
@@ -754,7 +827,8 @@ impl App {
                 Ok(())
             })();
             let _ = sender.send(crate::app::ExportTaskResult {
-                kind: "GLB retargeted animation".to_owned(),
+                task_id,
+                kind: TaskKind::GlbRetarget,
                 paths,
                 details,
                 result,
@@ -764,8 +838,9 @@ impl App {
 
     pub(crate) fn preview_glb_retarget(&mut self) {
         if self.glb_retarget_preview_active {
-            self.log.append(
-                "[glb_retarget] Exit the current preview before rebuilding it",
+            tracing::warn!(
+                target: "glb_retarget",
+                "Exit the current preview before rebuilding it"
             );
             return;
         }
@@ -775,15 +850,24 @@ impl App {
             .as_ref()
             .is_none_or(|report| !report.is_valid())
         {
-            self.log.append("[glb_retarget] Mapping validation failed");
+            tracing::error!(
+                target: "glb_retarget",
+                "Mapping validation failed"
+            );
             return;
         }
         let Some(mapping) = self.retarget_mapping.clone() else {
-            self.log.append("[glb_retarget] Load a Mapping v2 first");
+            tracing::warn!(
+                target: "glb_retarget",
+                "Load a Mapping v2 first"
+            );
             return;
         };
         let Some(target) = self.glb_retarget_target.clone() else {
-            self.log.append("[glb_retarget] Choose a target GLB first");
+            tracing::warn!(
+                target: "glb_retarget",
+                "Choose a target GLB first"
+            );
             return;
         };
         let Some(target_path) = self.glb_retarget_target_path.clone() else {
@@ -792,14 +876,22 @@ impl App {
         let source = match self.build_glb_retarget_source_snapshot() {
             Ok(source) => source,
             Err(error) => {
-                self.log.append(&format!("[glb_retarget] {error}"));
+                tracing::error!(
+                    target: "glb_retarget",
+                    error = %error,
+                    "Failed to build retarget source snapshot"
+                );
                 return;
             }
         };
         let source_bytes = match source.to_bytes() {
             Ok(bytes) => bytes,
             Err(error) => {
-                self.log.append(&format!("[glb_retarget] {error}"));
+                tracing::error!(
+                    target: "glb_retarget",
+                    error = %error,
+                    "Failed to serialize retarget source"
+                );
                 return;
             }
         };
@@ -812,7 +904,11 @@ impl App {
         ) {
             Ok(runtime) => runtime,
             Err(error) => {
-                self.log.append(&format!("[glb_retarget] {error}"));
+                tracing::error!(
+                    target: "glb_retarget",
+                    error = %error,
+                    "Failed to load retarget source runtime"
+                );
                 return;
             }
         };
@@ -825,7 +921,11 @@ impl App {
         ) {
             Ok(mapping) => mapping,
             Err(error) => {
-                self.log.append(&format!("[glb_retarget] {error}"));
+                tracing::error!(
+                    target: "glb_retarget",
+                    error = %error,
+                    "Failed to prepare retarget mapping"
+                );
                 return;
             }
         };
@@ -833,14 +933,22 @@ impl App {
             match target.skin_data_at(self.retarget_target_skin_index) {
                 Ok(skin) => skin,
                 Err(error) => {
-                    self.log.append(&format!("[glb_retarget] {error}"));
+                    tracing::error!(
+                        target: "glb_retarget",
+                        error = %error,
+                        "Target Skin is unavailable"
+                    );
                     return;
                 }
             };
         let options = match self.glb_retarget_options() {
             Ok(options) => options,
             Err(error) => {
-                self.log.append(&format!("[glb_retarget] {error}"));
+                tracing::error!(
+                    target: "glb_retarget",
+                    error = %error,
+                    "Invalid GLB retarget options"
+                );
                 return;
             }
         };
@@ -855,7 +963,11 @@ impl App {
         ) {
             Ok(clip) => clip,
             Err(error) => {
-                self.log.append(&format!("[glb_retarget] {error}"));
+                tracing::error!(
+                    target: "glb_retarget",
+                    error = %error,
+                    "GLB retarget preview failed"
+                );
                 return;
             }
         };
@@ -865,13 +977,21 @@ impl App {
             times: clip.times,
             channels: clip.channels,
         }) {
-            self.log.append(&format!("[glb_retarget] {error}"));
+            tracing::error!(
+                target: "glb_retarget",
+                error = %error,
+                "GLB retarget preview animation failed"
+            );
             return;
         }
         let generated_bytes = match generated.to_bytes() {
             Ok(bytes) => bytes,
             Err(error) => {
-                self.log.append(&format!("[glb_retarget] {error}"));
+                tracing::error!(
+                    target: "glb_retarget",
+                    error = %error,
+                    "GLB retarget preview serialization failed"
+                );
                 return;
             }
         };
@@ -884,9 +1004,11 @@ impl App {
                 self.glb_retarget_preview_active = true;
             }
             Err(error) => {
-                self.log.append(&format!(
-                    "[glb_retarget] Target Mesh preview unavailable; using skeleton-only playback: {error}"
-                ));
+                tracing::warn!(
+                    target: "glb_retarget",
+                    error = %error,
+                    "Target Mesh preview unavailable; using skeleton-only playback"
+                );
                 match AnimationRuntime::from_bytes_skeleton_only(
                     &generated_bytes,
                     target_path.parent(),
@@ -898,9 +1020,11 @@ impl App {
                         self.glb_animation_time = 0.0;
                         self.glb_animation_playing = false;
                     }
-                    Err(skeleton_error) => self.log.append(&format!(
-                        "[glb_retarget] Generated skeleton is not readable: {skeleton_error}"
-                    )),
+                    Err(skeleton_error) => tracing::error!(
+                        target: "glb_retarget",
+                        error = %skeleton_error,
+                        "Generated skeleton is not readable"
+                    ),
                 }
             }
         }

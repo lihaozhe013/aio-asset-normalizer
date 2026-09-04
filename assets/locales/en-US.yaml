@@ -24,6 +24,21 @@ page:
 bottom:
   animation: "Animation"
   debug_log: "Debug Log"
+log:
+  target: "Target"
+  target_all: "All"
+  target_glb_editor: "GLB Editor"
+  target_glb_export: "GLB Export"
+  target_bvh_studio: "BVH Studio"
+  target_retarget: "Retarget"
+  target_fbx_converter: "FBX Converter"
+  minimum_level: "Minimum level"
+  level_debug: "Debug"
+  level_info: "Info"
+  level_warn: "Warning"
+  level_error: "Error"
+  open_directory: "Open Log Directory"
+  storage_unavailable: "Log storage is unavailable; logs remain visible for this session."
 glb:
   open_hint: "Open a GLB file to inspect and edit it."
   unsaved: "Unsaved document"

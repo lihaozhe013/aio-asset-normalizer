@@ -44,7 +44,8 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
                     render_animation_timeline(app, ui);
                 }
                 _ => {
-                    if app.log.render(ui, &app.i18n) {
+                    if app.log.render(ui, &app.i18n, app.log_runtime.log_dir())
+                    {
                         app.needs_save = true;
                     }
                 }

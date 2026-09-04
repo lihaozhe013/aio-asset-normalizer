@@ -3,6 +3,7 @@ use std::path::Path;
 use crate::app::App;
 use crate::modules::bvh::{self, BvhDocument};
 use crate::modules::glb::{GlbDocument, GlbExportPreset};
+use crate::modules::logging::safe_path_label;
 use crate::modules::retarget;
 use crate::modules::ui::menu_bar::Page;
 use crate::modules::viewport::skeleton_visual::SkeletonPose;
@@ -33,10 +34,11 @@ impl App {
                 let mut export_selection =
                     document.default_export_selection().unwrap_or_default();
                 export_selection.preset = GlbExportPreset::CharacterPackage;
-                self.log.append(&format!(
-                    "[bvh_studio] Loaded target GLB {}",
-                    path.display()
-                ));
+                tracing::info!(
+                    target: "bvh_studio",
+                    input = %safe_path_label(path),
+                    "Loaded target GLB"
+                );
                 self.bvh_target_glb = Some(document);
                 self.bvh_target_path = Some(path.to_path_buf());
                 self.bvh_export_selection = export_selection;
@@ -45,7 +47,11 @@ impl App {
                 self.refresh_retarget_plan();
                 self.refresh_v2_retarget_mapping();
             }
-            Err(error) => self.log.append(&format!("[bvh_studio] {error}")),
+            Err(error) => tracing::error!(
+                target: "bvh_studio",
+                error = %error,
+                "Failed to load target GLB"
+            ),
         }
     }
 
@@ -64,12 +70,13 @@ impl App {
             Ok(document) => {
                 self.bvh_trim_end =
                     document.duration().max(document.frame_time);
-                self.log.append(&format!(
-                    "[bvh_studio] Loaded {} ({} joints, {} frames)",
-                    path.display(),
-                    document.joints.len(),
-                    document.frames.len()
-                ));
+                tracing::info!(
+                    target: "bvh_studio",
+                    input = %safe_path_label(path),
+                    joints = document.joints.len(),
+                    frames = document.frames.len(),
+                    "Loaded BVH"
+                );
                 self.bvh = Some(document);
                 self.bvh_path = Some(path.to_path_buf());
                 self.bvh_frame = 0;
@@ -92,7 +99,11 @@ impl App {
                 }
                 self.bvh_file_tree.select_file(path);
             }
-            Err(error) => self.log.append(&format!("[bvh_studio] {error}")),
+            Err(error) => tracing::error!(
+                target: "bvh_studio",
+                error = %error,
+                "Failed to load BVH"
+            ),
         }
     }
 
@@ -246,10 +257,11 @@ impl App {
             return;
         };
         if let Ok(mapping) = retarget::load_mapping(&path) {
-            self.log.append(&format!(
-                "[retarget] Loaded Mapping v2 {}",
-                path.display()
-            ));
+            tracing::info!(
+                target: "retarget",
+                input = %safe_path_label(&path),
+                "Loaded Mapping v2"
+            );
             self.retarget_mapping = Some(mapping);
             self.retarget_mapping_path = Some(path.clone());
             self.mapping = None;
@@ -268,10 +280,11 @@ impl App {
         }
         match bvh::load_mapping(&path) {
             Ok(mapping) => {
-                self.log.append(&format!(
-                    "[bvh_studio] Loaded mapping {}",
-                    path.display()
-                ));
+                tracing::info!(
+                    target: "bvh_studio",
+                    input = %safe_path_label(&path),
+                    "Loaded legacy mapping"
+                );
                 self.retarget_plan = self
                     .bvh
                     .as_ref()
@@ -291,7 +304,11 @@ impl App {
                 self.refresh_v2_retarget_mapping();
                 self.refresh_glb_retarget_mapping();
             }
-            Err(error) => self.log.append(&format!("[bvh_studio] {error}")),
+            Err(error) => tracing::error!(
+                target: "bvh_studio",
+                error = %error,
+                "Failed to load mapping"
+            ),
         }
     }
 
@@ -313,8 +330,9 @@ impl App {
         let Ok(skin) = target.skin_data_at(self.retarget_target_skin_index)
         else {
             self.retarget_plan = None;
-            self.log.append(
-                "[bvh_studio] Target GLB does not expose a usable Skin",
+            tracing::warn!(
+                target: "bvh_studio",
+                "Target GLB does not expose a usable Skin"
             );
             return;
         };

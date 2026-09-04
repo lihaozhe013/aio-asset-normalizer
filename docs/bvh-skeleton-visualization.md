@@ -42,5 +42,7 @@ For focused runtime logs, use:
 
 ```bash
 cargo run
-rg "\[(bvh_studio|retarget|glb_retarget)\]" debug.log > bvh-studio-debug.log
+rg "\[(bvh_studio|retarget|glb_retarget)\]" \
+  "/path/to/aio-asset-normalizer/logs/bvh-studio.log" \
+  "/path/to/aio-asset-normalizer/logs/retarget.log" > bvh-studio-debug.log
 ```

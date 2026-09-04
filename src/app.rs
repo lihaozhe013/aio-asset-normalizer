@@ -17,6 +17,7 @@ use crate::modules::{
         StandardizationProfile, TextureSlot,
     },
     i18n::I18n,
+    logging::{safe_path_label, LogLevel, LogRuntime},
     preferences::{self, UserPreferences},
     ui::{
         bvh_file_tree::BvhFileTree,
@@ -43,6 +44,7 @@ pub struct App {
     pub file_tree: FileTree,
     pub bvh_file_tree: BvhFileTree,
     pub log: LogViewer,
+    pub(crate) log_runtime: LogRuntime,
     pub page: Page,
     pub glb: Option<GlbDocument>,
     pub glb_path: Option<PathBuf>,
@@ -106,6 +108,7 @@ pub struct App {
     pub(crate) show_about: bool,
     pub(crate) about_icon: Option<three_d::egui::TextureHandle>,
     pub(crate) task_busy: bool,
+    pub(crate) active_task_id: Option<u64>,
     last_frame_time: Instant,
     pub(crate) bvh_playback_accumulator: f32,
     pub(crate) glb_animation_accumulator: f32,
@@ -125,8 +128,17 @@ pub struct App {
     pub(crate) converter_results: Vec<ConverterFileState>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TaskKind {
+    GlbExport,
+    BvhExport,
+    GlbRetarget,
+    RetargetAgent,
+}
+
 pub(crate) struct ExportTaskResult {
-    pub(crate) kind: String,
+    pub(crate) task_id: u64,
+    pub(crate) kind: TaskKind,
     pub(crate) paths: Vec<PathBuf>,
     pub(crate) details: Vec<String>,
     pub(crate) result: Result<(), String>,
@@ -137,6 +149,7 @@ impl App {
         context: &Context,
         viewport: Viewport,
         prefs: &UserPreferences,
+        log_runtime: LogRuntime,
     ) -> Self {
         let mut canvas = ViewportCanvas::new(context);
         canvas.apply_view_prefs(&prefs.view);
@@ -174,6 +187,7 @@ impl App {
             file_tree,
             bvh_file_tree,
             log,
+            log_runtime,
             page: Page::GlbEditor,
             glb: None,
             glb_path: None,
@@ -236,6 +250,7 @@ impl App {
             show_about: false,
             about_icon: None,
             task_busy: false,
+            active_task_id: None,
             last_frame_time: Instant::now(),
             bvh_playback_accumulator: 0.0,
             glb_animation_accumulator: 0.0,
@@ -287,6 +302,7 @@ impl App {
     }
 
     pub fn poll_tasks(&mut self) {
+        self.poll_logs();
         self.poll_converter();
         let Some(receiver) = self.task_rx.as_ref() else {
             return;
@@ -295,46 +311,80 @@ impl App {
             Ok(result) => {
                 self.task_busy = false;
                 self.task_rx = None;
+                self.active_task_id = None;
                 match result.result {
                     Ok(()) => {
                         self.file_tree.refresh();
                         self.bvh_file_tree.refresh();
-                        let prefix = task_log_prefix(&result.kind);
                         for detail in &result.details {
-                            self.log.append(&format!("{prefix} {detail}"));
+                            emit_task_log(
+                                result.kind,
+                                LogLevel::Info,
+                                result.task_id,
+                                detail,
+                            );
                         }
                         for path in &result.paths {
-                            self.log.append(&format!(
-                                "{prefix} Exported {} {}",
+                            emit_task_log(
                                 result.kind,
-                                path.display()
-                            ));
+                                LogLevel::Info,
+                                result.task_id,
+                                &format!("Exported {}", safe_path_label(path)),
+                            );
                         }
                     }
                     Err(error) => {
-                        let prefix = task_log_prefix(&result.kind);
                         for detail in &result.details {
-                            self.log.append(&format!("{prefix} {detail}"));
+                            emit_task_log(
+                                result.kind,
+                                LogLevel::Info,
+                                result.task_id,
+                                detail,
+                            );
                         }
                         for path in &result.paths {
-                            self.log.append(&format!(
-                                "{prefix} Exported {} {} before failure",
+                            emit_task_log(
                                 result.kind,
-                                path.display()
-                            ));
+                                LogLevel::Warn,
+                                result.task_id,
+                                &format!(
+                                    "Exported {} before failure",
+                                    safe_path_label(path)
+                                ),
+                            );
                         }
-                        self.log.append(&format!(
-                            "{prefix} Export failed: {error}"
-                        ));
+                        emit_task_log(
+                            result.kind,
+                            LogLevel::Error,
+                            result.task_id,
+                            &format!("Export failed: {error}"),
+                        );
                     }
                 }
             }
             Err(mpsc::TryRecvError::Disconnected) => {
                 self.task_busy = false;
                 self.task_rx = None;
-                self.log.append("[bvh_studio] Export worker disconnected");
+                if let Some(task_id) = self.active_task_id.take() {
+                    tracing::error!(
+                        target: "bvh_studio",
+                        task_id,
+                        "Export worker disconnected"
+                    );
+                } else {
+                    tracing::error!(
+                        target: "bvh_studio",
+                        "Export worker disconnected"
+                    );
+                }
             }
             Err(mpsc::TryRecvError::Empty) => {}
+        }
+    }
+
+    fn poll_logs(&mut self) {
+        for event in self.log_runtime.drain_ui() {
+            self.log.push(event);
         }
     }
 
@@ -361,10 +411,11 @@ impl App {
             };
             match document {
                 Ok(document) => {
-                    self.log.append(&format!(
-                        "[glb_editor] Loaded {}",
-                        path.display()
-                    ));
+                    tracing::info!(
+                        target: "glb_editor",
+                        input = %safe_path_label(&path),
+                        "Loaded GLB"
+                    );
                     let preview_document = if self.trim_enabled
                         || self.smart_loop_enabled
                     {
@@ -390,12 +441,13 @@ impl App {
                                     )
                                     .map_err(|error| error.to_string())?;
                                 if !report.already_looped {
-                                    self.log.append(&format!(
-                                        "[glb_editor] Smart LOOP preview added {:.3}s and {} keyframes",
-                                        report.new_duration
-                                            - report.original_duration,
-                                        report.added_keyframes
-                                    ));
+                                    tracing::info!(
+                                        target: "glb_editor",
+                                        duration_delta =
+                                            report.new_duration - report.original_duration,
+                                        added_keyframes = report.added_keyframes,
+                                        "Smart LOOP preview updated"
+                                    );
                                 }
                             }
                             Ok::<_, String>(preview)
@@ -403,9 +455,11 @@ impl App {
                         match result {
                             Ok(preview) => preview,
                             Err(error) => {
-                                self.log.append(&format!(
-                                    "[glb_editor] Animation preview setting unavailable: {error}"
-                                ));
+                                tracing::warn!(
+                                    target: "glb_editor",
+                                    error = %error,
+                                    "Animation preview setting unavailable"
+                                );
                                 document.clone()
                             }
                         }
@@ -418,9 +472,11 @@ impl App {
                         match preview_document.export_atomic(&path) {
                             Ok(()) => path,
                             Err(error) => {
-                                self.log.append(&format!(
-                                    "[glb_editor] Preview export failed: {error}"
-                                ));
+                                tracing::error!(
+                                    target: "glb_editor",
+                                    error = %error,
+                                    "Preview export failed"
+                                );
                                 path
                             }
                         }
@@ -462,9 +518,12 @@ impl App {
                                 } else {
                                     "GLB skeleton preview ready"
                                 };
-                                self.log.append(&format!(
-                                    "[glb_editor] {status} ({source})"
-                                ));
+                                tracing::info!(
+                                    target: "glb_editor",
+                                    source,
+                                    status,
+                                    "GLB skeleton preview ready"
+                                );
                             }
                             let skin_count = self
                                 .glb
@@ -484,8 +543,9 @@ impl App {
                             }
                             self.reset_glb_animation_state();
                             if self.first_playable_glb_animation().is_none() {
-                                self.log.append(
-                                    "[glb_editor] Applied authored Rest Pose for static preview",
+                                tracing::debug!(
+                                    target: "glb_editor",
+                                    "Applied authored Rest Pose for static preview"
                                 );
                             }
                             if !self.canvas.animation_clips().is_empty() {
@@ -509,9 +569,11 @@ impl App {
                                 if let Err(error) =
                                     self.update_glb_animation_preview()
                                 {
-                                    self.log.append(&format!(
-                                        "[glb_editor] Animation preview failed: {error}"
-                                    ));
+                                    tracing::error!(
+                                        target: "glb_editor",
+                                        error = %error,
+                                        "Animation preview failed"
+                                    );
                                 }
                             }
                             self.frame_glb_preview(context, reload_kind);
@@ -526,16 +588,21 @@ impl App {
                             self.glb = Some(document);
                             self.pending_auto_play = false;
                             self.bottom_panel_tab = BottomPanelTab::DebugLog;
-                            self.log.append(&format!(
-                                "[glb_editor] Preview failed: {error}"
-                            ));
+                            tracing::error!(
+                                target: "glb_editor",
+                                error = %error,
+                                "Preview failed"
+                            );
                         }
                     }
                 }
                 Err(error) => {
                     self.pending_auto_play = false;
-                    self.log
-                        .append(&format!("[glb_editor] Load failed: {error}"));
+                    tracing::error!(
+                        target: "glb_editor",
+                        error = %error,
+                        "GLB load failed"
+                    );
                 }
             }
         }
@@ -555,14 +622,18 @@ impl App {
                         self.glb_animation_index = 0;
                         self.glb_animation_time = 0.0;
                         self.glb_animation_playing = false;
-                        self.log
-                            .append("[glb_retarget] Retarget preview ready");
+                        tracing::info!(
+                            target: "glb_retarget",
+                            "Retarget preview ready"
+                        );
                         self.initialize_glb_retarget_preview_skeleton(context);
                     }
                     Err(error) => {
-                        self.log.append(&format!(
-                            "[glb_retarget] Target Mesh preview unavailable; using skeleton-only playback: {error}"
-                        ));
+                        tracing::warn!(
+                            target: "glb_retarget",
+                            error = %error,
+                            "Target Mesh preview unavailable; using skeleton-only playback"
+                        );
                         self.canvas.load_skeleton_runtime(runtime);
                         self.glb_retarget_preview_active = true;
                         self.glb_animation_index = 0;
@@ -600,11 +671,12 @@ impl App {
                                 self.camera.focus_on_points(&positions);
                             }
                             self.bvh_camera_focus_pending = false;
-                            self.log.append(&format!(
-                                "[bvh_studio] Focused preview on {} converted joints (unit={})",
-                                positions.len(),
-                                self.bvh_unit
-                            ));
+                            tracing::debug!(
+                                target: "bvh_studio",
+                                joints = positions.len(),
+                                unit = %self.bvh_unit,
+                                "Focused preview on converted joints"
+                            );
                         }
                         if self
                             .retarget_validation
@@ -617,9 +689,11 @@ impl App {
                                     frame as f32 * document.frame_time,
                                 )
                             {
-                                self.log.append(&format!(
-                                    "[retarget] Target animation preview failed: {error}"
-                                ));
+                                tracing::error!(
+                                    target: "retarget",
+                                    error = %error,
+                                    "Target animation preview failed"
+                                );
                             }
                             if let Some(target) = self.bvh_target_glb.as_ref() {
                                 if let Ok(skin) = target.skin_data_at(
@@ -634,17 +708,21 @@ impl App {
                                             &skin.joints,
                                         )
                                     {
-                                        self.log.append(&format!(
-                                            "[retarget] Target skeleton overlay failed: {error}"
-                                        ));
+                                        tracing::error!(
+                                            target: "retarget",
+                                            error = %error,
+                                            "Target skeleton overlay failed"
+                                        );
                                     }
                                 }
                             }
                         }
                     }
-                    Err(error) => self.log.append(&format!(
-                        "[bvh_studio] Skeleton preview failed: {error}"
-                    )),
+                    Err(error) => tracing::error!(
+                        target: "bvh_studio",
+                        error = %error,
+                        "Skeleton preview failed"
+                    ),
                 }
             } else {
                 self.canvas.clear_bvh_skeleton();
@@ -696,9 +774,11 @@ impl App {
                 }
                 if let Err(error) = self.update_glb_animation_preview() {
                     self.glb_animation_playing = false;
-                    self.log.append(&format!(
-                        "[glb_editor] Animation playback failed: {error}"
-                    ));
+                    tracing::error!(
+                        target: "glb_editor",
+                        error = %error,
+                        "Animation playback failed"
+                    );
                 }
             } else {
                 self.glb_animation_playing = false;
@@ -720,11 +800,10 @@ impl App {
             MenuAction::Export => match self.page {
                 Page::GlbEditor => self.export_glb(),
                 Page::BvhStudio => self.export_bvh(),
-                Page::FbxConverter => self.log.append(&format!(
-                    "{} Use Convert on the FBX Converter page; this page \
-                     has no document export",
-                    crate::app_fbx_converter::CONVERTER_LOG_PREFIX
-                )),
+                Page::FbxConverter => tracing::info!(
+                    target: "fbx_converter",
+                    "Use Convert on the FBX Converter page; this page has no document export"
+                ),
             },
             MenuAction::ExportBvhGlb => self.export_bvh_glb(false),
             MenuAction::ExportBvhAnimationClip => self.export_bvh_glb(true),
@@ -829,15 +908,22 @@ impl App {
 
     pub(crate) fn standardize(&mut self) {
         let Some(document) = self.glb.as_mut() else {
-            self.log
-                .append("[glb_editor] Open a GLB before standardizing");
+            tracing::warn!(
+                target: "glb_editor",
+                "Open a GLB before standardizing"
+            );
             return;
         };
         match document.standardize(&StandardizationProfile::default()) {
-            Ok(()) => self
-                .log
-                .append("[glb_editor] GLB matches the default contract"),
-            Err(error) => self.log.append(&format!("[glb_editor] {error}")),
+            Ok(()) => tracing::info!(
+                target: "glb_editor",
+                "GLB matches the default contract"
+            ),
+            Err(error) => tracing::error!(
+                target: "glb_editor",
+                error = %error,
+                "GLB standardization failed"
+            ),
         }
     }
 
@@ -855,8 +941,10 @@ impl App {
 
     pub(crate) fn replace_glb_texture(&mut self) {
         let Some(document) = self.glb.as_mut() else {
-            self.log
-                .append("[glb_editor] Open a GLB before replacing a texture");
+            tracing::warn!(
+                target: "glb_editor",
+                "Open a GLB before replacing a texture"
+            );
             return;
         };
         let Some(path) = rfd::FileDialog::new()
@@ -875,30 +963,45 @@ impl App {
             self.texture_duplicate_shared,
         ) {
             Ok(()) => {
-                self.log.append(&format!(
-                    "[glb_editor] Replaced {} texture with {}",
-                    self.texture_slot.label(),
-                    path.display()
-                ));
+                tracing::info!(
+                    target: "glb_editor",
+                    slot = %self.texture_slot.label(),
+                    input = %safe_path_label(&path),
+                    "Replaced texture"
+                );
                 self.request_glb_reload(GlbReloadKind::EditedModel);
             }
-            Err(error) => self.log.append(&format!("[glb_editor] {error}")),
+            Err(error) => tracing::error!(
+                target: "glb_editor",
+                error = %error,
+                "Texture replacement failed"
+            ),
         }
     }
 
     pub(crate) fn trim_bvh(&mut self) {
         let Some(document) = self.bvh.as_mut() else {
-            self.log.append("[bvh_studio] Open a BVH before trimming");
+            tracing::warn!(
+                target: "bvh_studio",
+                "Open a BVH before trimming"
+            );
             return;
         };
         let trimmed =
             match document.trim(self.bvh_trim_start, self.bvh_trim_end) {
                 Ok(()) => {
-                    self.log.append("[bvh_studio] Trimmed BVH frames");
+                    tracing::info!(
+                        target: "bvh_studio",
+                        "Trimmed BVH frames"
+                    );
                     true
                 }
                 Err(error) => {
-                    self.log.append(&format!("[bvh_studio] {error}"));
+                    tracing::error!(
+                        target: "bvh_studio",
+                        error = %error,
+                        "BVH trim failed"
+                    );
                     false
                 }
             };
@@ -935,14 +1038,42 @@ impl App {
     }
 }
 
-fn task_log_prefix(kind: &str) -> &'static str {
-    if kind.starts_with("GLB export") {
-        "[glb_export]"
-    } else if kind.starts_with("GLB") {
-        "[glb_retarget]"
-    } else if kind.starts_with("Agent") {
-        "[retarget_agent]"
-    } else {
-        "[bvh_studio]"
+fn emit_task_log(kind: TaskKind, level: LogLevel, task_id: u64, message: &str) {
+    macro_rules! emit {
+        ($target:literal) => {
+            match level {
+                LogLevel::Debug => tracing::debug!(
+                    target: $target,
+                    task_id,
+                    detail = %message,
+                    "Background task event"
+                ),
+                LogLevel::Info => tracing::info!(
+                    target: $target,
+                    task_id,
+                    detail = %message,
+                    "Background task event"
+                ),
+                LogLevel::Warn => tracing::warn!(
+                    target: $target,
+                    task_id,
+                    detail = %message,
+                    "Background task event"
+                ),
+                LogLevel::Error => tracing::error!(
+                    target: $target,
+                    task_id,
+                    detail = %message,
+                    "Background task event"
+                ),
+            }
+        };
+    }
+
+    match kind {
+        TaskKind::GlbExport => emit!("glb_export"),
+        TaskKind::BvhExport => emit!("bvh_studio"),
+        TaskKind::GlbRetarget => emit!("glb_retarget"),
+        TaskKind::RetargetAgent => emit!("retarget_agent"),
     }
 }

@@ -64,7 +64,8 @@ For focused meshless GLB logs, use:
 
 ```bash
 cargo run
-rg "\[glb_editor\]" debug.log > glb-skeleton-debug.log
+rg "\[glb_editor\]" "/path/to/aio-asset-normalizer/logs/glb-editor.log" \
+  > glb-skeleton-debug.log
 ```
 
 Generated log files are local artifacts and must remain untracked.
@@ -104,13 +105,29 @@ Generated log files are local artifacts and must remain untracked.
    file. Confirm the exported animation timing and root transform match the
    preview. Use Reset rate and confirm it does not reset the root transform.
 
+## Structured Debug Logging
+
+1. Open the Debug Log tab and confirm the Target selector offers All, GLB
+   Editor, GLB Export, BVH Studio, Retarget, and FBX Converter.
+2. Add or trigger records from two features. Select one target and confirm
+   unrelated records are hidden; raise the minimum level and confirm lower
+   level records are hidden.
+3. Press Copy and confirm only the visible filtered records are copied. Press
+   Clear and confirm the UI view is empty while the files in the application
+   log directory remain intact.
+4. Press Open Log Directory and confirm the platform application data log
+   directory opens.
+5. Run an export or conversion and use the same task_id to locate its start,
+   output, completion, or failure records in debug.log and the feature log.
+
 ## Focused Debug Logging
 
 Run the application and filter GLB editor messages into a focused log file:
 
 ```bash
 cargo run
-rg "\[glb_editor\]" debug.log > glb-animation-debug.log
+rg "\[glb_editor\]" "/path/to/aio-asset-normalizer/logs/glb-editor.log" \
+  > glb-animation-debug.log
 ```
 
 Generated log files are local artifacts and must remain untracked.
@@ -163,7 +180,8 @@ For focused package-export logs, use:
 
 ```bash
 cargo run
-rg "\[glb_export\]" debug.log > glb-export-debug.log
+rg "\[glb_export\]" "/path/to/aio-asset-normalizer/logs/glb-export.log" \
+  > glb-export-debug.log
 ```
 
 Generated log files are local artifacts and must remain untracked.

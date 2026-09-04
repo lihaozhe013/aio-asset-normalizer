@@ -24,6 +24,21 @@ page:
 bottom:
   animation: "动画"
   debug_log: "调试日志"
+log:
+  target: "功能"
+  target_all: "全部"
+  target_glb_editor: "GLB 编辑器"
+  target_glb_export: "GLB 导出"
+  target_bvh_studio: "BVH 工作室"
+  target_retarget: "重定向"
+  target_fbx_converter: "FBX 转换器"
+  minimum_level: "最低级别"
+  level_debug: "调试"
+  level_info: "信息"
+  level_warn: "警告"
+  level_error: "错误"
+  open_directory: "打开日志目录"
+  storage_unavailable: "日志存储不可用；本次会话日志仍可查看。"
 glb:
   open_hint: "打开 GLB 文件以检查和编辑。"
   unsaved: "未保存文档"

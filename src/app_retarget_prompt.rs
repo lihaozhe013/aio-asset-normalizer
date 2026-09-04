@@ -3,24 +3,29 @@ use std::fs;
 use std::path::Path;
 use std::sync::mpsc;
 
-use crate::app::{App, ExportTaskResult};
+use crate::app::{App, ExportTaskResult, TaskKind};
 use crate::modules::glb::AnimationRuntime;
+use crate::modules::logging::{next_task_id, safe_path_label};
 use crate::modules::retarget::{self, SkeletonDescriptor, SourceKind};
 
 impl App {
     pub(crate) fn export_retarget_agent_prompt(&mut self) {
         if self.task_busy {
-            self.log.append(
-                "[retarget_agent] Wait for the current background task",
+            tracing::warn!(
+                target: "retarget_agent",
+                "Wait for the current background task"
             );
             return;
         }
         let Some(bvh) = self.bvh.clone() else {
-            self.log.append("[retarget_agent] Open a BVH first");
+            tracing::warn!(target: "retarget_agent", "Open a BVH first");
             return;
         };
         let Some(target_document) = self.bvh_target_glb.clone() else {
-            self.log.append("[retarget_agent] Load a target GLB first");
+            tracing::warn!(
+                target: "retarget_agent",
+                "Load a target GLB first"
+            );
             return;
         };
         let target_skin_index = self.retarget_target_skin_index;
@@ -28,7 +33,11 @@ impl App {
         {
             Ok(skin) => skin,
             Err(error) => {
-                self.log.append(&format!("[retarget_agent] {error}"));
+                tracing::error!(
+                    target: "retarget_agent",
+                    error = %error,
+                    "Target Skin is unavailable"
+                );
                 return;
             }
         };
@@ -56,8 +65,10 @@ impl App {
         if same_path(&path, source_path.as_deref())
             || same_path(&path, target_path.as_deref())
         {
-            self.log.append(
-                "[retarget_agent] Refusing to overwrite a source asset",
+            tracing::error!(
+                target: "retarget_agent",
+                output = %safe_path_label(&path),
+                "Refusing to overwrite a source asset"
             );
             return;
         }
@@ -68,8 +79,12 @@ impl App {
         let (sender, receiver) = mpsc::channel();
         self.task_rx = Some(receiver);
         self.task_busy = true;
-        self.log.append(
-            "[retarget_agent] Building BVH mapping prompt in background",
+        let task_id = next_task_id();
+        self.active_task_id = Some(task_id);
+        tracing::info!(
+            target: "retarget_agent",
+            task_id,
+            "Building BVH mapping prompt in background"
         );
         let result_path = path.clone();
         std::thread::spawn(move || {
@@ -104,7 +119,8 @@ impl App {
                     .map_err(|error| error.to_string())
             })();
             let _ = sender.send(ExportTaskResult {
-                kind: "Agent BVH mapping prompt".to_owned(),
+                task_id,
+                kind: TaskKind::RetargetAgent,
                 paths: vec![result_path],
                 details: Vec::new(),
                 result,
@@ -114,28 +130,38 @@ impl App {
 
     pub(crate) fn export_glb_retarget_agent_prompt(&mut self) {
         if self.task_busy {
-            self.log.append(
-                "[retarget_agent] Wait for the current background task",
+            tracing::warn!(
+                target: "retarget_agent",
+                "Wait for the current background task"
             );
             return;
         }
         if self.glb.is_none() {
-            self.log.append("[retarget_agent] Open a source GLB first");
+            tracing::warn!(
+                target: "retarget_agent",
+                "Open a source GLB first"
+            );
             return;
         }
         let Some(target_document) = self.glb_retarget_target.clone() else {
-            self.log
-                .append("[retarget_agent] Choose a target GLB first");
+            tracing::warn!(
+                target: "retarget_agent",
+                "Choose a target GLB first"
+            );
             return;
         };
         let Some(source_path) = self.glb_path.clone() else {
-            self.log
-                .append("[retarget_agent] Source GLB path is unavailable");
+            tracing::error!(
+                target: "retarget_agent",
+                "Source GLB path is unavailable"
+            );
             return;
         };
         let Some(target_path) = self.glb_retarget_target_path.clone() else {
-            self.log
-                .append("[retarget_agent] Target GLB path is unavailable");
+            tracing::error!(
+                target: "retarget_agent",
+                "Target GLB path is unavailable"
+            );
             return;
         };
         let source_clip_index = self.glb_animation_index;
@@ -144,7 +170,11 @@ impl App {
         let source_snapshot = match self.build_glb_retarget_source_snapshot() {
             Ok(snapshot) => snapshot,
             Err(error) => {
-                self.log.append(&format!("[retarget_agent] {error}"));
+                tracing::error!(
+                    target: "retarget_agent",
+                    error = %error,
+                    "Failed to build source snapshot"
+                );
                 return;
             }
         };
@@ -170,8 +200,10 @@ impl App {
         if same_path(&path, Some(&source_path))
             || same_path(&path, Some(&target_path))
         {
-            self.log.append(
-                "[retarget_agent] Refusing to overwrite a source asset",
+            tracing::error!(
+                target: "retarget_agent",
+                output = %safe_path_label(&path),
+                "Refusing to overwrite a source asset"
             );
             return;
         }
@@ -179,8 +211,12 @@ impl App {
         let (sender, receiver) = mpsc::channel();
         self.task_rx = Some(receiver);
         self.task_busy = true;
-        self.log.append(
-            "[retarget_agent] Building GLB mapping prompt in background",
+        let task_id = next_task_id();
+        self.active_task_id = Some(task_id);
+        tracing::info!(
+            target: "retarget_agent",
+            task_id,
+            "Building GLB mapping prompt in background"
         );
         let result_path = path.clone();
         std::thread::spawn(move || {
@@ -238,7 +274,8 @@ impl App {
                     .map_err(|error| error.to_string())
             })();
             let _ = sender.send(ExportTaskResult {
-                kind: "Agent GLB mapping prompt".to_owned(),
+                task_id,
+                kind: TaskKind::RetargetAgent,
                 paths: vec![result_path],
                 details: Vec::new(),
                 result,

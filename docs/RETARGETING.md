@@ -94,5 +94,7 @@ For filtered diagnostics, run:
 
 ```bash
 cargo run
-rg "\[(retarget|retarget_agent|bvh_studio|glb_retarget)\]" debug.log > retarget-debug.log
+rg "\[(retarget|retarget_agent|bvh_studio|glb_retarget)\]" \
+  "/path/to/aio-asset-normalizer/logs/retarget.log" \
+  "/path/to/aio-asset-normalizer/logs/bvh-studio.log" > retarget-debug.log
 ```

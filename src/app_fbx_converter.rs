@@ -7,9 +7,7 @@ use crate::modules::blender::task::{
     normalized_output_path, ConversionTask, ConverterMessage,
 };
 use crate::modules::glb::GlbDocument;
-
-/// Stable log prefix for the FBX Converter workflow.
-pub(crate) const CONVERTER_LOG_PREFIX: &str = "[fbx_converter]";
+use crate::modules::logging::{next_task_id, safe_path_label};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ConverterStatus {
@@ -21,6 +19,7 @@ pub(crate) enum ConverterStatus {
 
 #[derive(Debug, Clone)]
 pub(crate) struct ConverterFileState {
+    pub(crate) task_id: Option<u64>,
     pub(crate) input: PathBuf,
     pub(crate) output: PathBuf,
     pub(crate) status: ConverterStatus,
@@ -34,19 +33,24 @@ fn apply_message(
     message: &ConverterMessage,
 ) {
     match message {
-        ConverterMessage::Log(_) => {}
-        ConverterMessage::FileStarted { input } => {
+        ConverterMessage::FileStarted { task_id, input } => {
             if let Some(state) =
                 results.iter_mut().find(|state| &state.input == input)
             {
+                state.task_id = Some(*task_id);
                 state.status = ConverterStatus::Running;
                 state.error = None;
             }
         }
-        ConverterMessage::FileFinished { input, result } => {
+        ConverterMessage::FileFinished {
+            task_id,
+            input,
+            result,
+        } => {
             if let Some(state) =
                 results.iter_mut().find(|state| &state.input == input)
             {
+                state.task_id = Some(*task_id);
                 match result {
                     Ok(_) => state.status = ConverterStatus::Success,
                     Err(error) => {
@@ -67,22 +71,24 @@ impl App {
         }
         let files = self.converter_file_tree.selected_files();
         if files.is_empty() {
-            self.log.append(&format!(
-                "{CONVERTER_LOG_PREFIX} Select at least one file to convert"
-            ));
+            tracing::warn!(
+                target: "fbx_converter",
+                "Select at least one file to convert"
+            );
             return;
         }
         if bridge::find_blender(self.blender_path.as_deref()).is_none() {
-            self.log.append(&format!(
-                "{CONVERTER_LOG_PREFIX} Blender executable not found; \
-                 install Blender or set its path on this page"
-            ));
+            tracing::error!(
+                target: "fbx_converter",
+                "Blender executable not found; install Blender or set its path on this page"
+            );
             return;
         }
 
         let tasks: Vec<ConversionTask> = files
             .iter()
             .map(|file| ConversionTask {
+                task_id: next_task_id(),
                 input: file.clone(),
                 output: normalized_output_path(file),
                 config_json: crate::modules::blender::task::default_config_json(
@@ -93,6 +99,7 @@ impl App {
         self.converter_results = tasks
             .iter()
             .map(|task| ConverterFileState {
+                task_id: Some(task.task_id),
                 input: task.input.clone(),
                 output: task.output.clone(),
                 status: ConverterStatus::Pending,
@@ -103,20 +110,29 @@ impl App {
         let (tx, rx) = mpsc::channel();
         self.converter_rx = Some(rx);
         self.converter_busy = true;
-        self.log.append(&format!(
-            "{CONVERTER_LOG_PREFIX} Starting conversion of {} file(s)",
-            tasks.len()
-        ));
+        tracing::info!(
+            target: "fbx_converter",
+            task_count = tasks.len(),
+            "Starting conversion batch"
+        );
 
         std::thread::spawn(move || {
             for task in tasks {
                 let input = task.input.clone();
                 let output = task.output.clone();
                 let _ = tx.send(ConverterMessage::FileStarted {
+                    task_id: task.task_id,
                     input: input.clone(),
                 });
-                let result = run_and_validate(&task, &tx, &output);
+                tracing::info!(
+                    target: "fbx_converter",
+                    task_id = task.task_id,
+                    input = %safe_path_label(&input),
+                    "Conversion file started"
+                );
+                let result = run_and_validate(&task, &output);
                 let _ = tx.send(ConverterMessage::FileFinished {
+                    task_id: task.task_id,
                     input,
                     result: result.map(|()| output),
                 });
@@ -139,36 +155,42 @@ impl App {
                 // Disconnected without a Finished message means the worker
                 // thread died; never leave the page stuck in the busy state.
                 Err(mpsc::TryRecvError::Disconnected) => {
-                    self.log.append(&format!(
-                        "{CONVERTER_LOG_PREFIX} Converter worker stopped \
-                         unexpectedly"
-                    ));
+                    tracing::warn!(
+                        target: "fbx_converter",
+                        "Converter worker stopped unexpectedly"
+                    );
                     batch_finished = true;
                     break;
                 }
             };
             match &message {
-                ConverterMessage::Log(line) => {
-                    self.log.append(&format!("{CONVERTER_LOG_PREFIX} {line}"));
-                }
                 ConverterMessage::Finished => {
                     batch_finished = true;
                     break;
                 }
                 other => {
                     apply_message(&mut self.converter_results, other);
-                    if let ConverterMessage::FileFinished { input, result } =
-                        other
+                    if let ConverterMessage::FileFinished {
+                        task_id,
+                        input,
+                        result,
+                    } = other
                     {
                         match result {
-                            Ok(output) => self.log.append(&format!(
-                                "{CONVERTER_LOG_PREFIX} Converted {}",
-                                output.display()
-                            )),
-                            Err(error) => self.log.append(&format!(
-                                "{CONVERTER_LOG_PREFIX} Failed {}: {error}",
-                                input.display()
-                            )),
+                            Ok(output) => tracing::info!(
+                                target: "fbx_converter",
+                                task_id = *task_id,
+                                input = %safe_path_label(input),
+                                output = %safe_path_label(output),
+                                "File conversion completed"
+                            ),
+                            Err(error) => tracing::error!(
+                                target: "fbx_converter",
+                                task_id = *task_id,
+                                input = %safe_path_label(input),
+                                error = %error,
+                                "File conversion failed"
+                            ),
                         }
                     }
                 }
@@ -179,8 +201,7 @@ impl App {
             self.file_tree.refresh();
             self.bvh_file_tree.refresh();
             self.converter_file_tree.refresh();
-            self.log
-                .append(&format!("{CONVERTER_LOG_PREFIX} Batch finished"));
+            tracing::info!(target: "fbx_converter", "Conversion batch finished");
         } else {
             self.converter_rx = Some(receiver);
         }
@@ -208,15 +229,16 @@ impl App {
             !trimmed.is_empty()
         });
         if let Some(path) = self.blender_path.as_ref() {
-            self.log.append(&format!(
-                "{CONVERTER_LOG_PREFIX} Blender path set to {}",
-                Path::new(path).display()
-            ));
+            tracing::info!(
+                target: "fbx_converter",
+                blender = %safe_path_label(std::path::Path::new(path)),
+                "Blender path set"
+            );
         } else {
-            self.log.append(&format!(
-                "{CONVERTER_LOG_PREFIX} Blender path cleared; using auto \
-                 detection"
-            ));
+            tracing::info!(
+                target: "fbx_converter",
+                "Blender path cleared; using auto detection"
+            );
         }
         self.needs_save = true;
     }
@@ -226,11 +248,9 @@ impl App {
 /// reader before the caller reports success (repository data-safety rule).
 fn run_and_validate(
     task: &ConversionTask,
-    tx: &mpsc::Sender<ConverterMessage>,
     output: &Path,
 ) -> Result<(), String> {
-    bridge::run_task(task, tx)
-        .map_err(|error: BlenderError| error.to_string())?;
+    bridge::run_task(task).map_err(|error: BlenderError| error.to_string())?;
     GlbDocument::load(output)
         .map_err(|error| {
             format!("conversion produced an unreadable GLB: {error}")
@@ -245,12 +265,14 @@ mod tests {
     fn sample_results() -> Vec<ConverterFileState> {
         vec![
             ConverterFileState {
+                task_id: None,
                 input: PathBuf::from("/assets/rig.fbx"),
                 output: PathBuf::from("/assets/rig_normalized.glb"),
                 status: ConverterStatus::Pending,
                 error: None,
             },
             ConverterFileState {
+                task_id: None,
                 input: PathBuf::from("/assets/prop.obj"),
                 output: PathBuf::from("/assets/prop_normalized.glb"),
                 status: ConverterStatus::Pending,
@@ -265,30 +287,36 @@ mod tests {
         apply_message(
             &mut results,
             &ConverterMessage::FileStarted {
+                task_id: 1,
                 input: PathBuf::from("/assets/rig.fbx"),
             },
         );
         assert_eq!(results[0].status, ConverterStatus::Running);
+        assert_eq!(results[0].task_id, Some(1));
         assert_eq!(results[1].status, ConverterStatus::Pending);
 
         apply_message(
             &mut results,
             &ConverterMessage::FileFinished {
+                task_id: 1,
                 input: PathBuf::from("/assets/rig.fbx"),
                 result: Err("boom".to_owned()),
             },
         );
         assert_eq!(results[0].status, ConverterStatus::Failed);
+        assert_eq!(results[0].task_id, Some(1));
         assert_eq!(results[0].error.as_deref(), Some("boom"));
 
         apply_message(
             &mut results,
             &ConverterMessage::FileFinished {
+                task_id: 2,
                 input: PathBuf::from("/assets/prop.obj"),
                 result: Ok(PathBuf::from("/assets/prop_normalized.glb")),
             },
         );
         assert_eq!(results[1].status, ConverterStatus::Success);
+        assert_eq!(results[1].task_id, Some(2));
         assert_eq!(results[0].status, ConverterStatus::Failed);
     }
 }

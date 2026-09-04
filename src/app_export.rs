@@ -3,13 +3,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 
-use crate::app::{App, ExportTaskResult};
+use crate::app::{App, ExportTaskResult, TaskKind};
 use crate::modules::bvh;
 use crate::modules::glb::{
     AnimationOutputMode, EditOperation, GlbDocument, GlbExportPreset,
     GlbExportReport, GlbExportSelection, RootTransformPreview,
     SmartLoopOptions,
 };
+use crate::modules::logging::{next_task_id, safe_path_label};
 
 #[cfg(test)]
 use crate::modules::glb::{AnimationChannelData, AnimationClipData};
@@ -467,12 +468,14 @@ mod tests {
 impl App {
     pub(crate) fn export_glb(&mut self) {
         if self.task_busy {
-            self.log
-                .append("[glb_export] Wait for the current background task");
+            tracing::warn!(
+                target: "glb_export",
+                "Wait for the current background task"
+            );
             return;
         }
         if self.glb.is_none() {
-            self.log.append("[glb_export] Nothing to export");
+            tracing::warn!(target: "glb_export", "Nothing to export");
             return;
         }
         let selection = self.glb_export_selection.clone();
@@ -482,14 +485,16 @@ impl App {
         let validation = document.validate_export_selection(&selection);
         if !validation.is_valid() {
             for error in validation.errors {
-                self.log.append(&format!(
-                    "[glb_export] Selection invalid: {error}"
-                ));
+                tracing::error!(
+                    target: "glb_export",
+                    error = %error,
+                    "Selection invalid"
+                );
             }
             return;
         }
         if let Err(error) = self.validate_glb_export_settings(&selection) {
-            self.log.append(&format!("[glb_export] {error}"));
+            tracing::error!(target: "glb_export", error = %error, "Invalid export settings");
             return;
         }
         let Some(path) = rfd::FileDialog::new()
@@ -511,22 +516,31 @@ impl App {
         let document = match self.build_glb_export_snapshot() {
             Ok(document) => document,
             Err(error) => {
-                self.log
-                    .append(&format!("[glb_export] Export failed: {error}"));
+                tracing::error!(
+                    target: "glb_export",
+                    error = %error,
+                    "Failed to build export snapshot"
+                );
                 return;
             }
         };
         let jobs = match build_glb_export_jobs(&document, &selection, &path) {
             Ok(jobs) => jobs,
             Err(error) => {
-                self.log.append(&format!("[glb_export] {error}"));
+                tracing::error!(
+                    target: "glb_export",
+                    error = %error,
+                    "Failed to build export jobs"
+                );
                 return;
             }
         };
         for job in &jobs {
             if is_source_path(&job.path, self.glb_path.as_deref()) {
-                self.log.append(
-                    "[glb_export] Refusing to overwrite the source GLB",
+                tracing::error!(
+                    target: "glb_export",
+                    output = %safe_path_label(&job.path),
+                    "Refusing to overwrite the source GLB"
                 );
                 return;
             }
@@ -592,41 +606,47 @@ impl App {
         let (sender, receiver) = mpsc::channel();
         self.task_rx = Some(receiver);
         self.task_busy = true;
+        let task_id = next_task_id();
+        self.active_task_id = Some(task_id);
         let baked_note =
             if !self.bake_root_transform && self.root_transform_active() {
                 " (root transform not baked)"
             } else {
                 ""
             };
-        self.log.append(&format!(
-            "[glb_export] Building {} output{} in background{baked_note}",
-            jobs.len(),
-            if jobs.len() == 1 { "" } else { "s" }
-        ));
+        tracing::info!(
+            target: "glb_export",
+            task_id,
+            output_count = jobs.len(),
+            baked_note,
+            "Building outputs in background"
+        );
         std::thread::spawn(move || {
             let mut paths = Vec::new();
             let mut details = Vec::new();
             let result = (|| {
                 for job in jobs {
                     let mut output = job.document;
-                    let report =
-                        output.prune_for_export(&job.selection).map_err(
-                            |error| format!("{}: {error}", job.path.display()),
-                        )?;
+                    let report = output
+                        .prune_for_export(&job.selection)
+                        .map_err(|error| {
+                            format!("{}: {error}", safe_path_label(&job.path))
+                        })?;
                     details.push(format!(
                         "Export report {}: {}",
-                        job.path.display(),
+                        safe_path_label(&job.path),
                         format_export_report(&report)
                     ));
                     output.export_atomic(&job.path).map_err(|error| {
-                        format!("{}: {error}", job.path.display())
+                        format!("{}: {error}", safe_path_label(&job.path))
                     })?;
                     paths.push(job.path);
                 }
                 Ok(())
             })();
             let _ = sender.send(ExportTaskResult {
-                kind: "GLB export".to_owned(),
+                task_id,
+                kind: TaskKind::GlbExport,
                 paths,
                 details,
                 result,
@@ -640,7 +660,7 @@ impl App {
             return;
         }
         let Some(mapping) = self.mapping.as_ref() else {
-            self.log.append("[bvh_studio] Nothing to export");
+            tracing::warn!(target: "bvh_studio", "Nothing to export");
             return;
         };
         let Some(path) = rfd::FileDialog::new()
@@ -651,8 +671,10 @@ impl App {
             return;
         };
         if is_source_path(&path, self.mapping_path.as_deref()) {
-            self.log.append(
-                "[bvh_studio] Refusing to overwrite the source mapping file",
+            tracing::error!(
+                target: "bvh_studio",
+                output = %safe_path_label(&path),
+                "Refusing to overwrite the source mapping file"
             );
             return;
         }
@@ -660,20 +682,23 @@ impl App {
             Ok(()) => {
                 self.file_tree.refresh();
                 self.bvh_file_tree.refresh();
-                self.log.append(&format!(
-                    "[bvh_studio] Exported mapping {}",
-                    path.display()
-                ));
+                tracing::info!(
+                    target: "bvh_studio",
+                    output = %safe_path_label(&path),
+                    "Exported mapping"
+                );
             }
-            Err(error) => self.log.append(&format!(
-                "[bvh_studio] Mapping export failed: {error}"
-            )),
+            Err(error) => tracing::error!(
+                target: "bvh_studio",
+                error = %error,
+                "Mapping export failed"
+            ),
         }
     }
 
     pub(crate) fn export_bvh(&mut self) {
         let Some(document) = self.bvh.as_ref() else {
-            self.log.append("[bvh_studio] Nothing to export");
+            tracing::warn!(target: "bvh_studio", "Nothing to export");
             return;
         };
         let Some(path) = rfd::FileDialog::new()
@@ -684,22 +709,28 @@ impl App {
             return;
         };
         if is_source_path(&path, self.bvh_path.as_deref()) {
-            self.log
-                .append("[bvh_studio] Refusing to overwrite the source BVH");
+            tracing::error!(
+                target: "bvh_studio",
+                output = %safe_path_label(&path),
+                "Refusing to overwrite the source BVH"
+            );
             return;
         }
         match document.write(&path) {
             Ok(()) => {
                 self.file_tree.refresh();
                 self.bvh_file_tree.refresh();
-                self.log.append(&format!(
-                    "[bvh_studio] Exported {}",
-                    path.display()
-                ));
+                tracing::info!(
+                    target: "bvh_studio",
+                    output = %safe_path_label(&path),
+                    "Exported BVH"
+                );
             }
-            Err(error) => self
-                .log
-                .append(&format!("[bvh_studio] Export failed: {error}")),
+            Err(error) => tracing::error!(
+                target: "bvh_studio",
+                error = %error,
+                "BVH export failed"
+            ),
         }
     }
 }

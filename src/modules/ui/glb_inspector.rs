@@ -116,9 +116,11 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
                         app.orientation_euler_degrees =
                             preset.correction_euler_degrees();
                         app.mark_root_preview_dirty();
-                        app.log.append(&format!(
-                            "[glb_editor] Applied up-axis preset {preset:?}"
-                        ));
+                        tracing::info!(
+                            target: "glb_editor",
+                            preset = ?preset,
+                            "Applied up-axis preset"
+                        );
                     }
                 }
             });

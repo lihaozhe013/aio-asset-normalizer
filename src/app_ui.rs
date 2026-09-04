@@ -82,9 +82,11 @@ impl App {
         self.glb_animation_accumulator = 0.0;
         self.glb_animation_playing = false;
         if let Err(error) = self.update_glb_animation_preview() {
-            self.log.append(&format!(
-                "[glb_editor] Animation selection failed: {error}"
-            ));
+            tracing::error!(
+                target: "glb_editor",
+                error = %error,
+                "Animation selection failed"
+            );
         }
     }
 
@@ -93,9 +95,11 @@ impl App {
         self.glb_animation_time = time.clamp(0.0, duration.max(0.0));
         self.glb_animation_accumulator = 0.0;
         if let Err(error) = self.update_glb_animation_preview() {
-            self.log.append(&format!(
-                "[glb_editor] Animation seek failed: {error}"
-            ));
+            tracing::error!(
+                target: "glb_editor",
+                error = %error,
+                "Animation seek failed"
+            );
         }
     }
 
@@ -113,9 +117,11 @@ impl App {
         self.glb_animation_playing = false;
         self.glb_animation_accumulator = 0.0;
         if let Err(error) = self.update_glb_animation_preview() {
-            self.log.append(&format!(
-                "[glb_editor] Animation step failed: {error}"
-            ));
+            tracing::error!(
+                target: "glb_editor",
+                error = %error,
+                "Animation step failed"
+            );
         }
     }
 

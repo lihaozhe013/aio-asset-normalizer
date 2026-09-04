@@ -26,6 +26,9 @@ The product centers on `.glb` assets. It provides:
 - Implement GLB loading, editing, animation processing, and export in Rust.
 - Reuse the existing `egui` + `three-d` window, 3D Canvas, orbit camera, axes, grid, and skeleton visualization foundations.
 - Use a shared bottom dock with switchable Animation and Debug Log tabs so the Canvas always owns its reserved viewport area.
+- Route structured logs to an aggregate debug.log plus feature-specific files
+  in the platform application data directory, with bounded UI history and
+  background file I/O.
 - Keep UI, GLB document processing, BVH algorithms, and rendering decoupled; run expensive work through background tasks and message passing.
 - Never overwrite source files by default. All exports use temporary files and atomic replacement.
 
@@ -159,6 +162,7 @@ generic tool.
 
 | Layer | Technology |
 | --- | --- |
+| Logging | tracing + tracing-subscriber, buffered rotating files |
 | GUI | `egui` through `three-d` |
 | 3D viewport | `three-d` / `wgpu` |
 | GLB loading and validation | `gltf` |
@@ -168,6 +172,9 @@ generic tool.
 | File dialogs | `rfd` |
 
 The GLB read/write layer preserves the original JSON and BIN data and changes only affected resources wherever possible. This helps retain unknown extensions, `extras`, and the original resource layout. The `gltf` crate and GLB container APIs provide the foundation for loading, reparsing, and writing files.
+
+Application log files, feature routing, rotation, privacy rules, and
+collection commands are documented in [docs/logging.md](docs/logging.md).
 
 ## Rebuild Stages
 

@@ -3,6 +3,7 @@ pub mod blender;
 pub mod bvh;
 pub mod glb;
 pub mod i18n;
+pub(crate) mod logging;
 pub mod preferences;
 pub mod retarget;
 pub mod ui;

@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 /// Immutable inputs for one headless Blender conversion run.
 pub struct ConversionTask {
+    pub task_id: u64,
     pub input: PathBuf,
     pub output: PathBuf,
     pub config_json: String,
@@ -10,12 +11,11 @@ pub struct ConversionTask {
 
 /// Message the converter worker thread sends back to the UI layer.
 pub enum ConverterMessage {
-    /// One raw line of Blender stdout/stderr or bridge progress info.
-    Log(String),
     /// A single file is about to be processed by the worker.
-    FileStarted { input: PathBuf },
+    FileStarted { task_id: u64, input: PathBuf },
     /// A single file finished; the result carries `Ok(output)` or an error.
     FileFinished {
+        task_id: u64,
         input: PathBuf,
         result: Result<PathBuf, String>,
     },

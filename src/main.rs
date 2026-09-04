@@ -18,12 +18,13 @@ use three_d::*;
 
 fn main() {
     let prefs = modules::preferences::load();
+    let logging = modules::logging::LogRuntime::init();
 
     let window = window::create().expect("Failed to create window");
 
     let context = window.gl();
     let mut gui = three_d::GUI::new(&context);
-    let mut app = App::new(&context, window.viewport(), &prefs);
+    let mut app = App::new(&context, window.viewport(), &prefs, logging);
 
     window.render_loop(move |mut frame_input| {
         let mut content_rect: Option<egui::Rect> = None;

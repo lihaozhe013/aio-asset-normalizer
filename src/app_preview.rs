@@ -54,18 +54,22 @@ impl App {
         let matrix = match self.root_transform_preview().to_matrix() {
             Ok(matrix) => matrix,
             Err(error) => {
-                self.log.append(&format!(
-                    "[glb_editor] Root transform preview failed: {error}"
-                ));
+                tracing::error!(
+                    target: "glb_editor",
+                    error = %error,
+                    "Root transform preview failed"
+                );
                 self.root_preview_error = Some(error.to_string());
                 return;
             }
         };
         let transform = mat4_from_rows(matrix);
         if let Err(error) = self.canvas.set_root_preview_transform(transform) {
-            self.log.append(&format!(
-                "[glb_editor] Root transform preview failed: {error}"
-            ));
+            tracing::error!(
+                target: "glb_editor",
+                error = %error,
+                "Root transform preview failed"
+            );
             self.root_preview_error = Some(error);
         } else {
             self.root_preview_error = None;
@@ -85,16 +89,20 @@ impl App {
         let part_count =
             self.canvas.model.as_ref().map_or(0, |model| model.len());
         let Some((minimum, maximum)) = self.canvas.preview_bounds() else {
-            self.log.append(&format!(
-                "[glb_editor] Preview bounds unavailable, parts={part_count}"
-            ));
+            tracing::warn!(
+                target: "glb_editor",
+                parts = part_count,
+                "Preview bounds unavailable"
+            );
             return;
         };
-        self.log.append(&format!(
-            "[glb_editor] Preview bounds parts={part_count} min=[{:.5}, {:.5}, {:.5}] max=[{:.5}, {:.5}, {:.5}]",
-            minimum[0], minimum[1], minimum[2], maximum[0], maximum[1],
-            maximum[2]
-        ));
+        tracing::debug!(
+            target: "glb_editor",
+            parts = part_count,
+            min = ?minimum,
+            max = ?maximum,
+            "Preview bounds"
+        );
         if reload_kind != GlbReloadKind::OpenModel {
             return;
         }

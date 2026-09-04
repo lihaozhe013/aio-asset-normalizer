@@ -2,9 +2,10 @@ use std::fmt;
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::mpsc;
 
-use super::task::{ConversionTask, ConverterMessage};
+use crate::modules::logging::safe_path_label;
+
+use super::task::ConversionTask;
 
 const SCRIPT_FILE_NAME: &str = "normalize_to_glb.py";
 const SCRIPT_SOURCE: &str =
@@ -33,7 +34,7 @@ impl fmt::Display for BlenderError {
             BlenderError::InputMissing(path) => write!(
                 formatter,
                 "Input file is not readable: {}",
-                path.display()
+                safe_path_label(path)
             ),
             BlenderError::ScriptWrite(message) => write!(
                 formatter,
@@ -158,12 +159,9 @@ pub fn materialize_script() -> Result<PathBuf, BlenderError> {
 }
 
 /// Run one conversion by invoking `blender -b -P <script> -- <in> <out>
-/// <config>`. Output lines are streamed to `tx` as `ConverterMessage::Log`
-/// messages; callers must not interpret them as success on their own.
-pub fn run_task(
-    task: &ConversionTask,
-    tx: &mpsc::Sender<ConverterMessage>,
-) -> Result<(), BlenderError> {
+/// <config>`. Output lines are submitted to the structured logging pipeline;
+/// callers must not interpret them as success on their own.
+pub fn run_task(task: &ConversionTask) -> Result<(), BlenderError> {
     if !task.input.is_file() {
         return Err(BlenderError::InputMissing(task.input.clone()));
     }
@@ -172,18 +170,14 @@ pub fn run_task(
         .ok_or(BlenderError::BlenderNotFound)?;
     let script = materialize_script()?;
 
-    let _ = tx.send(ConverterMessage::Log(format!(
-        "Blender: {}",
-        blender.display()
-    )));
-    let _ = tx.send(ConverterMessage::Log(format!(
-        "Input:   {}",
-        task.input.display()
-    )));
-    let _ = tx.send(ConverterMessage::Log(format!(
-        "Output:  {}",
-        task.output.display()
-    )));
+    tracing::info!(
+        target: "fbx_converter",
+        task_id = task.task_id,
+        input = %safe_path_label(&task.input),
+        output = %safe_path_label(&task.output),
+        blender = %safe_path_label(&blender),
+        "Starting Blender task"
+    );
 
     // Paths are passed as OsStr so non-UTF-8 inputs never panic here.
     let mut child = Command::new(&blender)
@@ -208,22 +202,38 @@ pub fn run_task(
         .take()
         .ok_or_else(|| BlenderError::Spawn("missing stderr pipe".into()))?;
 
-    let tx_stdout = tx.clone();
+    let input_label = safe_path_label(&task.input);
+    let stdout_task_id = task.task_id;
     std::thread::spawn(move || {
         let reader = std::io::BufReader::new(stdout);
         for line in reader.lines().map_while(Result::ok) {
             if !line.trim().is_empty() {
-                let _ = tx_stdout.send(ConverterMessage::Log(line));
+                tracing::info!(
+                    target: "fbx_converter",
+                    task_id = stdout_task_id,
+                    input = %input_label,
+                    stream = "stdout",
+                    line = %line,
+                    "Blender output"
+                );
             }
         }
     });
 
-    let tx_stderr = tx.clone();
+    let input_label = safe_path_label(&task.input);
+    let stderr_task_id = task.task_id;
     std::thread::spawn(move || {
         let reader = std::io::BufReader::new(stderr);
         for line in reader.lines().map_while(Result::ok) {
             if !line.trim().is_empty() {
-                let _ = tx_stderr.send(ConverterMessage::Log(line));
+                tracing::info!(
+                    target: "fbx_converter",
+                    task_id = stderr_task_id,
+                    input = %input_label,
+                    stream = "stderr",
+                    line = %line,
+                    "Blender output"
+                );
             }
         }
     });
@@ -270,14 +280,14 @@ mod tests {
 
     #[test]
     fn run_task_reports_missing_input() {
-        let (tx, _rx) = mpsc::channel();
         let task = ConversionTask {
+            task_id: 1,
             input: PathBuf::from("this-file-does-not-exist.fbx"),
             output: PathBuf::from("unused.glb"),
             config_json: "{}".to_owned(),
             blender_path: None,
         };
-        let error = run_task(&task, &tx).unwrap_err();
+        let error = run_task(&task).unwrap_err();
         assert!(matches!(error, BlenderError::InputMissing(_)));
     }
 }
