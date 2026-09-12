@@ -1,11 +1,67 @@
 use crate::app::App;
+use crate::app_glb_batch::{GlbInspectorScope, GlbSingleTab};
 use crate::modules::glb::{TextureSlot, UpAxisPreset};
+use crate::modules::ui::glb_batch_panel;
 use crate::modules::ui::glb_export_panel;
 use crate::modules::ui::skeleton_panel::{self, SkeletonPanelContext};
 
 pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
+    let selected_files = app.file_tree.selected_files();
+    app.observe_glb_selection(&selected_files);
+    let i18n = app.i18n.clone();
+    ui.heading(i18n.tr("page.glb_editor"));
+    ui.horizontal(|ui| {
+        if ui
+            .selectable_label(
+                app.glb_batch.scope == GlbInspectorScope::Current,
+                i18n.tr("glb.scope_current"),
+            )
+            .clicked()
+        {
+            app.glb_batch.scope = GlbInspectorScope::Current;
+        }
+        let count = app.file_tree.selected_count();
+        if ui
+            .selectable_label(
+                app.glb_batch.scope == GlbInspectorScope::Batch,
+                i18n.text("glb.scope_batch", &[("count", count.to_string())]),
+            )
+            .clicked()
+            && count > 0
+        {
+            app.glb_batch.scope = GlbInspectorScope::Batch;
+        }
+    });
+    ui.separator();
+    if app.glb_batch.scope == GlbInspectorScope::Batch {
+        glb_batch_panel::render(app, ui);
+        return;
+    }
+
+    ui.horizontal(|ui| {
+        for (tab, label) in [
+            (GlbSingleTab::Inspect, i18n.tr("glb.tab_inspect")),
+            (GlbSingleTab::Retarget, i18n.tr("glb.tab_retarget")),
+            (GlbSingleTab::Export, i18n.tr("glb.tab_export")),
+        ] {
+            if ui
+                .selectable_label(app.glb_batch.single_tab == tab, label)
+                .clicked()
+            {
+                app.glb_batch.single_tab = tab;
+            }
+        }
+    });
+    ui.separator();
+    match app.glb_batch.single_tab {
+        GlbSingleTab::Inspect => render_current(app, ui),
+        GlbSingleTab::Retarget => render_retarget_tab(app, ui),
+        GlbSingleTab::Export => glb_export_panel::render(app, ui),
+    }
+}
+
+fn render_current(app: &mut App, ui: &mut three_d::egui::Ui) {
     use three_d::egui::*;
-    ui.heading(app.i18n.tr("page.glb_editor"));
     if app.glb_retarget_preview_active {
         ui.colored_label(Color32::LIGHT_BLUE, "Retarget preview is active");
         if ui.button("Exit retarget preview").clicked() {
@@ -354,6 +410,14 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
     });
 
     ui.separator();
+    if ui.button(app.i18n.tr("glb.standardize")).clicked() {
+        app.standardize();
+    }
+}
+
+fn render_retarget_tab(app: &mut App, ui: &mut three_d::egui::Ui) {
+    use three_d::egui::*;
+
     ui.collapsing("Animation retargeting", |ui| {
         ui.label("Retarget the selected source animation onto a user-selected GLB Skin.");
         if ui.button("Choose target GLB").clicked() {
@@ -366,29 +430,37 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
         }
         if let Some(target) = app.glb_retarget_target.as_ref() {
             let target_summary = target.summary();
-            let source_skin_count = app.glb.as_ref().map(|source| source.summary().skins).unwrap_or(0);
+            let source_skin_count = app
+                .glb
+                .as_ref()
+                .map(|source| source.summary().skins)
+                .unwrap_or(0);
             if target_summary.skins > 0 && source_skin_count > 0 {
                 let mut changed = false;
                 ComboBox::from_label("Source Skin")
                     .selected_text(app.retarget_source_skin_index.to_string())
                     .show_ui(ui, |ui| {
                         for index in 0..source_skin_count {
-                            changed |= ui.selectable_value(
-                                &mut app.retarget_source_skin_index,
-                                index,
-                                format!("Skin {index}"),
-                            ).changed();
+                            changed |= ui
+                                .selectable_value(
+                                    &mut app.retarget_source_skin_index,
+                                    index,
+                                    format!("Skin {index}"),
+                                )
+                                .changed();
                         }
                     });
                 ComboBox::from_label("Target Skin")
                     .selected_text(app.retarget_target_skin_index.to_string())
                     .show_ui(ui, |ui| {
                         for index in 0..target_summary.skins {
-                            changed |= ui.selectable_value(
-                                &mut app.retarget_target_skin_index,
-                                index,
-                                format!("Skin {index}"),
-                            ).changed();
+                            changed |= ui
+                                .selectable_value(
+                                    &mut app.retarget_target_skin_index,
+                                    index,
+                                    format!("Skin {index}"),
+                                )
+                                .changed();
                         }
                     });
                 if changed {
@@ -457,13 +529,6 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
                 false,
             );
         }
-    }
-
-    ui.separator();
-    glb_export_panel::render(app, ui);
-    ui.separator();
-    if ui.button(app.i18n.tr("glb.standardize")).clicked() {
-        app.standardize();
     }
 }
 

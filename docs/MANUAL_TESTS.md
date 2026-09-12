@@ -70,6 +70,45 @@ rg "\[glb_editor\]" "/path/to/aio-asset-normalizer/logs/glb-editor.log" \
 
 Generated log files are local artifacts and must remain untracked.
 
+## GLB Batch Export
+
+Use at least two GLB files with Skeletons and animations, plus one file with a
+different Skin layout or an ambiguous root hierarchy.
+
+1. Click a file name without checking it. Confirm it becomes the current
+   preview and the Current file Inspector remains available.
+2. Check two or more files. Confirm the Inspector switches to Batch and the
+   checked count is separate from the current preview highlight.
+3. Select Skeleton Animation, Combined output, Automatic Skin, enable Remove
+   Root Motion with Automatic Root Motion Node, choose an empty output folder,
+   and run Preflight. Confirm every source is analyzed independently and no
+   output is written during preflight.
+4. Confirm a valid batch shows per-file estimates and warnings. A file with no
+   removable root translation must show a warning and zero modified channels,
+   not silently disappear.
+5. Confirm an ambiguous multiple-Skin file blocks the whole batch. Select an
+   exact authored Skin name and rerun preflight; duplicate or missing names
+   must remain errors.
+6. Confirm a valid preflight enables Export Batch. Reopen every output and
+   verify the selected Skin hierarchy and all animations are present, render
+   resources are removed, and Root Motion is frozen when a track was modified.
+7. Verify nested input directories are preserved below the output directory,
+   names use the preset suffix, and Split output creates one sanitized file per
+   animation.
+8. Create an existing output, leave overwrite disabled, and confirm preflight
+   blocks the batch. Enable overwrite, rerun preflight, and confirm only the
+   output is replaced; no input GLB can be overwritten.
+9. Change the checked files, recipe, output directory, or overwrite setting
+   after preflight. Confirm Export Batch becomes disabled until preflight is
+   run again.
+10. Modify a source file after preflight and before export. Confirm the worker
+    detects the SHA-256 mismatch before writing any output.
+11. Force an output I/O failure during export. Confirm completed outputs remain
+    intact, later files are marked skipped, and the result identifies the
+    failed input and completed paths.
+12. Switch back to Current file after a batch run. Confirm the viewport,
+    single-file selection, and source document are unchanged by batch export.
+
 ## Inspector and Canvas Input Boundaries
 
 1. Open a GLB in the GLB Editor and resize the left resource tree, right

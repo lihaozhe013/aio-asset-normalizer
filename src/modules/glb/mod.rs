@@ -25,6 +25,7 @@ pub use self::export_selection::{
 
 mod animation;
 mod animation_runtime;
+mod batch;
 mod orientation_presets;
 mod root_motion;
 mod smart_loop;
@@ -32,6 +33,7 @@ mod smart_loop;
 pub use animation_runtime::{
     AnimationClip, AnimationRuntime, RuntimeNode, RuntimeNodePose, RuntimePose,
 };
+pub use batch::{BatchNameSelector, GlbBatchRecipe};
 pub use orientation_presets::UpAxisPreset;
 #[allow(unused_imports)]
 pub use smart_loop::{SmartLoopOptions, SmartLoopReport};

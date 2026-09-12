@@ -94,6 +94,10 @@ impl FileTree {
         files
     }
 
+    pub fn selected_count(&self) -> usize {
+        self.selected.len()
+    }
+
     pub fn apply_prefs(&mut self, prefs: &FileTreePreferences) {
         self.show_all_files = prefs.show_all_files;
         if let Some(ref dir) = prefs.last_opened_directory {
@@ -366,8 +370,24 @@ impl FileTree {
         ui: &mut egui::Ui,
         i18n: &I18n,
     ) -> (bool, Option<PathBuf>) {
+        self.render_with_active(ui, i18n, None)
+    }
+
+    pub fn render_with_active(
+        &mut self,
+        ui: &mut egui::Ui,
+        i18n: &I18n,
+        active_path: Option<&Path>,
+    ) -> (bool, Option<PathBuf>) {
         let mut prefs_changed = false;
         let mut preview_glb: Option<PathBuf> = None;
+        let selection_label = if self.accepted_extensions.len() == 1
+            && self.accepted_extensions[0].eq_ignore_ascii_case("glb")
+        {
+            "files.batch_selected"
+        } else {
+            "files.selected"
+        };
 
         if self.root.is_none() {
             self.render_open_prompt(ui, i18n);
@@ -425,7 +445,7 @@ impl FileTree {
                         }
                     });
                     ui.label(i18n.text(
-                        "files.selected",
+                        selection_label,
                         &[
                             ("selected", self.selected.len().to_string()),
                             ("total", total.to_string()),
@@ -496,7 +516,12 @@ impl FileTree {
                                 }
                                 if Self::is_glb(&item.path) {
                                     if ui
-                                        .selectable_label(false, &item.name)
+                                        .selectable_label(
+                                            active_path.is_some_and(|path| {
+                                                path == item.path
+                                            }),
+                                            &item.name,
+                                        )
                                         .clicked()
                                     {
                                         preview_glb = Some(item.path.clone());

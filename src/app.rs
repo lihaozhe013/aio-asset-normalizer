@@ -1,8 +1,9 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::mpsc;
 use std::time::Instant;
 
 use crate::app_fbx_converter::ConverterFileState;
+use crate::app_glb_batch::GlbBatchState;
 use crate::modules::blender::task::ConverterMessage;
 use crate::modules::preferences::FileTreePreferences;
 use crate::modules::retarget::{MappingValidationReport, SkeletonMapping};
@@ -13,8 +14,7 @@ use crate::modules::{
     },
     glb::{
         AnimationRuntime, EditOperation, GlbDocument, GlbExportReport,
-        GlbExportSelection, PrimitiveTarget, SmartLoopOptions,
-        StandardizationProfile, TextureSlot,
+        GlbExportSelection, SmartLoopOptions, TextureSlot,
     },
     i18n::I18n,
     logging::{safe_path_label, LogLevel, LogRuntime},
@@ -27,7 +27,7 @@ use crate::modules::{
     },
     viewport::{camera::OrbitCamera, canvas::ViewportCanvas},
 };
-use crate::reload::{merge_glb_reload_kind, GlbReloadKind};
+use crate::reload::GlbReloadKind;
 use three_d::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,6 +51,7 @@ pub struct App {
     pub(crate) glb_export_selection: GlbExportSelection,
     pub(crate) glb_export_estimate:
         Option<(GlbExportSelection, Result<GlbExportReport, String>)>,
+    pub(crate) glb_batch: GlbBatchState,
     pub bvh_target_glb: Option<GlbDocument>,
     pub bvh_target_path: Option<PathBuf>,
     pub(crate) bvh_export_selection: GlbExportSelection,
@@ -112,9 +113,9 @@ pub struct App {
     last_frame_time: Instant,
     pub(crate) bvh_playback_accumulator: f32,
     pub(crate) glb_animation_accumulator: f32,
-    reload_request: Option<GlbReloadKind>,
-    pending_auto_play: bool,
-    pending_animation_selection: Option<usize>,
+    pub(crate) reload_request: Option<GlbReloadKind>,
+    pub(crate) pending_auto_play: bool,
+    pub(crate) pending_animation_selection: Option<usize>,
     pub(crate) needs_bvh_skeleton_reload: bool,
     pub(crate) bvh_camera_focus_pending: bool,
     pub(crate) needs_bvh_target_reload: bool,
@@ -193,6 +194,7 @@ impl App {
             glb_path: None,
             glb_export_selection: GlbExportSelection::default(),
             glb_export_estimate: None,
+            glb_batch: GlbBatchState::default(),
             bvh_target_glb: None,
             bvh_target_path: None,
             bvh_export_selection: GlbExportSelection::default(),
@@ -275,35 +277,10 @@ impl App {
         self.quit_requested
     }
 
-    pub fn preview_glb(&mut self, path: &Path) {
-        self.page = Page::GlbEditor;
-        self.glb_retarget_preview_active = false;
-        self.pending_glb_retarget_runtime = None;
-        self.canvas.clear_glb_skeleton();
-        self.canvas.clear_bvh_skeleton();
-        self.canvas.clear_target_skeleton();
-        self.glb_path = Some(path.to_path_buf());
-        self.pending_animation_selection = None;
-        self.reset_root_preview();
-        self.reset_glb_animation_rate();
-        self.smart_loop_enabled = false;
-        self.smart_loop_transition = 0.15;
-        self.trim_enabled = false;
-        self.trim_animation = 0;
-        self.trim_start = 0.0;
-        self.trim_end = 1.0;
-        self.request_glb_reload(GlbReloadKind::OpenModel);
-        self.pending_auto_play = true;
-    }
-
-    pub(crate) fn request_glb_reload(&mut self, requested: GlbReloadKind) {
-        self.reload_request =
-            Some(merge_glb_reload_kind(self.reload_request, requested));
-    }
-
     pub fn poll_tasks(&mut self) {
         self.poll_logs();
         self.poll_converter();
+        self.poll_glb_batch();
         let Some(receiver) = self.task_rx.as_ref() else {
             return;
         };
@@ -798,7 +775,7 @@ impl App {
             MenuAction::ExportMapping => self.export_mapping(),
             MenuAction::Save => self.export_glb(),
             MenuAction::Export => match self.page {
-                Page::GlbEditor => self.export_glb(),
+                Page::GlbEditor => self.export_glb_for_scope(),
                 Page::BvhStudio => self.export_bvh(),
                 Page::FbxConverter => tracing::info!(
                     target: "fbx_converter",
@@ -906,79 +883,6 @@ impl App {
         }
     }
 
-    pub(crate) fn standardize(&mut self) {
-        let Some(document) = self.glb.as_mut() else {
-            tracing::warn!(
-                target: "glb_editor",
-                "Open a GLB before standardizing"
-            );
-            return;
-        };
-        match document.standardize(&StandardizationProfile::default()) {
-            Ok(()) => tracing::info!(
-                target: "glb_editor",
-                "GLB matches the default contract"
-            ),
-            Err(error) => tracing::error!(
-                target: "glb_editor",
-                error = %error,
-                "GLB standardization failed"
-            ),
-        }
-    }
-
-    pub(crate) fn trim_setting_changed(&mut self) {
-        self.pending_animation_selection = Some(self.glb_animation_index);
-        self.glb_export_estimate = None;
-        self.request_glb_reload(GlbReloadKind::EditedModel);
-    }
-
-    pub(crate) fn smart_loop_setting_changed(&mut self) {
-        self.pending_animation_selection = Some(self.glb_animation_index);
-        self.glb_export_estimate = None;
-        self.request_glb_reload(GlbReloadKind::EditedModel);
-    }
-
-    pub(crate) fn replace_glb_texture(&mut self) {
-        let Some(document) = self.glb.as_mut() else {
-            tracing::warn!(
-                target: "glb_editor",
-                "Open a GLB before replacing a texture"
-            );
-            return;
-        };
-        let Some(path) = rfd::FileDialog::new()
-            .add_filter("PNG or JPEG", &["png", "jpg", "jpeg"])
-            .pick_file()
-        else {
-            return;
-        };
-        match document.replace_texture(
-            PrimitiveTarget {
-                mesh: self.texture_mesh,
-                primitive: self.texture_primitive,
-            },
-            self.texture_slot,
-            &path,
-            self.texture_duplicate_shared,
-        ) {
-            Ok(()) => {
-                tracing::info!(
-                    target: "glb_editor",
-                    slot = %self.texture_slot.label(),
-                    input = %safe_path_label(&path),
-                    "Replaced texture"
-                );
-                self.request_glb_reload(GlbReloadKind::EditedModel);
-            }
-            Err(error) => tracing::error!(
-                target: "glb_editor",
-                error = %error,
-                "Texture replacement failed"
-            ),
-        }
-    }
-
     pub(crate) fn trim_bvh(&mut self) {
         let Some(document) = self.bvh.as_mut() else {
             tracing::warn!(
@@ -1017,24 +921,6 @@ impl App {
             self.bvh_frame = frame;
             self.needs_bvh_skeleton_reload = true;
         }
-    }
-
-    fn import_glb(&mut self) {
-        let Some(path) = rfd::FileDialog::new()
-            .add_filter("GLB", &["glb"])
-            .pick_file()
-        else {
-            return;
-        };
-        if self.page == Page::BvhStudio {
-            self.load_bvh_target(&path);
-            return;
-        }
-        if let Some(parent) = path.parent() {
-            self.file_tree.open_folder(parent.to_path_buf());
-            self.file_tree.select_file(&path);
-        }
-        self.preview_glb(&path);
     }
 }
 

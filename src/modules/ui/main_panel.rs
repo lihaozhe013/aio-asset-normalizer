@@ -46,7 +46,11 @@ pub fn render_ui(
                 .min_size(170.0)
                 .show_inside(ui, |ui| {
                     let (changed, preview_path) =
-                        app.file_tree.render(ui, &app.i18n);
+                        app.file_tree.render_with_active(
+                            ui,
+                            &app.i18n,
+                            app.glb_path.as_deref(),
+                        );
                     if changed || app.file_tree.take_root_changed() {
                         app.needs_save = true;
                     }

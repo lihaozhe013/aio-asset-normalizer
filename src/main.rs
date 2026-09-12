@@ -4,6 +4,8 @@ mod app;
 mod app_bvh;
 mod app_export;
 mod app_fbx_converter;
+mod app_glb_batch;
+mod app_glb_editor;
 mod app_preview;
 mod app_retarget;
 mod app_retarget_prompt;
