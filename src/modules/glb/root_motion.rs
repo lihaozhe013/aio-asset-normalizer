@@ -7,6 +7,18 @@ use serde_json::{json, Value};
 use super::export_selection::GlbExportSelection;
 use super::{GlbDocument, GlbError};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RootMotionRemovalMode {
+    HorizontalXZ,
+    AllTranslation,
+}
+
+impl Default for RootMotionRemovalMode {
+    fn default() -> Self {
+        Self::HorizontalXZ
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RootMotionInfo {
     pub(crate) resolved_node: Option<usize>,
@@ -19,6 +31,7 @@ pub(super) struct RootMotionPlan {
     pub(super) node: usize,
     pub(super) candidate_nodes: Vec<usize>,
     pub(super) channels: Vec<RootMotionChannel>,
+    pub(super) removal_mode: RootMotionRemovalMode,
     pub(super) warnings: Vec<String>,
 }
 
@@ -145,6 +158,7 @@ impl GlbDocument {
             node,
             candidate_nodes: channel_nodes,
             channels: selected_channels,
+            removal_mode: selection.root_motion_removal_mode,
             warnings,
         }))
     }
@@ -162,10 +176,28 @@ impl GlbDocument {
                     channel.animation, channel.channel
                 ))
             })?;
-            if data.values.iter().all(|value| *value == first) {
+            let values = data
+                .values
+                .iter()
+                .map(|value| match plan.removal_mode {
+                    RootMotionRemovalMode::HorizontalXZ => {
+                        [first[0], value[1], first[2]]
+                    }
+                    RootMotionRemovalMode::AllTranslation => first,
+                })
+                .collect::<Vec<_>>();
+            if data
+                .values
+                .iter()
+                .zip(&values)
+                .all(|(source, output)| source == output)
+            {
                 continue;
             }
-            let values = vec![first.to_vec(); data.values.len()];
+            let values = values
+                .into_iter()
+                .map(|value| value.to_vec())
+                .collect::<Vec<_>>();
             let output_accessor =
                 self.append_float_accessor(&values, "VEC3")
                     .map_err(|error| context_error(*channel, error))?;
@@ -180,10 +212,15 @@ impl GlbDocument {
         if modified > 0 {
             self.dirty = true;
         }
+        let removal_axes = match plan.removal_mode {
+            RootMotionRemovalMode::HorizontalXZ => "xz",
+            RootMotionRemovalMode::AllTranslation => "xyz",
+        };
         tracing::info!(
             target: "glb_export",
             channels_modified = modified,
             root_node = plan.node,
+            removal_axes,
             "[root_motion] Removed root translation motion from export copy"
         );
         Ok(modified)

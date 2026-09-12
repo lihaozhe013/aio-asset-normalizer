@@ -26,7 +26,9 @@ Skin resolution is automatic only when there is zero or one Skin (zero is
 valid for Character Package). A batch can instead specify an exact, authored,
 case-sensitive Skin name; missing or duplicate matches are errors. Root Motion
 uses the existing automatic resolver or an exact, authored, case-sensitive
-node name. Node and Primitive subsets, animation trimming, animation-rate
+node name. Its default `Horizontal X/Z` mode preserves local Y motion; the
+`All translation X/Y/Z` mode remains available for full freezing. Node and
+Primitive subsets, animation trimming, animation-rate
 changes, Smart LOOP, root transforms, texture replacement, and retargeting are
 current-file operations and are not silently applied to a batch.
 
@@ -37,8 +39,9 @@ export selection, builds an in-memory export estimate, and records a SHA-256
 source fingerprint. Preflight does not create directories or write files. Any
 validation error, output collision, output/source collision, or existing
 output with overwrite disabled blocks the batch. Warnings remain exportable
-and are shown per file; a Remove Root Motion request that changes zero tracks
-is an explicit warning.
+and are shown per file. A Remove Root Motion request with no translation
+channel on the resolved root remains a warning; a clip with no motion on the
+selected axes is a successful no-op and does not create a warning.
 
 Outputs preserve the input tree below the selected output directory and use
 `<stem>_full.glb`, `<stem>_character.glb`, or `<stem>_skeleton.glb`. Split

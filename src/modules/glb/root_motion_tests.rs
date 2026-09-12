@@ -4,7 +4,7 @@ use serde_json::json;
 
 use super::super::{
     AnimationOutputMode, AnimationRuntime, GlbDocument, GlbExportPreset,
-    GlbExportSelection,
+    GlbExportSelection, RootMotionRemovalMode,
 };
 
 fn root_motion_document() -> GlbDocument {
@@ -21,7 +21,7 @@ fn root_motion_document() -> GlbDocument {
     for time in [0.0_f32, 1.0, 2.0] {
         bin.extend_from_slice(&time.to_le_bytes());
     }
-    for value in [[2.0_f32, 3.0, 4.0], [5.0, 3.0, 4.0], [8.0, 3.0, 4.0]] {
+    for value in [[2.0_f32, 3.0, 4.0], [5.0, 6.0, 7.0], [8.0, 9.0, 10.0]] {
         for component in value {
             bin.extend_from_slice(&component.to_le_bytes());
         }
@@ -104,6 +104,7 @@ fn skeleton_selection(animations: &[usize]) -> GlbExportSelection {
         selected_animations: animations.iter().copied().collect(),
         animation_output: AnimationOutputMode::Combined,
         remove_root_motion: true,
+        root_motion_removal_mode: RootMotionRemovalMode::HorizontalXZ,
         root_motion_node_override: None,
     }
 }
@@ -122,6 +123,7 @@ fn character_selection(
         selected_animations: animations.iter().copied().collect(),
         animation_output: AnimationOutputMode::Combined,
         remove_root_motion: true,
+        root_motion_removal_mode: RootMotionRemovalMode::HorizontalXZ,
         root_motion_node_override: None,
     }
 }
@@ -156,7 +158,7 @@ fn output_values(
 }
 
 #[test]
-fn freezes_linear_and_step_translation_at_the_first_keyframe() {
+fn freezes_horizontal_translation_and_preserves_y_for_linear_and_step() {
     for interpolation in ["LINEAR", "STEP"] {
         let source = root_motion_document();
         let original_root = output_values(&source, 0, 0);
@@ -169,7 +171,14 @@ fn freezes_linear_and_step_translation_at_the_first_keyframe() {
             output.prune_for_export(&skeleton_selection(&[0])).unwrap();
 
         assert_eq!(report.root_motion_channels_modified, 1);
-        assert_eq!(output_values(&output, 0, 0), vec![vec![2.0, 3.0, 4.0]; 3]);
+        assert_eq!(
+            output_values(&output, 0, 0),
+            vec![
+                vec![2.0, 3.0, 4.0],
+                vec![2.0, 6.0, 4.0],
+                vec![2.0, 9.0, 4.0]
+            ]
+        );
         assert_eq!(output_values(&output, 0, 1), original_scale);
         assert_ne!(original_root, output_values(&output, 0, 0));
         let input_index = output.json["animations"][0]["samplers"][0]["input"]
@@ -186,6 +195,46 @@ fn freezes_linear_and_step_translation_at_the_first_keyframe() {
         )
         .unwrap();
     }
+}
+
+#[test]
+fn all_translation_mode_freezes_every_component() {
+    let source = root_motion_document();
+    let mut output = source.clone();
+    let mut selection = skeleton_selection(&[0]);
+    selection.root_motion_removal_mode = RootMotionRemovalMode::AllTranslation;
+
+    let report = output.prune_for_export(&selection).unwrap();
+
+    assert_eq!(report.root_motion_channels_modified, 1);
+    assert_eq!(output_values(&output, 0, 0), vec![vec![2.0, 3.0, 4.0]; 3]);
+}
+
+#[test]
+fn y_only_motion_is_a_successful_horizontal_no_op() {
+    let mut output = root_motion_document();
+    let values = [[2.0_f32, 3.0, 4.0], [2.0, 6.0, 4.0], [2.0, 9.0, 4.0]];
+    let bin = output.bin.as_mut().unwrap();
+    for (index, value) in values.iter().copied().enumerate() {
+        let offset = 48 + index * 12;
+        for (component, component_value) in value.into_iter().enumerate() {
+            let start = offset + component * 4;
+            bin[start..start + 4]
+                .copy_from_slice(&component_value.to_le_bytes());
+        }
+    }
+
+    let selection = skeleton_selection(&[0]);
+    let validation = output.validate_export_selection(&selection);
+    assert!(validation.is_valid());
+    assert!(validation.warnings.is_empty());
+    let report = output.prune_for_export(&selection).unwrap();
+
+    assert_eq!(report.root_motion_channels_modified, 0);
+    assert_eq!(
+        output_values(&output, 0, 0),
+        values.into_iter().map(Vec::from).collect::<Vec<_>>()
+    );
 }
 
 #[test]
@@ -235,7 +284,11 @@ fn resolves_skin_skeleton_common_ancestor_and_manual_override() {
     assert_eq!(report.root_motion_channels_modified, 1);
     assert_eq!(
         output_values(&common_output, 0, 0),
-        vec![vec![2.0, 3.0, 4.0]; 3]
+        vec![
+            vec![2.0, 3.0, 4.0],
+            vec![2.0, 6.0, 4.0],
+            vec![2.0, 9.0, 4.0]
+        ]
     );
 
     let mut ambiguous = root_motion_document();
@@ -292,13 +345,20 @@ fn shared_sampler_is_copied_before_root_translation_is_rewritten() {
         .as_u64()
         .unwrap();
     assert_ne!(root_sampler, scale_sampler);
-    assert_eq!(output_values(&output, 0, 0), vec![vec![2.0, 3.0, 4.0]; 3]);
+    assert_eq!(
+        output_values(&output, 0, 0),
+        vec![
+            vec![2.0, 3.0, 4.0],
+            vec![2.0, 6.0, 4.0],
+            vec![2.0, 9.0, 4.0]
+        ]
+    );
     assert_eq!(
         output_values(&output, 0, 1),
         vec![
             vec![2.0, 3.0, 4.0],
-            vec![5.0, 3.0, 4.0],
-            vec![8.0, 3.0, 4.0]
+            vec![5.0, 6.0, 7.0],
+            vec![8.0, 9.0, 10.0]
         ]
     );
     gltf::Gltf::from_slice(&output.to_bytes().unwrap()).unwrap();

@@ -8,7 +8,7 @@ use serde_json::Value;
 
 use super::{
     AnimationOutputMode, GlbDocument, GlbError, GlbExportPreset,
-    GlbExportSelection,
+    GlbExportSelection, RootMotionRemovalMode,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,6 +30,7 @@ pub struct GlbBatchRecipe {
     pub root_motion_node: BatchNameSelector,
     pub animation_output: AnimationOutputMode,
     pub remove_root_motion: bool,
+    pub root_motion_removal_mode: RootMotionRemovalMode,
 }
 
 impl Default for GlbBatchRecipe {
@@ -40,6 +41,7 @@ impl Default for GlbBatchRecipe {
             root_motion_node: BatchNameSelector::AutomaticUnique,
             animation_output: AnimationOutputMode::Combined,
             remove_root_motion: false,
+            root_motion_removal_mode: RootMotionRemovalMode::default(),
         }
     }
 }
@@ -113,6 +115,11 @@ impl GlbBatchRecipe {
                 AnimationOutputMode::Combined
             },
             remove_root_motion: compact && self.remove_root_motion,
+            root_motion_removal_mode: if compact {
+                self.root_motion_removal_mode
+            } else {
+                RootMotionRemovalMode::default()
+            },
             root_motion_node_override,
         })
     }
@@ -253,12 +260,18 @@ mod tests {
             skin: BatchNameSelector::Exact("Armature".to_owned()),
             root_motion_node: BatchNameSelector::Exact("Root".to_owned()),
             remove_root_motion: true,
+            root_motion_removal_mode:
+                super::RootMotionRemovalMode::AllTranslation,
             ..Default::default()
         };
         let selection = recipe.resolve(&document).unwrap();
         assert_eq!(selection.skin_index, Some(0));
         assert_eq!(selection.root_motion_node_override, Some(0));
         assert_eq!(selection.selected_animations, [0, 1].into_iter().collect());
+        assert_eq!(
+            selection.root_motion_removal_mode,
+            super::RootMotionRemovalMode::AllTranslation
+        );
     }
 
     #[test]
@@ -270,6 +283,8 @@ mod tests {
             root_motion_node: BatchNameSelector::Exact("Root".to_owned()),
             animation_output: super::AnimationOutputMode::Split,
             remove_root_motion: true,
+            root_motion_removal_mode:
+                super::RootMotionRemovalMode::AllTranslation,
         };
         let selection = recipe.resolve(&document).unwrap();
         assert_eq!(selection.preset, GlbExportPreset::PreserveAll);
@@ -279,6 +294,10 @@ mod tests {
             super::AnimationOutputMode::Combined
         );
         assert!(!selection.remove_root_motion);
+        assert_eq!(
+            selection.root_motion_removal_mode,
+            super::RootMotionRemovalMode::default()
+        );
         assert_eq!(selection.root_motion_node_override, None);
     }
 

@@ -2,6 +2,7 @@ use crate::app::App;
 use crate::app_glb_batch::{GlbBatchFileStatus, GlbBatchPreflight};
 use crate::modules::glb::{
     AnimationOutputMode, BatchNameSelector, GlbExportPreset,
+    RootMotionRemovalMode,
 };
 
 pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
@@ -94,6 +95,37 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
             app.glb_batch.recipe.remove_root_motion = remove_root_motion;
         }
         if app.glb_batch.recipe.remove_root_motion && compact {
+            ComboBox::from_label(i18n.tr("glb.export_root_motion_mode"))
+                .selected_text(
+                    match app.glb_batch.recipe.root_motion_removal_mode {
+                        RootMotionRemovalMode::HorizontalXZ => {
+                            i18n.tr("glb.export_root_motion_horizontal")
+                        }
+                        RootMotionRemovalMode::AllTranslation => {
+                            i18n.tr("glb.export_root_motion_all")
+                        }
+                    },
+                )
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(
+                        &mut app.glb_batch.recipe.root_motion_removal_mode,
+                        RootMotionRemovalMode::HorizontalXZ,
+                        i18n.tr("glb.export_root_motion_horizontal"),
+                    );
+                    ui.selectable_value(
+                        &mut app.glb_batch.recipe.root_motion_removal_mode,
+                        RootMotionRemovalMode::AllTranslation,
+                        i18n.tr("glb.export_root_motion_all"),
+                    );
+                });
+            ui.label(match app.glb_batch.recipe.root_motion_removal_mode {
+                RootMotionRemovalMode::HorizontalXZ => {
+                    i18n.tr("glb.export_root_motion_horizontal_hint")
+                }
+                RootMotionRemovalMode::AllTranslation => {
+                    i18n.tr("glb.export_root_motion_all_hint")
+                }
+            });
             render_name_selector(
                 ui,
                 &i18n,
@@ -109,6 +141,8 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
     if app.glb_batch.recipe.preset == GlbExportPreset::PreserveAll {
         app.glb_batch.recipe.animation_output = AnimationOutputMode::Combined;
         app.glb_batch.recipe.remove_root_motion = false;
+        app.glb_batch.recipe.root_motion_removal_mode =
+            RootMotionRemovalMode::default();
         app.glb_batch.recipe.root_motion_node =
             BatchNameSelector::AutomaticUnique;
     }

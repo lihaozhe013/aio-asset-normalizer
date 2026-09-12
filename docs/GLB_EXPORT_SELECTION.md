@@ -45,11 +45,14 @@ or more files have been written reports the completed paths separately.
 ## Remove Root Motion
 
 Remove Root Motion is available only for Character Package and Skeleton
-Animation compact exports. It affects only the selected animations and freezes
-the selected root node's local translation at the first keyframe, preserving
-the initial XYZ offset while removing subsequent local translation motion.
-Root rotation, child motion, mesh vertices, and world-space reconstruction are
-outside this version's scope.
+Animation compact exports. It affects only the selected animations and operates
+on the selected root node's local translation in the canonical glTF Y-Up
+coordinate system. `Horizontal X/Z` is the default mode: it freezes local X/Z
+to the first keyframe while preserving every Y keyframe and the initial X/Z
+offset. `All translation X/Y/Z` freezes all three components to their first
+keyframe and preserves the previous behavior. Root rotation, child motion,
+mesh vertices, and world-space reconstruction are outside this version's
+scope.
 
 Automatic root selection uses the selected Skin's `skeleton` first, then the
 common ancestor of Skin joints or selected model nodes. Among valid common
@@ -58,12 +61,14 @@ preferred. The Root Motion Node dropdown can override this choice. Ambiguous
 hierarchies require an explicit node selection.
 
 An animation without a translation channel on the resolved node remains
-exportable with a warning and contributes zero modified channels. Shared
-samplers are copied before their output is rewritten so other channels retain
-their original values. FLOAT/VEC3, non-sparse, non-interleaved translation
-accessors are required; CUBICSPLINE root translation channels are currently
-reported as unsupported. Remove Root Motion cannot be combined with Smart
-LOOP. Preserve All disables and clears this configuration.
+exportable with a warning and contributes zero modified channels. An animation
+with no motion on the selected axes is a successful no-op and does not produce
+a zero-modification warning. Shared samplers are copied before their output is
+rewritten so other channels retain their original values. FLOAT/VEC3,
+non-sparse, non-interleaved translation accessors are required; CUBICSPLINE
+root translation channels are currently reported as unsupported. Remove Root
+Motion cannot be combined with Smart LOOP. Preserve All disables and clears
+this configuration.
 
 ## Safety boundaries
 

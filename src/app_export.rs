@@ -13,7 +13,9 @@ use crate::modules::glb::{
 use crate::modules::logging::{next_task_id, safe_path_label};
 
 #[cfg(test)]
-use crate::modules::glb::{AnimationChannelData, AnimationClipData};
+use crate::modules::glb::{
+    AnimationChannelData, AnimationClipData, RootMotionRemovalMode,
+};
 
 struct GlbExportJob {
     document: GlbDocument,
@@ -410,6 +412,7 @@ mod tests {
             selected_animations: BTreeSet::from([0]),
             animation_output: AnimationOutputMode::Split,
             remove_root_motion: true,
+            root_motion_removal_mode: RootMotionRemovalMode::AllTranslation,
             root_motion_node_override: Some(0),
             ..GlbExportSelection::default()
         };
@@ -430,6 +433,10 @@ mod tests {
             AnimationOutputMode::Combined
         );
         assert!(jobs[0].selection.remove_root_motion);
+        assert_eq!(
+            jobs[0].selection.root_motion_removal_mode,
+            RootMotionRemovalMode::AllTranslation
+        );
         assert_eq!(jobs[0].selection.root_motion_node_override, Some(0));
     }
 

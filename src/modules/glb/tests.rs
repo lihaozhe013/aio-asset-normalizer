@@ -654,6 +654,7 @@ fn character_export_selection() -> GlbExportSelection {
         selected_animations: BTreeSet::from([0]),
         animation_output: AnimationOutputMode::Combined,
         remove_root_motion: false,
+        root_motion_removal_mode: RootMotionRemovalMode::HorizontalXZ,
         root_motion_node_override: None,
     }
 }

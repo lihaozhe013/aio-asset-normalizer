@@ -562,14 +562,6 @@ fn preflight_entry(request: &GlbBatchRequest, input: &Path) -> GlbBatchEntry {
         entry.warnings.extend(validation.warnings);
         match document.preview_export_selection(&output.selection) {
             Ok(report) => {
-                if request.recipe.remove_root_motion
-                    && report.root_motion_channels_modified == 0
-                {
-                    entry.warnings.push(format!(
-                        "{}: Remove Root Motion modified zero channels",
-                        output.path.display()
-                    ));
-                }
                 entry.outputs.push(GlbBatchOutput {
                     path: output.path.clone(),
                     selection: output.selection.clone(),

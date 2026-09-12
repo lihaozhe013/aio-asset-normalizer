@@ -35,6 +35,7 @@ pub use animation_runtime::{
 };
 pub use batch::{BatchNameSelector, GlbBatchRecipe};
 pub use orientation_presets::UpAxisPreset;
+pub use root_motion::RootMotionRemovalMode;
 #[allow(unused_imports)]
 pub use smart_loop::{SmartLoopOptions, SmartLoopReport};
 

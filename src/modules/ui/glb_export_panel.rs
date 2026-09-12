@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use crate::app::App;
 use crate::modules::glb::{
     AnimationOutputMode, GlbDocument, GlbExportCatalog, GlbExportPreset,
-    GlbExportSelection,
+    GlbExportSelection, RootMotionRemovalMode,
 };
 use crate::modules::i18n::I18n;
 
@@ -154,6 +154,8 @@ pub fn render_selection_controls(
             if selection.preset == GlbExportPreset::PreserveAll {
                 selection.animation_output = AnimationOutputMode::Combined;
                 selection.remove_root_motion = false;
+                selection.root_motion_removal_mode =
+                    RootMotionRemovalMode::default();
                 selection.root_motion_node_override = None;
             }
             if selection.preset != GlbExportPreset::PreserveAll
@@ -512,6 +514,7 @@ fn render_root_motion_controls(
 
     if selection.preset == GlbExportPreset::PreserveAll {
         selection.remove_root_motion = false;
+        selection.root_motion_removal_mode = RootMotionRemovalMode::default();
         selection.root_motion_node_override = None;
     }
     let enabled = selection.preset != GlbExportPreset::PreserveAll
@@ -532,6 +535,28 @@ fn render_root_motion_controls(
         }
         return;
     }
+
+    ComboBox::from_label(i18n.tr("glb.export_root_motion_mode"))
+        .selected_text(match selection.root_motion_removal_mode {
+            RootMotionRemovalMode::HorizontalXZ => {
+                i18n.tr("glb.export_root_motion_horizontal")
+            }
+            RootMotionRemovalMode::AllTranslation => {
+                i18n.tr("glb.export_root_motion_all")
+            }
+        })
+        .show_ui(ui, |ui| {
+            ui.selectable_value(
+                &mut selection.root_motion_removal_mode,
+                RootMotionRemovalMode::HorizontalXZ,
+                i18n.tr("glb.export_root_motion_horizontal"),
+            );
+            ui.selectable_value(
+                &mut selection.root_motion_removal_mode,
+                RootMotionRemovalMode::AllTranslation,
+                i18n.tr("glb.export_root_motion_all"),
+            );
+        });
 
     let info = document.root_motion_info(selection);
     let mut candidates = info
@@ -584,7 +609,14 @@ fn render_root_motion_controls(
                 );
             }
         });
-    ui.label(i18n.tr("glb.export_root_motion_hint"));
+    ui.label(match selection.root_motion_removal_mode {
+        RootMotionRemovalMode::HorizontalXZ => {
+            i18n.tr("glb.export_root_motion_horizontal_hint")
+        }
+        RootMotionRemovalMode::AllTranslation => {
+            i18n.tr("glb.export_root_motion_all_hint")
+        }
+    });
     if let Err(error) = info {
         ui.colored_label(
             Color32::YELLOW,

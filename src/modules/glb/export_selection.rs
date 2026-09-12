@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use serde_json::{json, Value};
 
-use super::root_motion::RootMotionPlan;
+use super::root_motion::{RootMotionPlan, RootMotionRemovalMode};
 use super::{GlbDocument, GlbError, GlbSummary};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,6 +30,7 @@ pub struct GlbExportSelection {
     pub selected_animations: BTreeSet<usize>,
     pub animation_output: AnimationOutputMode,
     pub remove_root_motion: bool,
+    pub root_motion_removal_mode: RootMotionRemovalMode,
     pub root_motion_node_override: Option<usize>,
 }
 
@@ -44,6 +45,7 @@ impl Default for GlbExportSelection {
             selected_animations: BTreeSet::new(),
             animation_output: AnimationOutputMode::Combined,
             remove_root_motion: false,
+            root_motion_removal_mode: RootMotionRemovalMode::default(),
             root_motion_node_override: None,
         }
     }
@@ -324,6 +326,7 @@ impl GlbDocument {
                 .collect(),
             animation_output: AnimationOutputMode::Combined,
             remove_root_motion: false,
+            root_motion_removal_mode: RootMotionRemovalMode::default(),
             root_motion_node_override: None,
         })
     }

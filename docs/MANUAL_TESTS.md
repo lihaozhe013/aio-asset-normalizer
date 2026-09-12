@@ -208,17 +208,22 @@ animations, a camera, a punctual light, and some unreferenced resources.
 7. Confirm the Debug Log reports source/output counts and BIN sizes. Compare
    the output file sizes and confirm unused BIN ranges are not retained.
 8. Enable `Remove Root Motion` for a selected Character Package animation.
-   Confirm the Root Motion Node control offers `Automatic` and the selected
+   Confirm the mode control defaults to `Horizontal X/Z (Recommended)`, and
+   that the Root Motion Node control offers `Automatic` and the selected
    animation's translation-channel nodes. Export and sample the output at
-   multiple times; the resolved root's local translation must equal its first
-   keyframe while other channels remain unchanged.
+   multiple times; the resolved root's local X/Z must equal its first keyframe,
+   the Y values must match the source at every sampled time, and other channels
+   must remain unchanged.
 9. Choose a manual Root Motion Node and repeat the export. Confirm the source
    GLB and the current viewport remain unchanged, the export report contains
-   the number of rewritten channels, and Split output applies the setting to
-   each selected animation independently.
+   the number of rewritten channels, and Split output applies the selected
+   mode to each selected animation independently. Select `All X/Y/Z` and
+   confirm all three components remain at the first keyframe.
 10. Confirm Remove Root Motion is disabled and cleared by `Preserve All`.
     Select an animation without a translation channel on the resolved node and
     confirm export succeeds with a warning and zero modified channels. Try a
+    clip with Y-only root motion in `Horizontal X/Z` mode and confirm export
+    succeeds without a zero-modification warning. Try a
     CUBICSPLINE root translation accessor, a sparse accessor, and an
     interleaved accessor; confirm each produces a validation error without
     changing the source document. Enable Smart LOOP together with Remove Root
