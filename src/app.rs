@@ -474,6 +474,7 @@ impl App {
                                         document.default_export_selection().ok()
                                     })
                                     .unwrap_or_default();
+                                self.reset_glb_trim();
                             }
                             if self.canvas.has_glb_skeleton() {
                                 let source = self

@@ -1,7 +1,9 @@
 use std::path::Path;
 
 use crate::app::App;
-use crate::modules::glb::{PrimitiveTarget, StandardizationProfile};
+use crate::modules::glb::{
+    GlbDocument, PrimitiveTarget, StandardizationProfile,
+};
 use crate::modules::logging::safe_path_label;
 use crate::reload::{merge_glb_reload_kind, GlbReloadKind};
 
@@ -53,7 +55,63 @@ impl App {
         }
     }
 
+    pub(crate) fn reset_glb_trim(&mut self) {
+        self.trim_enabled = false;
+        self.trim_animation = 0;
+        self.trim_start = 0.0;
+        self.trim_end = 1.0;
+        if let Some((first, last)) = self
+            .glb
+            .as_ref()
+            .and_then(|document| document.animation_time_range(0).ok())
+            .filter(|(first, last)| first >= &0.0 && last > first)
+        {
+            self.trim_start = first;
+            self.trim_end = last;
+        }
+    }
+
+    pub(crate) fn glb_trim_settings_error(
+        &self,
+        document: &GlbDocument,
+    ) -> Option<String> {
+        if !self.trim_enabled {
+            return None;
+        }
+        if !self.trim_start.is_finite()
+            || !self.trim_end.is_finite()
+            || self.trim_start < 0.0
+            || self.trim_end <= self.trim_start
+        {
+            return Some("Trim range must satisfy 0 <= start < end".to_owned());
+        }
+        match document.animation_time_range(self.trim_animation) {
+            Ok((first, last)) => {
+                if self.trim_end <= first || self.trim_start >= last {
+                    Some(format!(
+                        "Trim range [{}, {}] does not overlap animation {} timeline [{first}, {last}]",
+                        self.trim_start, self.trim_end, self.trim_animation
+                    ))
+                } else {
+                    None
+                }
+            }
+            Err(error) => Some(format!(
+                "Trim animation {} is not trimmable: {error}",
+                self.trim_animation
+            )),
+        }
+    }
+
     pub(crate) fn trim_setting_changed(&mut self) {
+        if let Some((_, last)) = self.glb.as_ref().and_then(|document| {
+            document.animation_time_range(self.trim_animation).ok()
+        }) {
+            if last.is_finite() && last >= 0.0 {
+                self.trim_start = self.trim_start.clamp(0.0, last);
+                self.trim_end = self.trim_end.clamp(0.0, last);
+            }
+        }
         self.pending_animation_selection = Some(self.glb_animation_index);
         self.glb_export_estimate = None;
         self.request_glb_reload(GlbReloadKind::EditedModel);

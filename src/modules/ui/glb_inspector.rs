@@ -329,21 +329,29 @@ fn render_current(app: &mut App, ui: &mut three_d::egui::Ui) {
                     )
                     .changed();
             });
+            let trim_last = app
+                .glb
+                .as_ref()
+                .and_then(|document| {
+                    document.animation_time_range(app.trim_animation).ok()
+                })
+                .map(|(_, last)| last)
+                .filter(|last| last.is_finite() && last > &0.0);
             ui.horizontal(|ui| {
                 ui.label(app.i18n.tr("glb.start"));
-                trim_changed |= ui
-                    .add_enabled(
-                        app.trim_enabled,
-                        DragValue::new(&mut app.trim_start).speed(0.001),
-                    )
-                    .changed();
+                let mut start_drag =
+                    DragValue::new(&mut app.trim_start).speed(0.001);
+                let mut end_drag =
+                    DragValue::new(&mut app.trim_end).speed(0.001);
+                if let Some(last) = trim_last {
+                    start_drag = start_drag.range(0.0..=last);
+                    end_drag = end_drag.range(0.0..=last);
+                }
+                trim_changed |=
+                    ui.add_enabled(app.trim_enabled, start_drag).changed();
                 ui.label(app.i18n.tr("glb.end"));
-                trim_changed |= ui
-                    .add_enabled(
-                        app.trim_enabled,
-                        DragValue::new(&mut app.trim_end).speed(0.001),
-                    )
-                    .changed();
+                trim_changed |=
+                    ui.add_enabled(app.trim_enabled, end_drag).changed();
             });
             if trim_changed {
                 app.trim_setting_changed();

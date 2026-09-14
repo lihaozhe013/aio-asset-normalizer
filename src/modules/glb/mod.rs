@@ -1391,3 +1391,7 @@ fn rotation_matrix(
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "animation_tests.rs"]
+mod animation_tests;

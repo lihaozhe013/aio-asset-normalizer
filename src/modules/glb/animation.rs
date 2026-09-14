@@ -208,9 +208,16 @@ impl GlbDocument {
                     "Animation sampler has no keyframes".to_owned(),
                 )
             })?;
-            if start < input[0] || end > input_end {
+            // Mixamo-authored clips often start after t=0;
+            // sampling outside the keyframe range is well
+            // defined (endpoints hold), so clamp the
+            // requested window to this sampler.
+            let clamped_start = start.max(input[0]);
+            let clamped_end = end.min(input_end);
+            if clamped_end <= clamped_start {
                 return Err(GlbError::Invalid(format!(
-                    "Animation range [{start}, {end}] is outside sampler {sampler_index}"
+                    "Animation {animation_index} sampler {sampler_index} timeline [{}, {}] does not overlap range [{start}, {end}]",
+                    input[0], input_end
                 )));
             }
             let output_accessor = self.accessor(output_index)?.clone();
@@ -244,7 +251,7 @@ impl GlbDocument {
                         .to_owned(),
                 ));
             }
-            let times = trim_times(&input, start, end);
+            let times = trim_times(&input, clamped_start, clamped_end);
             let values = times
                 .iter()
                 .map(|time| {
@@ -254,7 +261,7 @@ impl GlbDocument {
             let new_input = self.append_float_accessor(
                 &times
                     .iter()
-                    .map(|time| vec![*time - start])
+                    .map(|time| vec![*time - clamped_start])
                     .collect::<Vec<_>>(),
                 "SCALAR",
             )?;
@@ -289,6 +296,71 @@ impl GlbDocument {
             sampler["output"] = json!(output);
         }
         Ok(())
+    }
+
+    /// Returns the shared playable window of an animation as
+    /// `(latest first keyframe, earliest last keyframe)` across all of its
+    /// sampler input timelines, so callers can clamp trim ranges to data
+    /// that actually exists.
+    pub fn animation_time_range(
+        &self,
+        animation_index: usize,
+    ) -> Result<(f32, f32), GlbError> {
+        let animation = self
+            .json
+            .get("animations")
+            .and_then(Value::as_array)
+            .and_then(|animations| animations.get(animation_index))
+            .ok_or_else(|| {
+                GlbError::Invalid(format!(
+                    "Animation {animation_index} does not exist"
+                ))
+            })?;
+        let samplers = animation
+            .get("samplers")
+            .and_then(Value::as_array)
+            .ok_or_else(|| {
+                GlbError::Invalid(format!(
+                    "Animation {animation_index} has no samplers"
+                ))
+            })?;
+        let mut first = None;
+        let mut last = None;
+        for sampler in samplers {
+            let input_index = sampler
+                .get("input")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| {
+                    GlbError::Invalid(
+                        "Animation sampler has no input accessor".to_owned(),
+                    )
+                })? as usize;
+            let input = self
+                .read_accessor_f32(input_index)?
+                .into_iter()
+                .map(|value| value[0])
+                .collect::<Vec<_>>();
+            validate_timeline(&input)?;
+            let sampler_first = input[0];
+            let sampler_last = input[input.len() - 1];
+            first =
+                Some(first.map_or(sampler_first, |value: f32| {
+                    value.max(sampler_first)
+                }));
+            last =
+                Some(last.map_or(sampler_last, |value: f32| {
+                    value.min(sampler_last)
+                }));
+        }
+        match (first, last) {
+            (Some(first), Some(last)) if last >= first => Ok((first, last)),
+            (Some(first), Some(last)) => Err(GlbError::Invalid(format!(
+                "Animation {animation_index} sampler timelines do not overlap: [{first}, {last}]"
+            ))),
+            _ => Err(GlbError::Invalid(format!(
+                "Animation {animation_index} has no samplers"
+            ))),
+        }
     }
 }
 

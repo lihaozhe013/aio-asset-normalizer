@@ -588,6 +588,11 @@ impl App {
                 .tr("glb.export_root_motion_smart_loop_error")
                 .to_owned());
         }
+        if let Some(document) = self.glb.as_ref() {
+            if let Some(error) = self.glb_trim_settings_error(document) {
+                return Err(error);
+            }
+        }
         if selection.preset == GlbExportPreset::PreserveAll {
             return Ok(());
         }

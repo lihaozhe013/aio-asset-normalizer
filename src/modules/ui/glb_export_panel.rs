@@ -34,7 +34,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
         true,
         true,
     );
-    let (validation, summary, bin_size, fresh_estimate) = {
+    let (mut validation, summary, bin_size, fresh_estimate) = {
         let Some(document) = app.glb.as_ref() else {
             return;
         };
@@ -64,6 +64,9 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
     };
     if let Some(estimate) = fresh_estimate {
         app.glb_export_estimate = Some((selection.clone(), estimate));
+    }
+    if let Some(error) = app.glb_trim_settings_error(document) {
+        validation.errors.push(error);
     }
     render_validation(ui, &app.i18n, &validation);
     ui.label(format!(
