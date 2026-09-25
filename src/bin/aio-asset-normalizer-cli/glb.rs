@@ -57,6 +57,9 @@ pub struct ExportArgs {
     /// Directory the inputs are relative to; defaults to their shared parent
     #[arg(long, value_name = "DIR")]
     pub input_root: Option<PathBuf>,
+    /// Recursively standardize every `.glb` below --input-root
+    #[arg(long)]
+    pub recursive: bool,
     /// Destination root directory
     #[arg(long, value_name = "DIR")]
     pub output_root: Option<PathBuf>,
@@ -234,6 +237,22 @@ fn export(args: &ExportArgs) -> i32 {
         dry_run = args.dry_run;
     }
 
+    if inputs.is_empty() {
+        if args.recursive {
+            let Some(root) = args.input_root.as_ref() else {
+                return fail(
+                    json!({}),
+                    CliError::validation(
+                        "--recursive requires --input-root",
+                    ),
+                );
+            };
+            match discover_glb_files(root) {
+                Ok(found) => inputs = found,
+                Err(error) => return fail(json!({}), error),
+            }
+        }
+    }
     if inputs.is_empty() {
         return fail(
             json!({}),
@@ -455,6 +474,42 @@ fn edit(args: &EditArgs) -> i32 {
         }),
         Vec::new(),
     )
+}
+
+// ---- recursive input discovery ---------------------------------------------
+
+fn discover_glb_files(root: &Path) -> Result<Vec<PathBuf>, CliError> {
+    if !root.is_dir() {
+        return Err(CliError::validation(format!(
+            "--input-root is not a directory: {}",
+            root.display()
+        )));
+    }
+    let mut found = Vec::new();
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(directory) = pending.pop() {
+        let entries = std::fs::read_dir(&directory)
+            .map_err(|error| CliError::io(error.to_string()))?;
+        for entry in entries {
+            let entry = entry.map_err(|error| CliError::io(error.to_string()))?;
+            let file_type = entry
+                .file_type()
+                .map_err(|error| CliError::io(error.to_string()))?;
+            if file_type.is_dir() {
+                pending.push(entry.path());
+            } else if file_type.is_file() && is_glb(&entry.path()) {
+                found.push(entry.path());
+            }
+        }
+    }
+    found.sort();
+    Ok(found)
+}
+
+fn is_glb(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("glb"))
 }
 
 // ---- JSON projection -------------------------------------------------------

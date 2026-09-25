@@ -125,6 +125,33 @@ fn export_writes_outputs_and_protects_existing_files() {
 }
 
 #[test]
+fn export_recursive_scans_the_input_tree() {
+    let dir = workspace("export-recursive");
+    let (glb, _) = write_fixtures(&dir);
+    let nested = dir.join("nested");
+    std::fs::create_dir_all(&nested).unwrap();
+    std::fs::copy(&glb, nested.join("copy.glb")).unwrap();
+    let out = dir.join("out");
+
+    let output = run(&[
+        "glb",
+        "export",
+        "--input-root",
+        dir.to_str().unwrap(),
+        "--recursive",
+        "--output-root",
+        out.to_str().unwrap(),
+        "--preset",
+        "skeleton",
+    ]);
+    let value = assert_success(&output);
+    let entries = value["results"]["entries"].as_array().unwrap();
+    assert_eq!(entries.len(), 2);
+    assert!(out.join("character_skeleton.glb").is_file());
+    assert!(out.join("nested/copy_skeleton.glb").is_file());
+}
+
+#[test]
 fn bvh_inspect_and_process_trim_a_file() {
     let dir = workspace("bvh");
     let (_, bvh) = write_fixtures(&dir);

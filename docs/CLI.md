@@ -57,7 +57,7 @@ Success:
   "ok": true,
   "command": "glb.inspect",
   "version": {
-    "app": "0.1.0",
+    "app": "AIO Asset Normalizer",
     "version": "0.1.0",
     "commit": "<git commit or unknown>"
   },
@@ -73,7 +73,7 @@ Failure:
   "schema_version": 1,
   "ok": false,
   "command": "glb.export",
-  "version": { "app": "0.1.0", "version": "0.1.0", "commit": "..." },
+  "version": { "app": "AIO Asset Normalizer", "version": "0.1.0", "commit": "..." },
   "results": { "...": "command specific, often per-file detail" },
   "error": { "code": "validation", "message": "preflight found errors" }
 }
@@ -153,6 +153,7 @@ resolved independently for every input, exactly like the desktop Batch scope.
 
 ```text
 aio-asset-normalizer-cli glb export <GLB>... --output-root <DIR> [options]
+aio-asset-normalizer-cli glb export --input-root <DIR> --recursive --output-root <DIR> [options]
 aio-asset-normalizer-cli glb export --job <file.json>
 ```
 
@@ -160,6 +161,7 @@ aio-asset-normalizer-cli glb export --job <file.json>
 | --------------------------- | --------------- | ------- |
 | `--output-root <DIR>`       | required        | Destination root; the input tree is preserved below it |
 | `--input-root <DIR>`        | shared parent   | Directory the inputs are relative to |
+| `--recursive`               | off             | Standardize every `.glb` below `--input-root`; requires `--input-root` |
 | `--preset <PRESET>`         | `preserve-all`  | `preserve-all`, `character`, or `skeleton` |
 | `--skin <NAME>`             | `auto`          | `auto` or an exact, case-sensitive authored Skin name |
 | `--animation-output <MODE>` | `combined`      | `combined` or `split` (one file per animation) |
@@ -512,8 +514,9 @@ aio-asset-normalizer-cli docs --raw   # raw Markdown on stdout
 ### Standardize a delivered GLB folder
 
 ```text
-aio-asset-normalizer-cli glb export assets/*.glb --output-root /build/normalized \
-  --preset skeleton --skin Armature --animation-output split --overwrite
+aio-asset-normalizer-cli glb export --input-root assets --recursive \
+  --output-root /build/normalized --preset skeleton --skin Armature \
+  --animation-output split --overwrite
 ```
 
 Split output requires `character` or `skeleton`, at least one animation, and a

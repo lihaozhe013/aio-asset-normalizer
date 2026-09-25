@@ -136,7 +136,7 @@ pub fn emit_failure(
 
 fn version_info() -> VersionInfo {
     VersionInfo {
-        app: build_info::APP_VERSION,
+        app: build_info::APP_NAME,
         version: build_info::APP_VERSION,
         commit: build_info::GIT_COMMIT,
     }
