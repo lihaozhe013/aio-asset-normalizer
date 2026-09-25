@@ -16,7 +16,7 @@ pub struct DocsArgs {
 
 pub fn run(args: &DocsArgs) -> i32 {
     if args.raw {
-        print!("{CLI_DOCUMENTATION}");
+        output::emit_stdout(CLI_DOCUMENTATION);
         return 0;
     }
     output::emit_success(

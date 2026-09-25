@@ -144,9 +144,23 @@ fn version_info() -> VersionInfo {
 
 fn write(envelope: &Envelope) {
     match serde_json::to_string_pretty(envelope) {
-        Ok(text) => println!("{text}"),
-        Err(error) => eprintln!("failed to serialize CLI output: {error}"),
+        Ok(text) => emit_stdout(&text),
+        Err(error) => {
+            tracing::error!(target: "app", error = %error, "Failed to serialize CLI output");
+        }
     }
+}
+
+/// Write one line of command output to stdout.
+///
+/// A closed pipe is not an error for a CLI, so a failed write is ignored.
+pub fn emit_stdout(text: &str) {
+    use std::io::Write;
+
+    let mut stdout = std::io::stdout().lock();
+    let _ = stdout.write_all(text.as_bytes());
+    let _ = stdout.write_all(b"\n");
+    let _ = stdout.flush();
 }
 
 pub fn glb_error(error: GlbError) -> CliError {

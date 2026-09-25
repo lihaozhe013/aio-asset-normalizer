@@ -202,9 +202,18 @@ where
             return;
         }
         if let Some(event) = build_log_event(event) {
-            eprintln!("{}", event.format_line());
+            write_console_line(&event.format_line());
         }
     }
+}
+
+/// Mirror one formatted record to stderr. A closed pipe is not fatal here.
+fn write_console_line(line: &str) {
+    use std::io::Write;
+
+    let mut stderr = std::io::stderr().lock();
+    let _ = stderr.write_all(line.as_bytes());
+    let _ = stderr.write_all(b"\n");
 }
 
 fn build_log_event(event: &Event<'_>) -> Option<LogEvent> {
