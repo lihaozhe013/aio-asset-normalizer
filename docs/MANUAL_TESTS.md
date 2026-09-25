@@ -245,3 +245,37 @@ rg "\[glb_export\]" "/path/to/aio-asset-normalizer/logs/glb-export.log" \
 ```
 
 Generated log files are local artifacts and must remain untracked.
+
+## CLI
+
+`cargo test --test cli` covers the command contract end to end. For a manual
+pass, build the CLI and drive it against a known GLB, BVH, and target GLB:
+
+```bash
+cargo build --bin aio-asset-normalizer-cli
+BIN=target/debug/aio-asset-normalizer-cli
+
+$BIN docs --raw | head           # embedded reference
+$BIN glb inspect asset.glb       # summary, catalog, Skin hierarchies (JSON)
+$BIN glb export asset.glb --output-root out --preset skeleton --dry-run
+$BIN glb export asset.glb --output-root out --preset skeleton
+$BIN glb export asset.glb --output-root out --preset skeleton   # exits 3
+$BIN bvh inspect motion.bvh
+$BIN retarget prompt --source motion.bvh --target target.glb --out prompt.md
+$BIN retarget validate --source motion.bvh --target target.glb --mapping mapping.json
+$BIN retarget run --source motion.bvh --target target.glb --mapping mapping.json \
+  --out retargeted.glb --preset character
+```
+
+1. Confirm every command prints one JSON envelope on stdout with
+   `schema_version: 1`, and that progress and diagnostics appear only on stderr.
+2. Confirm exit codes: `0` success, `2` for an unknown flag, `3` for an invalid
+   or blocked operation, `4` for an unreadable input, and `5` when Blender is
+   missing for `fbx convert`.
+3. Confirm a re-run without `--overwrite` is blocked and that `--overwrite`
+   replaces the output atomically with no `.tmp` file left behind.
+4. Confirm the classified error code in `error.code` matches the process exit
+   code.
+5. On Windows, run the CLI from `cmd.exe` and confirm stdout and stderr are
+   visible (the CLI is a console application and does not use the GUI
+   subsystem).

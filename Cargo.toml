@@ -2,7 +2,7 @@
 name = "aio-asset-normalizer"
 version = "0.1.0"
 edition = "2021"
-description = "A cross-platform GLB editor and generic BVH motion standardization tool"
+description = "A cross-platform GLB editor and generic BVH motion standardization tool with a headless CLI"
 license = "MIT"
 authors = []
 
@@ -25,6 +25,7 @@ winit = "0.28"
 
 three-d-asset = { version = "0.10", features = ["gltf", "image"] }
 egui-phosphor = "0.12"
+clap = { version = "4", features = ["derive"] }
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"

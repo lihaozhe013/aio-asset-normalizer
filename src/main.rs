@@ -10,7 +10,6 @@ mod app_preview;
 mod app_retarget;
 mod app_retarget_prompt;
 mod app_ui;
-mod build_info;
 mod reload;
 mod window;
 
@@ -18,8 +17,8 @@ mod window;
 /// stay in the desktop binary so the library never links egui or three-d.
 pub mod modules {
     pub use aio_asset_normalizer::modules::{
-        atomic_file, blender, bvh, glb, i18n, logging, preferences, retarget,
-        retarget_export,
+        atomic_file, blender, build_info, bvh, glb, i18n, logging, preferences,
+        retarget, retarget_export,
     };
 
     pub mod ui;

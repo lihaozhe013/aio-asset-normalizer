@@ -1,4 +1,4 @@
-use crate::{app::App, build_info};
+use crate::{app::App, modules::build_info};
 
 pub fn render(app: &mut App, ctx: &three_d::egui::Context) {
     use three_d::egui::*;

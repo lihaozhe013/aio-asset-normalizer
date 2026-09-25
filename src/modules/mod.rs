@@ -1,5 +1,6 @@
 pub mod atomic_file;
 pub mod blender;
+pub mod build_info;
 pub mod bvh;
 pub mod glb;
 pub mod i18n;

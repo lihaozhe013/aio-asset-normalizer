@@ -181,26 +181,50 @@ where
     S: Subscriber,
 {
     fn on_event(&self, event: &Event<'_>, _context: Context<'_, S>) {
-        let mut visitor = EventVisitor::default();
-        event.record(&mut visitor);
+        if let Some(event) = build_log_event(event) {
+            let _ = self.sender.send(RouterMessage::Event(event));
+        }
+    }
+}
 
-        let target = LogTarget::parse(event.metadata().target());
-        let message = visitor.message.trim().to_owned();
-        if message.is_empty() {
+/// Mirror routed events to the process console. The CLI enables this so
+/// progress and diagnostics go to stderr while stdout stays machine-readable.
+struct ConsoleLayer {
+    enabled: bool,
+}
+
+impl<S> Layer<S> for ConsoleLayer
+where
+    S: Subscriber,
+{
+    fn on_event(&self, event: &Event<'_>, _context: Context<'_, S>) {
+        if !self.enabled {
             return;
         }
-
-        let event = LogEvent {
-            timestamp: SystemTime::now(),
-            target,
-            level: LogLevel::from_tracing(event.metadata().level()),
-            task_id: visitor.task_id,
-            stream: visitor.stream,
-            fields: visitor.fields,
-            message,
-        };
-        let _ = self.sender.send(RouterMessage::Event(event));
+        if let Some(event) = build_log_event(event) {
+            eprintln!("{}", event.format_line());
+        }
     }
+}
+
+fn build_log_event(event: &Event<'_>) -> Option<LogEvent> {
+    let mut visitor = EventVisitor::default();
+    event.record(&mut visitor);
+
+    let message = visitor.message.trim().to_owned();
+    if message.is_empty() {
+        return None;
+    }
+
+    Some(LogEvent {
+        timestamp: SystemTime::now(),
+        target: LogTarget::parse(event.metadata().target()),
+        level: LogLevel::from_tracing(event.metadata().level()),
+        task_id: visitor.task_id,
+        stream: visitor.stream,
+        fields: visitor.fields,
+        message,
+    })
 }
 
 #[derive(Default)]
@@ -259,6 +283,17 @@ pub struct LogRuntime {
 
 impl LogRuntime {
     pub fn init() -> Self {
+        Self::init_internal(false, None)
+    }
+
+    /// Initialize file logging and mirror the same records to stderr.
+    ///
+    /// `level` overrides the default `RUST_LOG` filter when present.
+    pub fn init_cli(level: Option<&str>) -> Self {
+        Self::init_internal(true, level)
+    }
+
+    fn init_internal(console: bool, level: Option<&str>) -> Self {
         let log_dir = default_log_dir();
         let (sender, receiver) = mpsc::channel();
         let (ui_sender, ui_receiver) = mpsc::sync_channel(UI_QUEUE_CAPACITY);
@@ -282,14 +317,17 @@ impl LogRuntime {
             });
         }
 
-        let filter = EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| EnvFilter::new("info"));
+        let filter = level
+            .and_then(|level| EnvFilter::try_new(level).ok())
+            .or_else(|| EnvFilter::try_from_default_env().ok())
+            .unwrap_or_else(|| EnvFilter::new("info"));
         let subscriber =
             tracing_subscriber::registry()
                 .with(filter)
                 .with(RouterLayer {
                     sender: sender.clone(),
-                });
+                })
+                .with(ConsoleLayer { enabled: console });
         let _ = tracing::subscriber::set_global_default(subscriber);
 
         Self {
