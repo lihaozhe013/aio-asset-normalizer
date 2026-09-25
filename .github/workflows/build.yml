@@ -69,6 +69,24 @@ jobs:
           path: packaging/out/*.exe
           if-no-files-found: error
 
+      - name: Build Windows CLI archive
+        run: uv run packaging/build-cli.py
+
+      - name: Verify Windows CLI archive
+        shell: pwsh
+        run: |
+          $archive = Get-ChildItem -Path packaging/out -Filter *.zip -File
+          if ($null -eq $archive) {
+            throw "No Windows CLI archive was produced."
+          }
+
+      - name: Upload Windows CLI archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: aio-asset-normalizer-cli-windows-x86-64
+          path: packaging/out/*.zip
+          if-no-files-found: error
+
   macos:
     name: macOS arm64 app and DMG
     runs-on: macos-15
@@ -119,6 +137,19 @@ jobs:
         with:
           name: aio-asset-normalizer-macos-arm64
           path: packaging/out/
+          if-no-files-found: error
+
+      - name: Build macOS CLI archive
+        run: uv run packaging/build-cli.py
+
+      - name: Verify macOS CLI archive
+        run: test -s packaging/out/*.tar.gz
+
+      - name: Upload macOS CLI archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: aio-asset-normalizer-cli-macos-arm64
+          path: packaging/out/*.tar.gz
           if-no-files-found: error
 
   linux:
@@ -195,6 +226,19 @@ jobs:
           path: packaging/out/*.AppImage
           if-no-files-found: error
 
+      - name: Build Linux CLI archive
+        run: uv run packaging/build-cli.py
+
+      - name: Verify Linux CLI archive
+        run: test -s packaging/out/*.tar.gz
+
+      - name: Upload Linux CLI archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: aio-asset-normalizer-cli-linux-x86-64
+          path: packaging/out/*.tar.gz
+          if-no-files-found: error
+
   release:
     name: Publish nightly release
     if: github.ref == 'refs/heads/publish'
@@ -225,6 +269,24 @@ jobs:
           name: aio-asset-normalizer-linux-x86-64-appimage
           path: staging/linux
 
+      - name: Download Windows CLI artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: aio-asset-normalizer-cli-windows-x86-64
+          path: staging/cli-windows
+
+      - name: Download macOS CLI artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: aio-asset-normalizer-cli-macos-arm64
+          path: staging/cli-macos
+
+      - name: Download Linux CLI artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: aio-asset-normalizer-cli-linux-x86-64
+          path: staging/cli-linux
+
       - name: Prepare release assets
         shell: bash
         run: |
@@ -234,6 +296,9 @@ jobs:
           windows_installers=(staging/windows/*.exe)
           macos_disk_images=(staging/macos/*.dmg)
           linux_appimages=(staging/linux/*.AppImage)
+          windows_cli_archives=(staging/cli-windows/*.zip)
+          macos_cli_archives=(staging/cli-macos/*.tar.gz)
+          linux_cli_archives=(staging/cli-linux/*.tar.gz)
 
           if (( ${#windows_installers[@]} != 1 )); then
             echo "Expected exactly one Windows installer."
@@ -247,11 +312,26 @@ jobs:
             echo "Expected exactly one Linux AppImage."
             exit 1
           fi
+          if (( ${#windows_cli_archives[@]} != 1 )); then
+            echo "Expected exactly one Windows CLI archive."
+            exit 1
+          fi
+          if (( ${#macos_cli_archives[@]} != 1 )); then
+            echo "Expected exactly one macOS CLI archive."
+            exit 1
+          fi
+          if (( ${#linux_cli_archives[@]} != 1 )); then
+            echo "Expected exactly one Linux CLI archive."
+            exit 1
+          fi
 
           mkdir -p release-assets
           cp -- "${windows_installers[0]}" release-assets/aio-asset-normalizer-windows-x86-64.exe
           cp -- "${macos_disk_images[0]}" release-assets/aio-asset-normalizer-macos-arm64.dmg
           cp -- "${linux_appimages[0]}" release-assets/aio-asset-normalizer-linux-x86-64.AppImage
+          cp -- "${windows_cli_archives[0]}" release-assets/aio-asset-normalizer-cli-windows-x86-64.zip
+          cp -- "${macos_cli_archives[0]}" release-assets/aio-asset-normalizer-cli-macos-arm64.tar.gz
+          cp -- "${linux_cli_archives[0]}" release-assets/aio-asset-normalizer-cli-linux-x86-64.tar.gz
 
       - name: Update nightly tag
         env:
@@ -287,6 +367,13 @@ jobs:
           release_id=""
           release_body=$(cat <<EOF
           Automated nightly build for commit ${COMMIT_SHA}.
+
+          ## Headless CLI
+
+          The standalone CLI archives (\`aio-asset-normalizer-cli-*\`) each contain a
+          self-contained executable. Run \`aio-asset-normalizer-cli docs --raw\` for the
+          full command and JSON reference; stdout is one JSON envelope per run and logs
+          go to stderr.
 
           ## ⚠️ Note for macOS users
           Builds are unsigned (no Apple Developer ID). After dragging AIO Asset Normalizer.app into Applications, clear the quarantine flag once:
@@ -324,6 +411,9 @@ jobs:
             release-assets/aio-asset-normalizer-windows-x86-64.exe \
             release-assets/aio-asset-normalizer-macos-arm64.dmg \
             release-assets/aio-asset-normalizer-linux-x86-64.AppImage \
+            release-assets/aio-asset-normalizer-cli-windows-x86-64.zip \
+            release-assets/aio-asset-normalizer-cli-macos-arm64.tar.gz \
+            release-assets/aio-asset-normalizer-cli-linux-x86-64.tar.gz \
             --repo "${REPOSITORY}" \
             --clobber
 

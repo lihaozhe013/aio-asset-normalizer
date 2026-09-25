@@ -15,7 +15,9 @@ The product centers on `.glb` assets. It provides:
   contract;
 - target Skinned GLB preview with source/target skeleton overlays and external
   Agent prompt handoff;
-- reusable Mapping files for different motion-capture systems and character models.
+- reusable Mapping files for different motion-capture systems and character models;
+- a headless CLI (`aio-asset-normalizer-cli`) that exposes the same GLB, BVH,
+  retargeting, and FBX workflows as JSON for scripts and coding agents.
 
 ## Design Goals
 
@@ -91,6 +93,31 @@ A Blender-backed batch conversion page with no 3D viewport:
 
 Detailed behavior and manual verification steps are documented in
 [`docs/fbx-converter.md`](docs/fbx-converter.md).
+
+## Headless CLI
+
+`aio-asset-normalizer-cli` is a console build backed by the same domain code as
+the desktop application. It is meant for scripts and coding agents: every command
+prints one JSON envelope to stdout (`schema_version: 1`) and writes progress and
+diagnostics to stderr, so a caller only needs the executable path and the
+reference. Exit codes are `0` success, `2` usage, `3` validation, `4` I/O, and
+`5` external tool.
+
+```bash
+aio-asset-normalizer-cli docs --raw          # full command and JSON reference
+aio-asset-normalizer-cli glb inspect model.glb
+aio-asset-normalizer-cli glb export --input-root assets --recursive \
+  --output-root build/normalized --preset skeleton
+aio-asset-normalizer-cli retarget run --source walk.bvh --target hero.glb \
+  --mapping mapping.json --out hero_walk.glb --preset character
+```
+
+The command surface, JSON schemas, job files, and exit codes are documented in
+[`docs/CLI.md`](docs/CLI.md), which is embedded in the binary and printable with
+`docs --raw`. Standalone CLI archives
+(`aio-asset-normalizer-cli-<platform>.<ext>`) are published next to the
+installers, and `make build-cli` produces one locally. See
+[`packaging/README.md`](packaging/README.md).
 
 ## Default Standardization Contract
 
