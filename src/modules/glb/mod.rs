@@ -26,7 +26,9 @@ pub use self::export_selection::{
 mod animation;
 mod animation_runtime;
 mod batch;
+pub mod batch_runner;
 mod orientation_presets;
+pub mod pipeline;
 mod root_motion;
 mod smart_loop;
 #[allow(unused_imports)]
@@ -35,7 +37,7 @@ pub use animation_runtime::{
 };
 pub use batch::{BatchNameSelector, GlbBatchRecipe};
 pub use orientation_presets::UpAxisPreset;
-pub use root_motion::RootMotionRemovalMode;
+pub use root_motion::{RootMotionInfo, RootMotionRemovalMode};
 #[allow(unused_imports)]
 pub use smart_loop::{SmartLoopOptions, SmartLoopReport};
 

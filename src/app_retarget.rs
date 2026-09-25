@@ -11,8 +11,9 @@ use crate::modules::glb::{
 };
 use crate::modules::logging::{next_task_id, safe_path_label};
 use crate::modules::retarget::{
-    self, RetargetOptions, SkeletonDescriptor, SkeletonMapping, SourceKind,
+    self, RetargetOptions, SkeletonDescriptor, SourceKind,
 };
+use crate::modules::retarget_export;
 use three_d::Context;
 
 impl App {
@@ -369,34 +370,23 @@ impl App {
                 let skin = target
                     .skin_data_at(target_skin_index)
                     .map_err(|error| error.to_string())?;
-                let clip = retarget::retarget_bvh(
+                let clip = retarget_export::retarget_clip_from_bvh(
                     &source,
                     &skin,
                     &mapping,
                     options,
                     "BVH Retarget",
+                    reduce_keys.then_some(key_tolerance),
                 )
                 .map_err(|error| error.to_string())?;
-                let mut clip = clip;
-                if reduce_keys {
-                    clip.reduce_keys(key_tolerance)
-                        .map_err(|error| error.to_string())?;
-                }
-                let mut output = target;
-                output
-                    .replace_animations(&AnimationClipData {
-                        name: clip.name,
-                        times: clip.times,
-                        channels: clip.channels,
-                    })
-                    .map_err(|error| error.to_string())?;
-                let report = output
-                    .prune_for_export(&export_selection)
-                    .map_err(|error| error.to_string())?;
+                let report = retarget_export::export_retargeted_glb(
+                    &target,
+                    clip,
+                    &export_selection,
+                    &path,
+                )
+                .map_err(|error| error.to_string())?;
                 details.push(format_export_report(&report));
-                output
-                    .export_atomic(&path)
-                    .map_err(|error| error.to_string())?;
                 paths.push(path.clone());
                 Ok(())
             })();
@@ -777,52 +767,28 @@ impl App {
             let mut paths = Vec::new();
             let mut details = Vec::new();
             let result = (|| {
-                let source_bytes =
-                    source.to_bytes().map_err(|error| error.to_string())?;
-                let runtime = AnimationRuntime::from_bytes_skeleton_only(
-                    &source_bytes,
-                    source_path.parent(),
-                )
-                .map_err(|error| error.to_string())?;
-                let effective_mapping = mapping_for_glb_snapshot(
-                    &mapping,
-                    &runtime,
-                    &source,
-                    source_clip_index,
-                    &source_bytes,
-                )?;
                 let target_skin = target
                     .skin_data_at(target_skin_index)
                     .map_err(|error| error.to_string())?;
-                let mut clip = retarget::retarget_glb(
-                    &runtime,
+                let clip = retarget_export::retarget_clip_from_glb(
                     &source,
+                    source_path.parent(),
                     source_clip_index,
                     &target_skin,
-                    &effective_mapping,
+                    &mapping,
                     options,
                     "GLB Retarget",
+                    reduce_keys.then_some(key_tolerance),
                 )
                 .map_err(|error| error.to_string())?;
-                if reduce_keys {
-                    clip.reduce_keys(key_tolerance)
-                        .map_err(|error| error.to_string())?;
-                }
-                let mut output = target;
-                output
-                    .replace_animations(&AnimationClipData {
-                        name: clip.name,
-                        times: clip.times,
-                        channels: clip.channels,
-                    })
-                    .map_err(|error| error.to_string())?;
-                let report = output
-                    .prune_for_export(&export_selection)
-                    .map_err(|error| error.to_string())?;
+                let report = retarget_export::export_retargeted_glb(
+                    &target,
+                    clip,
+                    &export_selection,
+                    &output_path,
+                )
+                .map_err(|error| error.to_string())?;
                 details.push(format_export_report(&report));
-                output
-                    .export_atomic(&output_path)
-                    .map_err(|error| error.to_string())?;
                 paths.push(output_path.clone());
                 Ok(())
             })();
@@ -884,50 +850,8 @@ impl App {
                 return;
             }
         };
-        let source_bytes = match source.to_bytes() {
-            Ok(bytes) => bytes,
-            Err(error) => {
-                tracing::error!(
-                    target: "glb_retarget",
-                    error = %error,
-                    "Failed to serialize retarget source"
-                );
-                return;
-            }
-        };
         let Some(source_path) = self.glb_path.as_deref() else {
             return;
-        };
-        let runtime = match AnimationRuntime::from_bytes_skeleton_only(
-            &source_bytes,
-            source_path.parent(),
-        ) {
-            Ok(runtime) => runtime,
-            Err(error) => {
-                tracing::error!(
-                    target: "glb_retarget",
-                    error = %error,
-                    "Failed to load retarget source runtime"
-                );
-                return;
-            }
-        };
-        let effective_mapping = match mapping_for_glb_snapshot(
-            &mapping,
-            &runtime,
-            &source,
-            self.glb_animation_index,
-            &source_bytes,
-        ) {
-            Ok(mapping) => mapping,
-            Err(error) => {
-                tracing::error!(
-                    target: "glb_retarget",
-                    error = %error,
-                    "Failed to prepare retarget mapping"
-                );
-                return;
-            }
         };
         let target_skin =
             match target.skin_data_at(self.retarget_target_skin_index) {
@@ -952,14 +876,15 @@ impl App {
                 return;
             }
         };
-        let clip = match retarget::retarget_glb(
-            &runtime,
+        let clip = match retarget_export::retarget_clip_from_glb(
             &source,
+            source_path.parent(),
             self.glb_animation_index,
             &target_skin,
-            &effective_mapping,
+            &mapping,
             options,
             "GLB Retarget",
+            None,
         ) {
             Ok(clip) => clip,
             Err(error) => {
@@ -972,11 +897,9 @@ impl App {
             }
         };
         let mut generated = target;
-        if let Err(error) = generated.replace_animations(&AnimationClipData {
-            name: clip.name,
-            times: clip.times,
-            channels: clip.channels,
-        }) {
+        if let Err(error) =
+            retarget_export::apply_retarget_clip(&mut generated, clip)
+        {
             tracing::error!(
                 target: "glb_retarget",
                 error = %error,
@@ -1044,44 +967,6 @@ fn file_hash(path: Option<&Path>) -> String {
     path.and_then(|path| fs::read(path).ok())
         .map(|bytes| retarget::sha256_hex(&bytes))
         .unwrap_or_default()
-}
-
-fn mapping_for_glb_snapshot(
-    mapping: &SkeletonMapping,
-    runtime: &AnimationRuntime,
-    source_document: &GlbDocument,
-    clip_index: usize,
-    source_bytes: &[u8],
-) -> Result<SkeletonMapping, String> {
-    let clip = runtime
-        .clips
-        .get(clip_index)
-        .ok_or_else(|| format!("Animation {clip_index} does not exist"))?;
-    let animated_nodes = clip
-        .channels
-        .iter()
-        .map(|channel| channel.node)
-        .collect::<HashSet<_>>();
-    let descriptor = SkeletonDescriptor::from_runtime(
-        runtime,
-        source_document,
-        mapping
-            .source
-            .skin
-            .as_ref()
-            .map(|skin| skin.index)
-            .unwrap_or(0),
-        &animated_nodes,
-        retarget::sha256_hex(source_bytes),
-        mapping.source.up_axis.clone(),
-        mapping.source.forward_axis.clone(),
-        mapping.source.unit.clone(),
-    )
-    .map_err(|error| error.to_string())?;
-    let mut effective = mapping.clone();
-    effective.source.file_sha256 = descriptor.file_sha256;
-    effective.source.skeleton_sha256 = descriptor.skeleton_sha256;
-    Ok(effective)
 }
 
 fn invalid_report(error: String) -> retarget::MappingValidationReport {

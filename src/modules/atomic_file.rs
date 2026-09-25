@@ -4,7 +4,7 @@ use std::path::Path;
 #[cfg(any(not(windows), test))]
 use std::fs;
 
-pub(crate) fn replace(source: &Path, destination: &Path) -> io::Result<()> {
+pub fn replace(source: &Path, destination: &Path) -> io::Result<()> {
     #[cfg(windows)]
     {
         replace_windows(source, destination)

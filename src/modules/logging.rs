@@ -23,7 +23,7 @@ const UI_QUEUE_CAPACITY: usize = 8_192;
 static NEXT_TASK_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) enum LogTarget {
+pub enum LogTarget {
     App,
     GlbEditor,
     GlbExport,
@@ -35,7 +35,7 @@ pub(crate) enum LogTarget {
 }
 
 impl LogTarget {
-    pub(crate) fn parse(value: &str) -> Self {
+    pub fn parse(value: &str) -> Self {
         match value {
             "glb_editor" => Self::GlbEditor,
             "glb_export" => Self::GlbExport,
@@ -48,7 +48,7 @@ impl LogTarget {
         }
     }
 
-    pub(crate) fn as_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             Self::App => "app",
             Self::GlbEditor => "glb_editor",
@@ -76,7 +76,7 @@ impl LogTarget {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum LogLevel {
+pub enum LogLevel {
     Debug,
     Info,
     Warn,
@@ -84,7 +84,7 @@ pub(crate) enum LogLevel {
 }
 
 impl LogLevel {
-    pub(crate) fn as_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             Self::Debug => "DEBUG",
             Self::Info => "INFO",
@@ -93,7 +93,7 @@ impl LogLevel {
         }
     }
 
-    pub(crate) fn from_tracing(level: &Level) -> Self {
+    pub fn from_tracing(level: &Level) -> Self {
         match *level {
             Level::ERROR => Self::Error,
             Level::WARN => Self::Warn,
@@ -104,7 +104,7 @@ impl LogLevel {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum LogStream {
+pub enum LogStream {
     Stdout,
     Stderr,
 }
@@ -127,18 +127,18 @@ impl LogStream {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct LogEvent {
-    pub(crate) timestamp: SystemTime,
-    pub(crate) target: LogTarget,
-    pub(crate) level: LogLevel,
-    pub(crate) task_id: Option<u64>,
-    pub(crate) stream: Option<LogStream>,
-    pub(crate) fields: Vec<(String, String)>,
-    pub(crate) message: String,
+pub struct LogEvent {
+    pub timestamp: SystemTime,
+    pub target: LogTarget,
+    pub level: LogLevel,
+    pub task_id: Option<u64>,
+    pub stream: Option<LogStream>,
+    pub fields: Vec<(String, String)>,
+    pub message: String,
 }
 
 impl LogEvent {
-    pub(crate) fn format_line(&self) -> String {
+    pub fn format_line(&self) -> String {
         let mut context = Vec::new();
         if let Some(task_id) = self.task_id {
             context.push(format!("task_id={task_id}"));
@@ -250,7 +250,7 @@ impl tracing::field::Visit for EventVisitor {
     }
 }
 
-pub(crate) struct LogRuntime {
+pub struct LogRuntime {
     log_dir: PathBuf,
     sender: Sender<RouterMessage>,
     ui_receiver: Receiver<LogEvent>,
@@ -258,7 +258,7 @@ pub(crate) struct LogRuntime {
 }
 
 impl LogRuntime {
-    pub(crate) fn init() -> Self {
+    pub fn init() -> Self {
         let log_dir = default_log_dir();
         let (sender, receiver) = mpsc::channel();
         let (ui_sender, ui_receiver) = mpsc::sync_channel(UI_QUEUE_CAPACITY);
@@ -300,11 +300,11 @@ impl LogRuntime {
         }
     }
 
-    pub(crate) fn drain_ui(&self) -> Vec<LogEvent> {
+    pub fn drain_ui(&self) -> Vec<LogEvent> {
         self.ui_receiver.try_iter().collect()
     }
 
-    pub(crate) fn log_dir(&self) -> &Path {
+    pub fn log_dir(&self) -> &Path {
         &self.log_dir
     }
 
@@ -528,18 +528,18 @@ fn backup_path(path: &Path, index: u32) -> PathBuf {
     PathBuf::from(value)
 }
 
-pub(crate) fn default_log_dir() -> PathBuf {
+pub fn default_log_dir() -> PathBuf {
     dirs::data_local_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join(LOG_DIRECTORY_NAME)
         .join(LOG_SUBDIRECTORY_NAME)
 }
 
-pub(crate) fn next_task_id() -> u64 {
+pub fn next_task_id() -> u64 {
     NEXT_TASK_ID.fetch_add(1, Ordering::Relaxed)
 }
 
-pub(crate) fn safe_path_label(path: &Path) -> String {
+pub fn safe_path_label(path: &Path) -> String {
     let name = path
         .file_name()
         .map(|value| value.to_string_lossy().into_owned())

@@ -173,9 +173,9 @@ impl BvhDocument {
 
     /// Return world transforms for one motion frame to the shared retargeter.
     ///
-    /// This deliberately exposes a crate-local tuple instead of the parser's
-    /// private transform type so BVH remains independent from GLB internals.
-    pub(crate) fn frame_transforms_for_retarget(
+    /// This deliberately exposes a plain tuple instead of the parser's private
+    /// transform type so BVH remains independent from GLB internals.
+    pub fn frame_transforms_for_retarget(
         &self,
         frame: &[f32],
     ) -> Result<Vec<([f32; 3], [f32; 4], [f32; 3])>, BvhError> {
@@ -192,7 +192,7 @@ impl BvhDocument {
     ///
     /// A motion file's first frame is not guaranteed to be its Rest Pose and
     /// must never be used as the reference for retargeting.
-    pub(crate) fn rest_transforms_for_retarget(
+    pub fn rest_transforms_for_retarget(
         &self,
     ) -> Result<Vec<([f32; 3], [f32; 4], [f32; 3])>, BvhError> {
         let zero_frame = vec![0.0; self.channel_count()];

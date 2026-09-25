@@ -20,10 +20,10 @@ impl Default for RootMotionRemovalMode {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct RootMotionInfo {
-    pub(crate) resolved_node: Option<usize>,
-    pub(crate) candidates: Vec<usize>,
-    pub(crate) animations_without_track: Vec<usize>,
+pub struct RootMotionInfo {
+    pub resolved_node: Option<usize>,
+    pub candidates: Vec<usize>,
+    pub animations_without_track: Vec<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -56,7 +56,7 @@ struct RootHierarchyInfo {
 
 impl GlbDocument {
     /// Return root-motion candidates for the currently selected animations.
-    pub(crate) fn root_motion_info(
+    pub fn root_motion_info(
         &self,
         selection: &GlbExportSelection,
     ) -> Result<RootMotionInfo, GlbError> {

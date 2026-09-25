@@ -1,130 +1,27 @@
-use std::collections::BTreeSet;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::mpsc;
 
 use crate::app::{App, ExportTaskResult, TaskKind};
 use crate::modules::bvh;
+use crate::modules::glb::pipeline::{
+    apply_export_edits, build_export_jobs, ExportEdits,
+    ExportJob as GlbExportJob,
+};
 use crate::modules::glb::{
-    AnimationOutputMode, EditOperation, GlbDocument, GlbExportPreset,
-    GlbExportReport, GlbExportSelection, RootTransformPreview,
-    SmartLoopOptions,
+    AnimationOutputMode, GlbDocument, GlbExportPreset, GlbExportSelection,
 };
 use crate::modules::logging::{next_task_id, safe_path_label};
+
+pub(crate) use crate::modules::glb::pipeline::format_export_report;
+
+#[cfg(test)]
+use std::collections::BTreeSet;
 
 #[cfg(test)]
 use crate::modules::glb::{
     AnimationChannelData, AnimationClipData, RootMotionRemovalMode,
 };
-
-struct GlbExportJob {
-    document: GlbDocument,
-    selection: GlbExportSelection,
-    path: PathBuf,
-}
-
-fn apply_glb_export_preview(
-    document: &mut GlbDocument,
-    orientation_euler_degrees: [f32; 3],
-    root_scale: f32,
-    root_translation: [f32; 3],
-    trim: Option<(usize, f32, f32)>,
-    animation_rate: Option<(usize, f32)>,
-    smart_loop: Option<(usize, f32)>,
-) -> Result<(), String> {
-    apply_glb_export_preview_with_root_transform(
-        document,
-        orientation_euler_degrees,
-        root_scale,
-        root_translation,
-        trim,
-        animation_rate,
-        smart_loop,
-        true,
-    )
-}
-
-fn apply_glb_export_preview_with_root_transform(
-    document: &mut GlbDocument,
-    orientation_euler_degrees: [f32; 3],
-    root_scale: f32,
-    root_translation: [f32; 3],
-    trim: Option<(usize, f32, f32)>,
-    animation_rate: Option<(usize, f32)>,
-    smart_loop: Option<(usize, f32)>,
-    include_root_transform: bool,
-) -> Result<(), String> {
-    if include_root_transform {
-        RootTransformPreview {
-            euler_degrees: orientation_euler_degrees,
-            scale: root_scale,
-            translation: root_translation,
-        }
-        .to_matrix()
-        .map_err(|error| error.to_string())?;
-    }
-
-    if let Some((animation, start, end)) = trim {
-        document
-            .apply(EditOperation::TrimAnimation {
-                animation,
-                start,
-                end,
-            })
-            .map_err(|error| error.to_string())?;
-    }
-
-    if include_root_transform
-        && orientation_euler_degrees
-            .iter()
-            .any(|value| value.abs() > f32::EPSILON)
-    {
-        document
-            .apply(EditOperation::RotateRoots {
-                euler_degrees: orientation_euler_degrees,
-            })
-            .map_err(|error| error.to_string())?;
-    }
-    if include_root_transform && (root_scale - 1.0).abs() > f32::EPSILON {
-        document
-            .apply(EditOperation::ScaleRoots { factor: root_scale })
-            .map_err(|error| error.to_string())?;
-    }
-    if include_root_transform
-        && root_translation
-            .iter()
-            .any(|value| value.abs() > f32::EPSILON)
-    {
-        document
-            .apply(EditOperation::TranslateRoots {
-                offset: root_translation,
-            })
-            .map_err(|error| error.to_string())?;
-    }
-
-    if let Some((animation, rate)) = animation_rate {
-        if !rate.is_finite() || rate <= 0.0 {
-            return Err("Animation rate must be finite and greater than zero"
-                .to_owned());
-        }
-        if (rate - 1.0).abs() > f32::EPSILON {
-            document
-                .apply(EditOperation::ScaleAnimationRate { animation, rate })
-                .map_err(|error| error.to_string())?;
-        }
-    }
-
-    if let Some((animation, transition_seconds)) = smart_loop {
-        document
-            .smart_loop_animation(
-                animation,
-                SmartLoopOptions { transition_seconds },
-            )
-            .map_err(|error| error.to_string())?;
-    }
-
-    Ok(())
-}
 
 impl App {
     pub(crate) fn root_transform_active(&self) -> bool {
@@ -196,29 +93,19 @@ impl App {
             None
         };
 
+        let edits = ExportEdits {
+            orientation_euler_degrees: self.orientation_euler_degrees,
+            root_scale: self.root_scale,
+            root_translation: self.root_translation,
+            trim,
+            animation_rate,
+            smart_loop,
+            bake_root_transform: include_root_transform,
+        };
+
         let mut snapshot = document.clone();
-        if include_root_transform {
-            apply_glb_export_preview(
-                &mut snapshot,
-                self.orientation_euler_degrees,
-                self.root_scale,
-                self.root_translation,
-                trim,
-                animation_rate,
-                smart_loop,
-            )?;
-        } else {
-            apply_glb_export_preview_with_root_transform(
-                &mut snapshot,
-                self.orientation_euler_degrees,
-                self.root_scale,
-                self.root_translation,
-                trim,
-                animation_rate,
-                smart_loop,
-                false,
-            )?;
-        }
+        apply_export_edits(&mut snapshot, &edits)
+            .map_err(|error| error.to_string())?;
         Ok(snapshot)
     }
 }
@@ -301,14 +188,15 @@ mod tests {
         let original = document.to_bytes().unwrap();
         let mut snapshot = document.clone();
 
-        apply_glb_export_preview(
+        apply_export_edits(
             &mut snapshot,
-            [0.0, 0.0, 90.0],
-            2.0,
-            [3.0, 4.0, 5.0],
-            None,
-            Some((0, 2.0)),
-            None,
+            &ExportEdits {
+                orientation_euler_degrees: [0.0, 0.0, 90.0],
+                root_scale: 2.0,
+                root_translation: [3.0, 4.0, 5.0],
+                animation_rate: Some((0, 2.0)),
+                ..ExportEdits::default()
+            },
         )
         .unwrap();
 
@@ -347,14 +235,12 @@ mod tests {
         let mut snapshot = document.clone();
         let original = snapshot.to_bytes().unwrap();
 
-        assert!(apply_glb_export_preview(
+        assert!(apply_export_edits(
             &mut snapshot,
-            [0.0, 0.0, 0.0],
-            f32::NAN,
-            [0.0, 0.0, 0.0],
-            None,
-            None,
-            None,
+            &ExportEdits {
+                root_scale: f32::NAN,
+                ..ExportEdits::default()
+            },
         )
         .is_err());
         assert_eq!(snapshot.to_bytes().unwrap(), original);
@@ -365,15 +251,16 @@ mod tests {
         let document = export_fixture();
         let mut snapshot = document.clone();
 
-        apply_glb_export_preview_with_root_transform(
+        apply_export_edits(
             &mut snapshot,
-            [0.0, 0.0, 90.0],
-            2.0,
-            [3.0, 4.0, 5.0],
-            Some((0, 0.25, 0.75)),
-            None,
-            None,
-            false,
+            &ExportEdits {
+                orientation_euler_degrees: [0.0, 0.0, 90.0],
+                root_scale: 2.0,
+                root_translation: [3.0, 4.0, 5.0],
+                trim: Some((0, 0.25, 0.75)),
+                bake_root_transform: false,
+                ..ExportEdits::default()
+            },
         )
         .unwrap();
 
@@ -416,7 +303,7 @@ mod tests {
             root_motion_node_override: Some(0),
             ..GlbExportSelection::default()
         };
-        let jobs = build_glb_export_jobs(
+        let jobs = build_export_jobs(
             &document,
             &selection,
             &std::env::temp_dir().join("character.glb"),
@@ -463,7 +350,7 @@ mod tests {
         let base_path = std::env::temp_dir().join("character.glb");
 
         let jobs =
-            build_glb_export_jobs(&document, &selection, &base_path).unwrap();
+            build_export_jobs(&document, &selection, &base_path).unwrap();
 
         assert_eq!(
             jobs[0].path,
@@ -535,7 +422,7 @@ impl App {
                 return;
             }
         };
-        let jobs = match build_glb_export_jobs(&document, &selection, &path) {
+        let jobs = match build_export_jobs(&document, &selection, &path) {
             Ok(jobs) => jobs,
             Err(error) => {
                 tracing::error!(
@@ -779,103 +666,3 @@ fn same_path(left: &Path, right: &Path) -> bool {
     }
 }
 
-fn build_glb_export_jobs(
-    document: &GlbDocument,
-    selection: &GlbExportSelection,
-    base_path: &Path,
-) -> Result<Vec<GlbExportJob>, String> {
-    if selection.animation_output == AnimationOutputMode::Combined {
-        return Ok(vec![GlbExportJob {
-            document: document.clone(),
-            selection: selection.clone(),
-            path: base_path.to_path_buf(),
-        }]);
-    }
-
-    if selection.selected_animations.is_empty() {
-        return Err(
-            "Split animation output requires at least one selected animation"
-                .to_owned(),
-        );
-    }
-    let names = document.animation_names();
-    let stem = base_path
-        .file_stem()
-        .and_then(|value| value.to_str())
-        .filter(|value| !value.is_empty())
-        .unwrap_or("animation");
-    let parent = base_path.parent().unwrap_or_else(|| Path::new("."));
-    let mut used_names = BTreeSet::new();
-    let mut jobs = Vec::new();
-    for animation_index in &selection.selected_animations {
-        let animation_name = names
-            .get(*animation_index)
-            .cloned()
-            .unwrap_or_else(|| format!("animation-{animation_index}"));
-        let cleaned = clean_filename_component(&animation_name);
-        let mut suffix = cleaned.clone();
-        let mut count = 1;
-        while !used_names.insert(suffix.to_lowercase()) {
-            count += 1;
-            suffix = format!("{cleaned}-{count}");
-        }
-        let path = parent.join(format!("{stem}--{suffix}.glb"));
-        let mut split_selection = selection.clone();
-        split_selection.selected_animations =
-            BTreeSet::from([*animation_index]);
-        split_selection.animation_output = AnimationOutputMode::Combined;
-        jobs.push(GlbExportJob {
-            document: document.clone(),
-            selection: split_selection,
-            path,
-        });
-    }
-    Ok(jobs)
-}
-
-fn clean_filename_component(value: &str) -> String {
-    let cleaned = value
-        .chars()
-        .map(|character| {
-            if character.is_control()
-                || matches!(
-                    character,
-                    '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'
-                )
-            {
-                '_'
-            } else {
-                character
-            }
-        })
-        .collect::<String>();
-    let trimmed =
-        cleaned.trim_matches(|character| character == ' ' || character == '.');
-    if trimmed.is_empty() {
-        "animation".to_owned()
-    } else {
-        trimmed.to_owned()
-    }
-}
-
-pub(crate) fn format_export_report(report: &GlbExportReport) -> String {
-    format!(
-        "scenes {} -> {}, nodes {} -> {}, meshes {} -> {}, skins {} -> {}, animations {} -> {}, removed channels {}, root motion channels {}, BIN {} -> {} bytes, GLB {} -> {} bytes",
-        report.source.scenes,
-        report.output.scenes,
-        report.source.nodes,
-        report.output.nodes,
-        report.source.meshes,
-        report.output.meshes,
-        report.source.skins,
-        report.output.skins,
-        report.source.animations,
-        report.output.animations,
-        report.removed_animation_channels,
-        report.root_motion_channels_modified,
-        report.source_bin_bytes,
-        report.output_bin_bytes,
-        report.source_glb_bytes,
-        report.output_glb_bytes,
-    )
-}
