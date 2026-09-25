@@ -286,8 +286,12 @@ impl App {
                 BatchProgress::PreflightFile { .. }
                 | BatchProgress::PreflightFinished { .. } => {}
             };
-            let result =
-                run_export(&request, &preflight.entries, task_id, &mut progress);
+            let result = run_export(
+                &request,
+                &preflight.entries,
+                task_id,
+                &mut progress,
+            );
             let _ =
                 sender.send(GlbBatchMessage::Finished { generation, result });
         });
@@ -463,4 +467,3 @@ impl App {
         }
     }
 }
-

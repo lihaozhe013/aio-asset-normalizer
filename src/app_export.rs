@@ -665,4 +665,3 @@ fn same_path(left: &Path, right: &Path) -> bool {
         left == right
     }
 }
-

@@ -11,8 +11,7 @@ use aio_asset_normalizer::modules::glb::batch_runner::{
     BatchRequest,
 };
 use aio_asset_normalizer::modules::glb::pipeline::{
-    apply_export_edits, build_export_jobs, export_selection_atomic,
-    ExportEdits,
+    apply_export_edits, build_export_jobs, export_selection_atomic, ExportEdits,
 };
 use aio_asset_normalizer::modules::glb::{
     GlbDocument, GlbExportCatalog, GlbExportReport, GlbSummary,
@@ -224,7 +223,9 @@ fn export(args: &ExportArgs) -> i32 {
         }
         let file: ExportJobFile = match job::load_json(job_path, "export job") {
             Ok(file) => file,
-            Err(message) => return fail(json!({}), CliError::validation(message)),
+            Err(message) => {
+                return fail(json!({}), CliError::validation(message))
+            }
         };
         if let Some(command) = &file.command {
             if command != "glb.export" {
@@ -250,9 +251,7 @@ fn export(args: &ExportArgs) -> i32 {
             let Some(root) = args.input_root.as_ref() else {
                 return fail(
                     json!({}),
-                    CliError::validation(
-                        "--recursive requires --input-root",
-                    ),
+                    CliError::validation("--recursive requires --input-root"),
                 );
             };
             match discover_glb_files(root) {
@@ -499,7 +498,8 @@ fn discover_glb_files(root: &Path) -> Result<Vec<PathBuf>, CliError> {
         let entries = std::fs::read_dir(&directory)
             .map_err(|error| CliError::io(error.to_string()))?;
         for entry in entries {
-            let entry = entry.map_err(|error| CliError::io(error.to_string()))?;
+            let entry =
+                entry.map_err(|error| CliError::io(error.to_string()))?;
             let file_type = entry
                 .file_type()
                 .map_err(|error| CliError::io(error.to_string()))?;
@@ -613,8 +613,11 @@ fn entry_json(
     entry: &BatchEntry,
     finished: Option<&HashMap<usize, (Vec<PathBuf>, Option<String>)>>,
 ) -> Value {
-    let (mut status, mut error, mut completed) =
-        (entry.status, entry.error.clone(), entry.completed_outputs.clone());
+    let (mut status, mut error, mut completed) = (
+        entry.status,
+        entry.error.clone(),
+        entry.completed_outputs.clone(),
+    );
     if let Some(finished) = finished {
         match finished.get(&index) {
             Some((paths, failed)) => {

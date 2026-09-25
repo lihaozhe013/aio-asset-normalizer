@@ -88,10 +88,10 @@ pub fn retarget_clip_from_glb(
     let runtime =
         AnimationRuntime::from_bytes_skeleton_only(&source_bytes, source_dir)
             .map_err(|error| {
-                RetargetExportError::Retarget(RetargetError::Source(
-                    error.to_string(),
-                ))
-            })?;
+            RetargetExportError::Retarget(RetargetError::Source(
+                error.to_string(),
+            ))
+        })?;
     let effective_mapping = mapping_for_glb_snapshot(
         mapping,
         &runtime,

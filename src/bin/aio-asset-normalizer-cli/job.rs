@@ -86,7 +86,9 @@ impl Default for RootMotionModeArg {
 impl From<RootMotionModeArg> for RootMotionRemovalMode {
     fn from(value: RootMotionModeArg) -> Self {
         match value {
-            RootMotionModeArg::HorizontalXz => RootMotionRemovalMode::HorizontalXZ,
+            RootMotionModeArg::HorizontalXz => {
+                RootMotionRemovalMode::HorizontalXZ
+            }
             RootMotionModeArg::AllTranslation => {
                 RootMotionRemovalMode::AllTranslation
             }
@@ -243,11 +245,11 @@ pub fn load_json<T: for<'de> Deserialize<'de>>(
     path: &Path,
     label: &str,
 ) -> Result<T, String> {
-    let text = std::fs::read_to_string(path)
-        .map_err(|error| format!("cannot read {label} {}: {error}", path.display()))?;
-    serde_json::from_str(&text).map_err(|error| {
-        format!("invalid {label} {}: {error}", path.display())
-    })
+    let text = std::fs::read_to_string(path).map_err(|error| {
+        format!("cannot read {label} {}: {error}", path.display())
+    })?;
+    serde_json::from_str(&text)
+        .map_err(|error| format!("invalid {label} {}: {error}", path.display()))
 }
 
 #[cfg(test)]
@@ -266,10 +268,9 @@ mod tests {
 
     #[test]
     fn export_job_defaults_to_preserve_all_combined() {
-        let job: ExportJobFile = serde_json::from_str(
-            r#"{"inputs":["a.glb"],"output_root":"out"}"#,
-        )
-        .unwrap();
+        let job: ExportJobFile =
+            serde_json::from_str(r#"{"inputs":["a.glb"],"output_root":"out"}"#)
+                .unwrap();
         assert_eq!(job.recipe.preset, PresetArg::PreserveAll);
         assert_eq!(job.recipe.skin, "auto");
         assert_eq!(job.recipe.animation_output, AnimationOutputArg::Combined);

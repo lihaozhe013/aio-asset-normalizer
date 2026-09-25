@@ -76,9 +76,10 @@ fn convert(args: &ConvertArgs) -> i32 {
     let mut files = Vec::new();
     let mut first_error: Option<CliError> = None;
     for input in &args.inputs {
-        let output = args.out.clone().unwrap_or_else(|| {
-            normalized_output_path(input)
-        });
+        let output = args
+            .out
+            .clone()
+            .unwrap_or_else(|| normalized_output_path(input));
 
         if same_path(&output, input) {
             let error = CliError::validation(format!(

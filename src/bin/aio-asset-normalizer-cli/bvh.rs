@@ -131,9 +131,8 @@ fn inspect_one(path: &Path) -> Result<Value, CliError> {
 
 fn process(args: &ProcessArgs) -> i32 {
     const COMMAND: &str = "bvh.process";
-    let fail = |error: CliError| {
-        output::emit_failure(COMMAND, json!({}), &error)
-    };
+    let fail =
+        |error: CliError| output::emit_failure(COMMAND, json!({}), &error);
 
     let mut document = match BvhDocument::load(&args.input) {
         Ok(document) => document,

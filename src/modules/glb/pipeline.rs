@@ -72,7 +72,8 @@ pub fn apply_export_edits(
             euler_degrees: edits.orientation_euler_degrees,
         })?;
     }
-    if edits.bake_root_transform && (edits.root_scale - 1.0).abs() > f32::EPSILON
+    if edits.bake_root_transform
+        && (edits.root_scale - 1.0).abs() > f32::EPSILON
     {
         document.apply(EditOperation::ScaleRoots {
             factor: edits.root_scale,
@@ -92,14 +93,13 @@ pub fn apply_export_edits(
     if let Some((animation, rate)) = edits.animation_rate {
         if !rate.is_finite() || rate <= 0.0 {
             return Err(GlbError::Invalid(
-                "Animation rate must be finite and greater than zero".to_owned(),
+                "Animation rate must be finite and greater than zero"
+                    .to_owned(),
             ));
         }
         if (rate - 1.0).abs() > f32::EPSILON {
-            document.apply(EditOperation::ScaleAnimationRate {
-                animation,
-                rate,
-            })?;
+            document
+                .apply(EditOperation::ScaleAnimationRate { animation, rate })?;
         }
     }
 
@@ -148,7 +148,9 @@ pub fn build_export_jobs(
         .and_then(|value| value.to_str())
         .filter(|value| !value.is_empty())
         .unwrap_or("animation");
-    let parent = base_path.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let parent = base_path
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."));
     let mut used_names = std::collections::BTreeSet::new();
     let mut jobs = Vec::new();
     for animation_index in &selection.selected_animations {

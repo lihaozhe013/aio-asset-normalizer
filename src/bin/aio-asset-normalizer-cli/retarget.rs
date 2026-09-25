@@ -6,14 +6,13 @@ use std::path::{Path, PathBuf};
 use clap::{Args, Subcommand, ValueEnum};
 use serde_json::{json, Value};
 
+use aio_asset_normalizer::modules::bvh::BvhDocument;
 use aio_asset_normalizer::modules::glb::{
     AnimationRuntime, GlbDocument, GlbExportPreset, GlbExportSelection,
     SkinData,
 };
-use aio_asset_normalizer::modules::bvh::BvhDocument;
 use aio_asset_normalizer::modules::retarget::{
-    self, RetargetOptions, SkeletonDescriptor, SkeletonMapping,
-    SourceKind,
+    self, RetargetOptions, SkeletonDescriptor, SkeletonMapping, SourceKind,
 };
 use aio_asset_normalizer::modules::retarget_export;
 
@@ -330,7 +329,8 @@ fn load_mapping(
 
 fn prompt(args: &PromptArgs) -> i32 {
     const COMMAND: &str = "retarget.prompt";
-    let fail = |error: CliError| output::emit_failure(COMMAND, json!({}), &error);
+    let fail =
+        |error: CliError| output::emit_failure(COMMAND, json!({}), &error);
 
     let source = match load_source(&args.source) {
         Ok(source) => source,
@@ -412,7 +412,8 @@ fn prompt(args: &PromptArgs) -> i32 {
 
 fn suggest(args: &SuggestArgs) -> i32 {
     const COMMAND: &str = "retarget.suggest";
-    let fail = |error: CliError| output::emit_failure(COMMAND, json!({}), &error);
+    let fail =
+        |error: CliError| output::emit_failure(COMMAND, json!({}), &error);
 
     let source = match load_source(&args.source) {
         Ok(source) => source,
@@ -467,7 +468,8 @@ fn suggest(args: &SuggestArgs) -> i32 {
 
 fn validate(args: &ValidateArgs) -> i32 {
     const COMMAND: &str = "retarget.validate";
-    let fail = |error: CliError| output::emit_failure(COMMAND, json!({}), &error);
+    let fail =
+        |error: CliError| output::emit_failure(COMMAND, json!({}), &error);
 
     let source = match load_source(&args.source) {
         Ok(source) => source,
@@ -510,7 +512,8 @@ fn validate(args: &ValidateArgs) -> i32 {
 
 fn retarget(args: &RunArgs) -> i32 {
     const COMMAND: &str = "retarget.run";
-    let fail = |error: CliError| output::emit_failure(COMMAND, json!({}), &error);
+    let fail =
+        |error: CliError| output::emit_failure(COMMAND, json!({}), &error);
 
     let source = match load_source(&args.source) {
         Ok(source) => source,

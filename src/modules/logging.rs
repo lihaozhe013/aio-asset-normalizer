@@ -330,13 +330,12 @@ impl LogRuntime {
             .and_then(|level| EnvFilter::try_new(level).ok())
             .or_else(|| EnvFilter::try_from_default_env().ok())
             .unwrap_or_else(|| EnvFilter::new("info"));
-        let subscriber =
-            tracing_subscriber::registry()
-                .with(filter)
-                .with(RouterLayer {
-                    sender: sender.clone(),
-                })
-                .with(ConsoleLayer { enabled: console });
+        let subscriber = tracing_subscriber::registry()
+            .with(filter)
+            .with(RouterLayer {
+                sender: sender.clone(),
+            })
+            .with(ConsoleLayer { enabled: console });
         let _ = tracing::subscriber::set_global_default(subscriber);
 
         Self {

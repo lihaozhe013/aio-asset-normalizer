@@ -8,10 +8,8 @@ use serde_json::{json, Value};
 const BIN: &str = env!("CARGO_BIN_EXE_aio-asset-normalizer-cli");
 
 fn workspace(label: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "aio-cli-tests-{}-{label}",
-        std::process::id()
-    ));
+    let dir = std::env::temp_dir()
+        .join(format!("aio-cli-tests-{}-{label}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir
@@ -161,7 +159,10 @@ fn bvh_inspect_and_process_trim_a_file() {
     let value = stdout_json(&inspect);
     assert_envelope(&value, "bvh.inspect");
     assert_eq!(value["results"]["files"][0]["frame_count"], json!(3));
-    assert_eq!(value["results"]["files"][0]["joints"][0]["name"], json!("Hips"));
+    assert_eq!(
+        value["results"]["files"][0]["joints"][0]["name"],
+        json!("Hips")
+    );
 
     let trimmed = dir.join("trimmed.bvh");
     let process = run(&[
@@ -234,7 +235,10 @@ fn retarget_prompt_validate_and_run_complete_the_agent_workflow() {
 
     let inspect = run(&["glb", "inspect", retargeted.to_str().unwrap()]);
     let value = stdout_json(&inspect);
-    assert_eq!(value["results"]["files"][0]["summary"]["animations"], json!(1));
+    assert_eq!(
+        value["results"]["files"][0]["summary"]["animations"],
+        json!(1)
+    );
 }
 
 #[test]
@@ -326,16 +330,18 @@ fn glb_bytes() -> Vec<u8> {
         offsets.push(offset);
         offset
     };
-    let positions = [(-0.5_f32, 0.0_f32, 0.0_f32), (0.5, 0.0, 0.0), (0.0, 2.0, 0.0)]
-        .iter()
-        .flat_map(|(x, y, z)| {
-            [x.to_le_bytes(), y.to_le_bytes(), z.to_le_bytes()].concat()
-        })
-        .collect::<Vec<u8>>();
+    let positions = [
+        (-0.5_f32, 0.0_f32, 0.0_f32),
+        (0.5, 0.0, 0.0),
+        (0.0, 2.0, 0.0),
+    ]
+    .iter()
+    .flat_map(|(x, y, z)| {
+        [x.to_le_bytes(), y.to_le_bytes(), z.to_le_bytes()].concat()
+    })
+    .collect::<Vec<u8>>();
     let position_offset = push(positions.clone());
-    let joints = (0..3)
-        .flat_map(|_| [0_u8, 0, 0, 0])
-        .collect::<Vec<u8>>();
+    let joints = (0..3).flat_map(|_| [0_u8, 0, 0, 0]).collect::<Vec<u8>>();
     let joints_offset = push(joints.clone());
     let weights = (0..3)
         .flat_map(|_| 1.0_f32.to_le_bytes().into_iter().chain([0_u8; 12]))
@@ -357,10 +363,12 @@ fn glb_bytes() -> Vec<u8> {
         .flat_map(|value| value.to_le_bytes())
         .collect::<Vec<u8>>();
     let times_offset = push(times.clone());
-    let rotations = [0.0_f32, 0.0, 0.0, 1.0, 0.0, 0.0, 0.5, 0.866, 0.0, 0.0, 0.0, 1.0]
-        .iter()
-        .flat_map(|value| value.to_le_bytes())
-        .collect::<Vec<u8>>();
+    let rotations = [
+        0.0_f32, 0.0, 0.0, 1.0, 0.0, 0.0, 0.5, 0.866, 0.0, 0.0, 0.0, 1.0,
+    ]
+    .iter()
+    .flat_map(|value| value.to_le_bytes())
+    .collect::<Vec<u8>>();
     let rotations_offset = push(rotations.clone());
 
     let json = json!({
