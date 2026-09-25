@@ -214,6 +214,14 @@ fn export(args: &ExportArgs) -> i32 {
     let mut dry_run = args.dry_run;
 
     if let Some(job_path) = &args.job {
+        if !args.inputs.is_empty() || args.output_root.is_some() {
+            return fail(
+                json!({}),
+                CliError::validation(
+                    "--job cannot be combined with positional inputs or --output-root",
+                ),
+            );
+        }
         let file: ExportJobFile = match job::load_json(job_path, "export job") {
             Ok(file) => file,
             Err(message) => return fail(json!({}), CliError::validation(message)),
