@@ -52,6 +52,6 @@ jobs:
           tar -xf blender.tar.xz
           echo "$PWD/blender-5.1.2-linux-x64" >> "$GITHUB_PATH"
       - name: Verify fixed version
-        run: blender --version | rg '^Blender 5\.1\.2$'
+        run: blender --version | grep -Fx 'Blender 5.1.2'
       - name: Compare Converter CLI and snapshot requests
         run: cargo test --locked --no-default-features --features cli --test converter -- --include-ignored
