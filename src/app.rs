@@ -125,6 +125,8 @@ pub struct App {
     pub converter_file_tree: FileTree,
     pub blender_path: Option<String>,
     pub(crate) converter_busy: bool,
+    pub(crate) converter_overwrite: bool,
+    pub(crate) output_overwrite: bool,
     pub(crate) converter_rx: Option<mpsc::Receiver<ConverterMessage>>,
     pub(crate) converter_results: Vec<ConverterFileState>,
 }
@@ -268,6 +270,8 @@ impl App {
             converter_file_tree,
             blender_path: prefs.converter.blender_path.clone(),
             converter_busy: false,
+            converter_overwrite: false,
+            output_overwrite: false,
             converter_rx: None,
             converter_results: Vec::new(),
         }

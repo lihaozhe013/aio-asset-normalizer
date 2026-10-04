@@ -148,6 +148,7 @@ impl App {
             input_root,
             inputs,
             output_root,
+            selection: None,
             recipe: self.glb_batch.recipe.clone(),
             overwrite_existing: self.glb_batch.overwrite_existing,
         })
@@ -292,8 +293,10 @@ impl App {
                 task_id,
                 &mut progress,
             );
-            let _ =
-                sender.send(GlbBatchMessage::Finished { generation, result });
+            let _ = sender.send(GlbBatchMessage::Finished {
+                generation,
+                result: result.map_err(|e| e.to_string()),
+            });
         });
     }
 
@@ -330,6 +333,7 @@ impl App {
                                     input_root: PathBuf::new(),
                                     inputs: Vec::new(),
                                     output_root: PathBuf::new(),
+                                    selection: None,
                                     recipe: GlbBatchRecipe::default(),
                                     overwrite_existing: false,
                                 });

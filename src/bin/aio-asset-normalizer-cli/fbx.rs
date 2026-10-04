@@ -5,16 +5,13 @@ use std::path::{Path, PathBuf};
 use clap::{Args, Subcommand};
 use serde_json::{json, Value};
 
-use aio_asset_normalizer::modules::blender::bridge;
-use aio_asset_normalizer::modules::blender::bridge::run_task;
-use aio_asset_normalizer::modules::blender::task::{
-    default_config_json, normalized_output_path, ConversionTask,
-};
-use aio_asset_normalizer::modules::glb::GlbDocument;
+use aio_asset_normalizer::modules::blender::task::normalized_output_path;
 use aio_asset_normalizer::modules::logging::next_task_id;
 
 use crate::output::{self, CliError};
-use crate::util::same_path;
+use aio_asset_normalizer::modules::operations::converter::{
+    validate_batch_outputs, ConversionRequest,
+};
 
 #[derive(Args)]
 pub struct FbxArgs {
@@ -42,6 +39,9 @@ pub struct ConvertArgs {
     /// Output file for a single input; defaults to a sibling *_normalized.glb
     #[arg(long, value_name = "FILE")]
     pub out: Option<PathBuf>,
+    /// Check inputs, dependencies and destinations without launching Blender
+    #[arg(long)]
+    pub dry_run: bool,
 }
 
 pub fn run(args: FbxArgs) -> i32 {
@@ -63,82 +63,46 @@ fn convert(args: &ConvertArgs) -> i32 {
         );
     }
 
-    let preferred = args.blender.as_ref().map(|path| path.to_string_lossy());
-    if bridge::find_blender(preferred.as_deref()).is_none() {
-        return fail(
-            json!({}),
-            CliError::external(
-                "Blender executable not found; install Blender or pass --blender",
-            ),
-        );
+    let requests: Vec<_> = args
+        .inputs
+        .iter()
+        .map(|input| ConversionRequest {
+            input: input.clone(),
+            output: args
+                .out
+                .clone()
+                .unwrap_or_else(|| normalized_output_path(input)),
+            blender: args.blender.clone(),
+            overwrite: args.overwrite,
+        })
+        .collect();
+    if let Err(error) = validate_batch_outputs(&requests) {
+        return fail(json!({"files":[]}), output::operation_error(error));
     }
-
     let mut files = Vec::new();
     let mut first_error: Option<CliError> = None;
-    for input in &args.inputs {
-        let output = args
-            .out
-            .clone()
-            .unwrap_or_else(|| normalized_output_path(input));
-
-        if same_path(&output, input) {
-            let error = CliError::validation(format!(
-                "output must not replace the input: {}",
-                input.display()
-            ));
-            files.push(failure_json(input, &output, &error));
-            first_error.get_or_insert(error);
-            continue;
-        }
-        if output.exists() && !args.overwrite {
-            let error = CliError::validation(format!(
-                "output already exists: {} (pass --overwrite)",
-                output.display()
-            ));
-            files.push(failure_json(input, &output, &error));
-            first_error.get_or_insert(error);
-            continue;
-        }
-
-        let task = ConversionTask {
-            task_id: next_task_id(),
-            input: input.clone(),
-            output: output.clone(),
-            config_json: default_config_json(),
-            blender_path: args
-                .blender
-                .as_ref()
-                .map(|path| path.to_string_lossy().into_owned()),
+    for request in requests {
+        let input = &request.input;
+        let output = request.output.clone();
+        let result = if args.dry_run {
+            aio_asset_normalizer::modules::operations::converter::preflight(
+                &request,
+            )
+            .map(|()| None)
+        } else {
+            aio_asset_normalizer::modules::operations::converter::execute(
+                &request,
+                next_task_id(),
+            )
+            .map(Some)
         };
-        match run_task(&task) {
-            Ok(()) => match GlbDocument::load(&output) {
-                Ok(document) => files.push(json!({
-                    "input": input.display().to_string(),
-                    "output": output.display().to_string(),
-                    "ok": true,
-                    "summary": {
-                        "nodes": document.summary().nodes,
-                        "meshes": document.summary().meshes,
-                        "materials": document.summary().materials,
-                        "skins": document.summary().skins,
-                        "animations": document.summary().animations,
-                    },
-                })),
-                Err(error) => {
-                    let error = output::glb_error(error);
-                    files.push(failure_json(input, &output, &error));
-                    first_error.get_or_insert(error);
-                }
-            },
-            Err(error) => {
-                let error = output::blender_error(error);
-                files.push(failure_json(input, &output, &error));
-                first_error.get_or_insert(error);
-            }
+        match result {
+            Ok(summary) => files.push(json!({"input":input,"output":output,"ok":true,"summary":summary.map(|v|json!({"nodes":v.nodes,"meshes":v.meshes,"materials":v.materials,"skins":v.skins,"animations":v.animations})),"written":!args.dry_run})),
+            Err(e) => { let error = output::operation_error(e); files.push(failure_json(input,&output,&error)); first_error.get_or_insert(error); }
         }
     }
 
-    let results = json!({ "files": files });
+    let results = json!({ "files": files, "dry_run":args.dry_run, "validation_scope": if args.dry_run { "preflight-only" } else { "converted-glb" } });
     match first_error {
         None => output::emit_success(COMMAND, results, Vec::new()),
         Some(error) => fail(results, error),

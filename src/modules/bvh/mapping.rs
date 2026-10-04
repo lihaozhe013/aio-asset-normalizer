@@ -243,12 +243,7 @@ pub fn save_mapping(
     let bytes = serde_json::to_vec_pretty(mapping).map_err(|error| {
         BvhError::Mapping(format!("serialize mapping: {error}"))
     })?;
-    let temporary = path.with_extension("json.tmp");
-    fs::write(&temporary, bytes)?;
-    if let Err(error) = crate::modules::atomic_file::replace(&temporary, path) {
-        let _ = fs::remove_file(&temporary);
-        return Err(error.into());
-    }
+    crate::modules::atomic_file::write(path, &bytes, true)?;
     Ok(())
 }
 

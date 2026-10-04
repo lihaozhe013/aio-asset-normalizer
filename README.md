@@ -236,3 +236,19 @@ Platform packaging commands are documented in
 [`packaging/README.md`](packaging/README.md).
 
 The project is licensed under the MIT License.
+
+### Agent skill and headless build
+
+The repository-maintained, provider-neutral skill is
+[`skills/aio-asset-normalizer/SKILL.md`](skills/aio-asset-normalizer/SKILL.md).
+It covers GLB, BVH, retargeting, and the Blender Converter using capability
+queries, inspection, dry-run, execution, and result checks. CLI archives include
+the same-version skill; no personal skill directory is modified by the build.
+
+```bash
+cargo build --locked --no-default-features --features cli --bin aio-asset-normalizer-cli
+```
+
+This build excludes the desktop dependency stack. Default features retain both
+executables; `--no-default-features --features desktop` builds the desktop only.
+See [`docs/CORE_AND_SKILL.md`](docs/CORE_AND_SKILL.md) for boundaries and validation.

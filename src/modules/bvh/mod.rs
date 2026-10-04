@@ -394,7 +394,7 @@ impl BvhDocument {
         self.joints.iter().map(|joint| joint.channels.len()).sum()
     }
 
-    pub fn write(&self, path: &Path) -> Result<(), BvhError> {
+    pub fn to_text(&self) -> Result<String, BvhError> {
         let mut output = String::new();
         output.push_str("HIERARCHY\n");
         let root = self
@@ -416,14 +416,14 @@ impl BvhDocument {
             output.push_str(&values.join(" "));
             output.push('\n');
         }
-        let temporary = path.with_extension("bvh.tmp");
-        fs::write(&temporary, output)?;
-        if let Err(error) =
-            crate::modules::atomic_file::replace(&temporary, path)
-        {
-            let _ = fs::remove_file(&temporary);
-            return Err(error.into());
-        }
+        Ok(output)
+    }
+    pub fn write(&self, path: &Path) -> Result<(), BvhError> {
+        crate::modules::atomic_file::write(
+            path,
+            self.to_text()?.as_bytes(),
+            true,
+        )?;
         Ok(())
     }
 }

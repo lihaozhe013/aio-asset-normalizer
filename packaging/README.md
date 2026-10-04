@@ -57,14 +57,16 @@ uv run packaging/build-cli.py
 
 The script builds the `aio-asset-normalizer-cli` executable and packages it as a
 standalone archive: `.zip` on Windows, `.tar.gz` elsewhere. Each archive contains
-the executable, the embedded CLI reference as `CLI.md`, and a short `README.txt`.
+the executable, the embedded CLI reference as `CLI.md`, a short `README.txt`,
+and `skills/aio-asset-normalizer/` with its four workflow references. The script
+builds with `--no-default-features --features cli`, excluding GUI dependencies.
 
 The archive name is `aio-asset-normalizer-cli-<version>-<platform>-<arch>`, where
 `<platform>` is `win`, `macos`, or `linux` and `<arch>` is `x86-64` or `arm64`.
 Use `--skip-build` to package an existing executable, `--debug` for the debug
 profile, and `--platform`/`--arch` to override the detected target.
 
-The CLI is self-contained (the reference, Blender script, and locales are
-embedded), so the archive has no runtime dependencies beyond the executable. The
+The command reference and Blender script are embedded. GLB/BVH/retarget workflows
+need no Blender installation; Converter requires a separately installed Blender. The
 nightly release publishes the three archives next to the installers; the CLI
 reference itself lives in [`docs/CLI.md`](../docs/CLI.md).

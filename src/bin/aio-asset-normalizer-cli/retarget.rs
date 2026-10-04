@@ -1,657 +1,370 @@
-//! `retarget` subcommands: prompt, suggest, validate, and run.
-
-use std::collections::HashSet;
-use std::path::{Path, PathBuf};
-
+//! CLI adapters for shared skeleton context and retarget requests.
+use crate::output::{self, CliError};
+use aio_asset_normalizer::modules::operations::spec::PresetArg;
+use aio_asset_normalizer::modules::operations::{self, retarget as core};
 use clap::{Args, Subcommand, ValueEnum};
 use serde_json::{json, Value};
-
-use aio_asset_normalizer::modules::bvh::BvhDocument;
-use aio_asset_normalizer::modules::glb::{
-    AnimationRuntime, GlbDocument, GlbExportPreset, GlbExportSelection,
-    SkinData,
-};
-use aio_asset_normalizer::modules::retarget::{
-    self, RetargetOptions, SkeletonDescriptor, SkeletonMapping, SourceKind,
-};
-use aio_asset_normalizer::modules::retarget_export;
-
-use crate::output::{self, CliError};
-use crate::util::{file_sha256, same_path};
+use std::path::PathBuf;
 
 #[derive(Args)]
 pub struct RetargetArgs {
     #[command(subcommand)]
     pub command: RetargetCommand,
 }
-
 #[derive(Subcommand)]
 pub enum RetargetCommand {
-    /// Write a deterministic agent prompt for authoring a Mapping v2
     Prompt(PromptArgs),
-    /// List name-match suggestions for a BVH source
     Suggest(SuggestArgs),
-    /// Validate a Mapping against concrete source and target skeletons
     Validate(ValidateArgs),
-    /// Retarget a BVH or GLB animation onto a target GLB
     Run(RunArgs),
 }
-
-#[derive(Args, Clone)]
-pub struct SourceArgs {
-    /// BVH or animated GLB source
-    #[arg(long, value_name = "FILE")]
-    pub source: PathBuf,
-    /// Animation index inside a GLB source
-    #[arg(long, value_name = "INDEX", default_value_t = 0)]
-    pub source_animation: usize,
-    /// Skin index inside a GLB source
-    #[arg(long, value_name = "INDEX", default_value_t = 0)]
-    pub source_skin: usize,
-    /// Source up axis
-    #[arg(long, value_name = "AXIS", default_value = "Y")]
-    pub source_up_axis: String,
-    /// Source forward axis
-    #[arg(long, value_name = "AXIS", default_value = "-Z")]
-    pub source_forward_axis: String,
-    /// Source unit; defaults to cm for BVH and m for GLB
-    #[arg(long, value_name = "UNIT")]
+#[derive(Args)]
+pub struct ContextArgs {
+    #[arg(long)]
+    pub job: Option<PathBuf>,
+    #[arg(long)]
+    pub source: Option<PathBuf>,
+    #[arg(long)]
+    pub target: Option<PathBuf>,
+    #[arg(long)]
+    pub source_animation: Option<usize>,
+    #[arg(long)]
+    pub source_skin: Option<usize>,
+    #[arg(long)]
+    pub skin: Option<usize>,
+    #[arg(long, allow_hyphen_values = true)]
+    pub source_up_axis: Option<String>,
+    #[arg(long, allow_hyphen_values = true)]
+    pub source_forward_axis: Option<String>,
+    #[arg(long)]
     pub source_unit: Option<String>,
+    #[arg(long, allow_hyphen_values = true)]
+    pub target_up_axis: Option<String>,
+    #[arg(long, allow_hyphen_values = true)]
+    pub target_forward_axis: Option<String>,
+    #[arg(long)]
+    pub target_unit: Option<String>,
 }
-
-#[derive(Args, Clone)]
-pub struct TargetArgs {
-    /// Target Skinned GLB
-    #[arg(long, value_name = "FILE")]
-    pub target: PathBuf,
-    /// Skin index inside the target GLB
-    #[arg(long, value_name = "INDEX", default_value_t = 0)]
-    pub skin: usize,
-    /// Target up axis
-    #[arg(long, value_name = "AXIS", default_value = "Y")]
-    pub target_up_axis: String,
-    /// Target forward axis
-    #[arg(long, value_name = "AXIS", default_value = "-Z")]
-    pub target_forward_axis: String,
-    /// Target unit
-    #[arg(long, value_name = "UNIT", default_value = "m")]
-    pub target_unit: String,
+impl ContextArgs {
+    fn resolve(&self, command: &str) -> Result<core::RetargetJob, CliError> {
+        if let Some(path) = &self.job {
+            let request: core::RetargetJob =
+                operations::load_json(path, "retarget job")
+                    .map_err(output::operation_error)?;
+            if request.command.as_deref().is_some_and(|v| v != command) {
+                return Err(CliError::validation(
+                    "Retarget job declares a different command",
+                ));
+            }
+            return Ok(request);
+        }
+        let mut request = core::RetargetJob::new(
+            self.source.clone().ok_or_else(|| {
+                CliError::usage("--source is required without --job")
+            })?,
+            self.target.clone().ok_or_else(|| {
+                CliError::usage("--target is required without --job")
+            })?,
+        );
+        if let Some(value) = self.source_animation {
+            request.source_animation = value;
+        }
+        if let Some(value) = self.source_skin {
+            request.source_skin = value;
+        }
+        if let Some(value) = self.skin {
+            request.skin = value;
+        }
+        if let Some(value) = &self.source_up_axis {
+            request.source_up_axis = value.clone();
+        }
+        if let Some(value) = &self.source_forward_axis {
+            request.source_forward_axis = value.clone();
+        }
+        request.source_unit = self.source_unit.clone();
+        if let Some(value) = &self.target_up_axis {
+            request.target_up_axis = value.clone();
+        }
+        if let Some(value) = &self.target_forward_axis {
+            request.target_forward_axis = value.clone();
+        }
+        if let Some(value) = &self.target_unit {
+            request.target_unit = value.clone();
+        }
+        Ok(request)
+    }
 }
-
 #[derive(Args)]
 pub struct PromptArgs {
     #[command(flatten)]
-    pub source: SourceArgs,
-    #[command(flatten)]
-    pub target: TargetArgs,
-    /// Destination Markdown prompt
-    #[arg(long, value_name = "FILE")]
-    pub out: PathBuf,
-    /// Replace an existing prompt file
+    pub context: ContextArgs,
+    #[arg(long)]
+    pub out: Option<PathBuf>,
+    #[arg(long)]
+    pub mapping: Option<PathBuf>,
     #[arg(long)]
     pub overwrite: bool,
-    /// Existing Mapping to include as a candidate
-    #[arg(long, value_name = "FILE")]
-    pub mapping: Option<PathBuf>,
+    #[arg(long)]
+    pub dry_run: bool,
 }
-
 #[derive(Args)]
 pub struct SuggestArgs {
     #[command(flatten)]
-    pub source: SourceArgs,
-    #[command(flatten)]
-    pub target: TargetArgs,
-    /// Optional file for the suggestion list
-    #[arg(long, value_name = "FILE")]
+    pub context: ContextArgs,
+    #[arg(long)]
     pub out: Option<PathBuf>,
-    /// Replace an existing suggestion file
     #[arg(long)]
     pub overwrite: bool,
 }
-
 #[derive(Args)]
 pub struct ValidateArgs {
     #[command(flatten)]
-    pub source: SourceArgs,
-    #[command(flatten)]
-    pub target: TargetArgs,
-    /// Mapping v2 JSON to validate
-    #[arg(long, value_name = "FILE")]
-    pub mapping: PathBuf,
+    pub context: ContextArgs,
+    #[arg(long)]
+    pub mapping: Option<PathBuf>,
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+#[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum RetargetPresetArg {
     Character,
     Skeleton,
 }
-
 #[derive(Args)]
 pub struct RunArgs {
     #[command(flatten)]
-    pub source: SourceArgs,
-    #[command(flatten)]
-    pub target: TargetArgs,
-    /// Mapping v2 JSON (legacy v1 is accepted for BVH sources)
-    #[arg(long, value_name = "FILE")]
-    pub mapping: PathBuf,
-    /// Destination GLB
-    #[arg(long, value_name = "FILE")]
-    pub out: PathBuf,
-    /// Name of the generated animation clip
-    #[arg(long, value_name = "NAME", default_value = "Retargeted")]
-    pub clip_name: String,
-    /// Baked animation sampling rate
-    #[arg(long, value_name = "HZ", default_value_t = 60.0)]
-    pub sample_rate: f32,
-    /// Do not transfer root translation motion
+    pub context: ContextArgs,
+    #[arg(long)]
+    pub mapping: Option<PathBuf>,
+    #[arg(long)]
+    pub out: Option<PathBuf>,
+    #[arg(long)]
+    pub clip_name: Option<String>,
+    #[arg(long)]
+    pub sample_rate: Option<f32>,
     #[arg(long)]
     pub no_root_motion: bool,
-    /// Normalize the initial heading
     #[arg(long)]
     pub normalize_heading: bool,
-    /// Remove redundant sampled keys below TOLERANCE
-    #[arg(long, value_name = "TOLERANCE")]
+    #[arg(long)]
     pub reduce_keys: Option<f32>,
-    /// Target package: full character or skeleton plus animation only
-    #[arg(long, value_enum, default_value = "character")]
-    pub preset: RetargetPresetArg,
-    /// Replace an existing output
+    #[arg(long, value_enum)]
+    pub preset: Option<RetargetPresetArg>,
     #[arg(long)]
     pub overwrite: bool,
+    #[arg(long)]
+    pub dry_run: bool,
 }
-
 pub fn run(args: RetargetArgs) -> i32 {
     match args.command {
-        RetargetCommand::Prompt(args) => prompt(&args),
-        RetargetCommand::Suggest(args) => suggest(&args),
-        RetargetCommand::Validate(args) => validate(&args),
-        RetargetCommand::Run(args) => retarget(&args),
+        RetargetCommand::Prompt(v) => prompt(&v),
+        RetargetCommand::Suggest(v) => suggest(&v),
+        RetargetCommand::Validate(v) => validate(&v),
+        RetargetCommand::Run(v) => retarget(&v),
     }
 }
-
-// ---- loading ---------------------------------------------------------------
-
-enum Source {
-    Bvh {
-        document: BvhDocument,
-        descriptor: SkeletonDescriptor,
-    },
-    Glb {
-        document: GlbDocument,
-        runtime: AnimationRuntime,
-        clip_index: usize,
-        descriptor: SkeletonDescriptor,
-    },
+fn load(
+    request: &core::RetargetJob,
+) -> Result<(core::Source, core::Target), CliError> {
+    Ok((
+        core::load_source(request).map_err(output::operation_error)?,
+        core::load_target(request).map_err(output::operation_error)?,
+    ))
 }
-
-impl Source {
-    fn descriptor(&self) -> &SkeletonDescriptor {
-        match self {
-            Self::Bvh { descriptor, .. } | Self::Glb { descriptor, .. } => {
-                descriptor
-            }
-        }
-    }
-}
-
-struct Target {
-    document: GlbDocument,
-    skin: SkinData,
-    descriptor: SkeletonDescriptor,
-}
-
-fn is_bvh(path: &Path) -> bool {
-    path.extension()
-        .and_then(|extension| extension.to_str())
-        .is_some_and(|extension| extension.eq_ignore_ascii_case("bvh"))
-}
-
-fn load_source(args: &SourceArgs) -> Result<Source, CliError> {
-    let default_unit = if is_bvh(&args.source) { "cm" } else { "m" };
-    let unit = args
-        .source_unit
-        .clone()
-        .unwrap_or_else(|| default_unit.to_owned());
-
-    if is_bvh(&args.source) {
-        let document =
-            BvhDocument::load(&args.source).map_err(output::bvh_error)?;
-        let descriptor = SkeletonDescriptor::from_bvh(
-            &document,
-            file_sha256(&args.source),
-            args.source_up_axis.clone(),
-            args.source_forward_axis.clone(),
-            unit,
-        )
-        .map_err(output::retarget_error)?;
-        return Ok(Source::Bvh {
-            document,
-            descriptor,
-        });
-    }
-
-    let document =
-        GlbDocument::load(&args.source).map_err(output::glb_error)?;
-    let bytes = std::fs::read(&args.source)
-        .map_err(|error| CliError::io(error.to_string()))?;
-    let runtime = AnimationRuntime::from_bytes_skeleton_only(
-        &bytes,
-        args.source.parent(),
+fn mapping(
+    request: &core::RetargetJob,
+    source: &core::Source,
+    target: &core::Target,
+) -> Result<aio_asset_normalizer::modules::retarget::SkeletonMapping, CliError>
+{
+    core::load_mapping(
+        request.mapping.as_deref().ok_or_else(|| {
+            CliError::usage("--mapping or job mapping is required")
+        })?,
+        source,
+        target,
     )
-    .map_err(|error| CliError::validation(error.to_string()))?;
-    let clip_index = args.source_animation;
-    let clip = runtime.clips.get(clip_index).ok_or_else(|| {
-        CliError::validation(format!(
-            "source animation {clip_index} does not exist"
-        ))
-    })?;
-    if !clip.is_playable() {
-        return Err(CliError::validation(format!(
-            "source animation {clip_index} is unsupported: {}",
-            clip.unsupported.join(", ")
-        )));
+    .map_err(output::operation_error)
+}
+fn protected_write(
+    request: &core::RetargetJob,
+    bytes: &[u8],
+) -> Result<(), CliError> {
+    let path = request
+        .out
+        .as_deref()
+        .ok_or_else(|| CliError::usage("--out or job out is required"))?;
+    let mut sources = vec![request.source.as_path(), request.target.as_path()];
+    if let Some(mapping) = request.mapping.as_deref() {
+        sources.push(mapping);
     }
-    let animated_nodes = clip
-        .channels
-        .iter()
-        .map(|channel| channel.node)
-        .collect::<HashSet<_>>();
-    let descriptor = SkeletonDescriptor::from_runtime(
-        &runtime,
-        &document,
-        args.source_skin,
-        &animated_nodes,
-        file_sha256(&args.source),
-        args.source_up_axis.clone(),
-        args.source_forward_axis.clone(),
-        unit,
+    operations::check_output(path, &sources, request.overwrite)
+        .map_err(output::operation_error)?;
+    aio_asset_normalizer::modules::atomic_file::write(
+        path,
+        bytes,
+        request.overwrite,
     )
-    .map_err(output::retarget_error)?;
-    Ok(Source::Glb {
-        document,
-        runtime,
-        clip_index,
-        descriptor,
-    })
+    .map_err(|e| CliError::io(e.to_string()))
 }
-
-fn load_target(args: &TargetArgs) -> Result<Target, CliError> {
-    let document =
-        GlbDocument::load(&args.target).map_err(output::glb_error)?;
-    let skin = document
-        .skin_data_at(args.skin)
-        .map_err(output::glb_error)?;
-    let descriptor = SkeletonDescriptor::from_skin(
-        &skin,
-        SourceKind::Glb,
-        file_sha256(&args.target),
-        String::new(),
-        args.target_up_axis.clone(),
-        args.target_forward_axis.clone(),
-        args.target_unit.clone(),
-        &HashSet::new(),
-    )
-    .map_err(output::retarget_error)?;
-    Ok(Target {
-        document,
-        skin,
-        descriptor,
-    })
-}
-
-fn load_mapping(
-    path: &Path,
-    source: &Source,
-    target: &Target,
-) -> Result<SkeletonMapping, CliError> {
-    match retarget::load_mapping(path) {
-        Ok(mapping) => Ok(mapping),
-        Err(v2_error) => {
-            if let Source::Bvh { .. } = source {
-                if let Ok(legacy) =
-                    aio_asset_normalizer::modules::bvh::load_mapping(path)
-                {
-                    return retarget::from_legacy_bvh_mapping(
-                        &legacy,
-                        source.descriptor(),
-                        &target.descriptor,
-                    )
-                    .map_err(output::retarget_error);
-                }
-            }
-            Err(output::retarget_error(v2_error))
-        }
-    }
-}
-
-// ---- handlers --------------------------------------------------------------
-
 fn prompt(args: &PromptArgs) -> i32 {
     const COMMAND: &str = "retarget.prompt";
-    let fail =
-        |error: CliError| output::emit_failure(COMMAND, json!({}), &error);
-
-    let source = match load_source(&args.source) {
-        Ok(source) => source,
-        Err(error) => return fail(error),
-    };
-    let target = match load_target(&args.target) {
-        Ok(target) => target,
-        Err(error) => return fail(error),
-    };
-    let candidate = match &args.mapping {
-        Some(path) => match load_mapping(path, &source, &target) {
-            Ok(mapping) => Some(mapping),
-            Err(error) => return fail(error),
-        },
-        None => None,
-    };
-
-    let prompt = match &source {
-        Source::Bvh {
-            document,
-            descriptor,
-        } => retarget::build_bvh_agent_prompt(
-            document,
-            descriptor,
-            &target.descriptor,
-            candidate.as_ref(),
-        ),
-        Source::Glb {
-            runtime,
-            clip_index,
-            descriptor,
-            ..
-        } => {
-            let Some(clip) = runtime.clips.get(*clip_index) else {
-                return fail(CliError::validation(
-                    "source animation is unavailable",
-                ));
-            };
-            retarget::build_agent_prompt(
-                descriptor,
-                &target.descriptor,
-                Some(clip),
-                candidate.as_ref(),
-            )
+    let work = (|| {
+        let mut request = args.context.resolve(COMMAND)?;
+        if args.context.job.is_none() {
+            request.out = args.out.clone();
+            request.mapping = args.mapping.clone();
+            request.overwrite = args.overwrite;
         }
-    };
-    let prompt = match prompt {
-        Ok(prompt) => prompt,
-        Err(error) => return fail(output::retarget_error(error)),
-    };
-
-    if same_path(&args.out, &args.source.source) {
-        return fail(CliError::validation(
-            "prompt output must not replace the source file",
-        ));
+        let (source, target) = load(&request)?;
+        let candidate = if request.mapping.is_some() {
+            Some(mapping(&request, &source, &target)?)
+        } else {
+            None
+        };
+        let prompt = core::prompt(&source, &target, candidate.as_ref())
+            .map_err(output::operation_error)?;
+        let out = request
+            .out
+            .as_deref()
+            .ok_or_else(|| CliError::usage("--out or job out is required"))?;
+        let sources: Vec<_> = [
+            Some(request.source.as_path()),
+            Some(request.target.as_path()),
+            request.mapping.as_deref(),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        operations::check_output(out, &sources, request.overwrite)
+            .map_err(output::operation_error)?;
+        if !args.dry_run {
+            protected_write(&request, prompt.as_bytes())?;
+        }
+        Ok::<_, CliError>(
+            json!({"source":request.source,"target":request.target,"output":out,"bytes":prompt.len(),"lines":prompt.lines().count(),"dry_run":args.dry_run,"prompt":prompt}),
+        )
+    })();
+    match work {
+        Ok(value) => output::emit_success(COMMAND, value, vec![]),
+        Err(e) => output::emit_failure(COMMAND, json!({}), &e),
     }
-    if args.out.exists() && !args.overwrite {
-        return fail(CliError::validation(format!(
-            "prompt already exists: {} (pass --overwrite)",
-            args.out.display()
-        )));
-    }
-    if let Err(error) = retarget::save_agent_prompt(&args.out, &prompt) {
-        return fail(output::retarget_error(error));
-    }
-
-    output::emit_success(
-        COMMAND,
-        json!({
-            "source": args.source.source.display().to_string(),
-            "target": args.target.target.display().to_string(),
-            "output": args.out.display().to_string(),
-            "bytes": prompt.len(),
-            "lines": prompt.lines().count(),
-        }),
-        Vec::new(),
-    )
 }
-
 fn suggest(args: &SuggestArgs) -> i32 {
     const COMMAND: &str = "retarget.suggest";
-    let fail =
-        |error: CliError| output::emit_failure(COMMAND, json!({}), &error);
-
-    let source = match load_source(&args.source) {
-        Ok(source) => source,
-        Err(error) => return fail(error),
-    };
-    let target = match load_target(&args.target) {
-        Ok(target) => target,
-        Err(error) => return fail(error),
-    };
-
-    let Source::Bvh { document, .. } = &source else {
-        return fail(CliError::validation(
-            "name suggestions require a BVH source; use retarget prompt for GLB sources",
-        ));
-    };
-    let suggestions = document.suggest_mapping(&target.skin);
-    let value = json!({
-        "source": args.source.source.display().to_string(),
-        "target": args.target.target.display().to_string(),
-        "skin_index": args.target.skin,
-        "suggestions": suggestions
-            .iter()
-            .map(|suggestion| json!({
-                "source_joint": suggestion.source_joint,
-                "target_node": suggestion.target_node,
-                "confidence": match suggestion.confidence {
-                    aio_asset_normalizer::modules::bvh::SuggestionConfidence::Exact => "exact",
-                    aio_asset_normalizer::modules::bvh::SuggestionConfidence::Normalized => "normalized",
-                },
-            }))
-            .collect::<Vec<_>>(),
-    });
-
-    if let Some(out) = &args.out {
-        if out.exists() && !args.overwrite {
-            return fail(CliError::validation(format!(
-                "suggestion file already exists: {} (pass --overwrite)",
-                out.display()
-            )));
+    let work = (|| {
+        let mut request = args.context.resolve(COMMAND)?;
+        if args.context.job.is_none() {
+            request.out = args.out.clone();
+            request.overwrite = args.overwrite;
         }
-        let text = match serde_json::to_string_pretty(&value) {
-            Ok(text) => text,
-            Err(error) => return fail(CliError::validation(error.to_string())),
+        let (source, target) = load(&request)?;
+        let core::Source::Bvh { document, .. } = &source else {
+            return Err(CliError::validation("Name suggestions require a BVH source; use retarget prompt for GLB"));
         };
-        if let Err(error) = std::fs::write(out, text) {
-            return fail(CliError::io(error.to_string()));
+        let value = json!({"source":request.source,"target":request.target,"skin_index":request.skin,
+            "suggestions":document.suggest_mapping(&target.skin).iter().map(|v| json!({"source_joint":v.source_joint,"target_node":v.target_node,
+                "confidence": match v.confidence { aio_asset_normalizer::modules::bvh::SuggestionConfidence::Exact => "exact", aio_asset_normalizer::modules::bvh::SuggestionConfidence::Normalized => "normalized" }})).collect::<Vec<_>>() });
+        if request.out.is_some() {
+            let bytes = serde_json::to_vec_pretty(&value)
+                .map_err(|e| CliError::validation(e.to_string()))?;
+            protected_write(&request, &bytes)?;
         }
+        Ok::<_, CliError>(value)
+    })();
+    match work {
+        Ok(value) => output::emit_success(COMMAND, value, vec![]),
+        Err(e) => output::emit_failure(COMMAND, json!({}), &e),
     }
-
-    output::emit_success(COMMAND, value, Vec::new())
 }
-
 fn validate(args: &ValidateArgs) -> i32 {
     const COMMAND: &str = "retarget.validate";
-    let fail =
-        |error: CliError| output::emit_failure(COMMAND, json!({}), &error);
-
-    let source = match load_source(&args.source) {
-        Ok(source) => source,
-        Err(error) => return fail(error),
-    };
-    let target = match load_target(&args.target) {
-        Ok(target) => target,
-        Err(error) => return fail(error),
-    };
-    let mapping = match load_mapping(&args.mapping, &source, &target) {
-        Ok(mapping) => mapping,
-        Err(error) => return fail(error),
-    };
-
-    let report = retarget::validate_mapping(
-        &mapping,
-        source.descriptor(),
-        &target.descriptor,
-    );
-    let value = json!({
-        "mapping": args.mapping.display().to_string(),
-        "valid": report.is_valid(),
-        "mapped_count": report.mapped_count,
-        "unmapped_source_nodes": report.unmapped_source_nodes,
-        "errors": report.errors,
-        "warnings": report.warnings,
-    });
-
-    if report.is_valid() {
-        output::emit_success(COMMAND, value, report.warnings)
-    } else {
-        let message = if report.errors.is_empty() {
-            "mapping maps no source nodes".to_owned()
-        } else {
-            report.errors.join("; ")
-        };
-        output::emit_failure(COMMAND, value, &CliError::validation(message))
+    let work = (|| {
+        let mut request = args.context.resolve(COMMAND)?;
+        if args.context.job.is_none() {
+            request.mapping = args.mapping.clone();
+        }
+        let (source, target) = load(&request)?;
+        let report = core::validate(
+            &source,
+            &target,
+            &mapping(&request, &source, &target)?,
+        );
+        Ok::<_, CliError>((
+            json!({"mapping":request.mapping,"valid":report.is_valid(),"mapped_count":report.mapped_count,"unmapped_source_nodes":report.unmapped_source_nodes,"errors":report.errors,"warnings":report.warnings}),
+            report,
+        ))
+    })();
+    match work {
+        Ok((value, report)) if report.is_valid() => {
+            output::emit_success(COMMAND, value, report.warnings)
+        }
+        Ok((value, report)) => output::emit_failure(
+            COMMAND,
+            value,
+            &CliError::validation(report.errors.join("; ")),
+        ),
+        Err(e) => output::emit_failure(COMMAND, json!({}), &e),
     }
 }
-
 fn retarget(args: &RunArgs) -> i32 {
     const COMMAND: &str = "retarget.run";
-    let fail =
-        |error: CliError| output::emit_failure(COMMAND, json!({}), &error);
-
-    let source = match load_source(&args.source) {
-        Ok(source) => source,
-        Err(error) => return fail(error),
-    };
-    let target = match load_target(&args.target) {
-        Ok(target) => target,
-        Err(error) => return fail(error),
-    };
-    let mapping = match load_mapping(&args.mapping, &source, &target) {
-        Ok(mapping) => mapping,
-        Err(error) => return fail(error),
-    };
-
-    let report = retarget::validate_mapping(
-        &mapping,
-        source.descriptor(),
-        &target.descriptor,
-    );
-    if !report.is_valid() {
-        let message = if report.errors.is_empty() {
-            "mapping maps no source nodes".to_owned()
-        } else {
-            report.errors.join("; ")
-        };
-        return output::emit_failure(
-            COMMAND,
-            json!({
-                "valid": false,
-                "errors": report.errors,
-                "warnings": report.warnings,
-            }),
-            &CliError::validation(message),
-        );
-    }
-
-    let options = RetargetOptions {
-        root_motion: !args.no_root_motion,
-        normalize_initial_heading: args.normalize_heading,
-        sample_rate: args.sample_rate,
-        ..RetargetOptions::default()
-    };
-
-    let clip = match &source {
-        Source::Bvh { document, .. } => {
-            retarget_export::retarget_clip_from_bvh(
-                document,
-                &target.skin,
-                &mapping,
-                options,
-                args.clip_name.clone(),
-                args.reduce_keys,
-            )
+    let work = (|| {
+        let mut request = args.context.resolve(COMMAND)?;
+        if args.context.job.is_none() {
+            request.mapping = args.mapping.clone();
+            request.out = args.out.clone();
+            request.overwrite = args.overwrite;
+            if let Some(value) = &args.clip_name {
+                request.clip_name = value.clone();
+            }
+            if let Some(value) = args.sample_rate {
+                request.sample_rate = value;
+            }
+            request.root_motion = !args.no_root_motion;
+            request.normalize_heading = args.normalize_heading;
+            request.reduce_keys = args.reduce_keys;
+            if let Some(value) = args.preset {
+                request.preset = match value {
+                    RetargetPresetArg::Character => PresetArg::Character,
+                    RetargetPresetArg::Skeleton => PresetArg::Skeleton,
+                };
+            }
         }
-        Source::Glb {
-            document,
-            clip_index,
-            ..
-        } => retarget_export::retarget_clip_from_glb(
-            document,
-            args.source.source.parent(),
-            *clip_index,
-            &target.skin,
-            &mapping,
-            options,
-            args.clip_name.clone(),
-            args.reduce_keys,
-        ),
-    };
-    let clip = match clip {
-        Ok(clip) => clip,
-        Err(error) => return fail(output::retarget_export_error(error)),
-    };
-
-    if same_path(&args.out, &args.source.source)
-        || same_path(&args.out, &args.target.target)
-    {
-        return fail(CliError::validation(
-            "output must not replace the source or target GLB",
-        ));
+        let (source, target) = load(&request)?;
+        let mapping = mapping(&request, &source, &target)?;
+        let validation = core::validate(&source, &target, &mapping);
+        let job = core::prepare(&source, &target, &mapping, &request)
+            .map_err(output::operation_error)?;
+        let report = if args.dry_run {
+            operations::glb::preview_job(&job)
+        } else {
+            operations::glb::execute_job(&job, request.overwrite)
+        }
+        .map_err(output::operation_error)?;
+        Ok::<_, CliError>((
+            json!({"source":request.source,"target":request.target,"output":job.path,"preset":request.preset,"dry_run":args.dry_run,"report":report_json(&report)}),
+            validation.warnings,
+        ))
+    })();
+    match work {
+        Ok((value, warnings)) => output::emit_success(COMMAND, value, warnings),
+        Err(e) => output::emit_failure(COMMAND, json!({}), &e),
     }
-    if args.out.exists() && !args.overwrite {
-        return fail(CliError::validation(format!(
-            "output already exists: {} (pass --overwrite)",
-            args.out.display()
-        )));
-    }
-
-    let selection = GlbExportSelection {
-        preset: match args.preset {
-            RetargetPresetArg::Character => GlbExportPreset::CharacterPackage,
-            RetargetPresetArg::Skeleton => GlbExportPreset::SkeletonAnimation,
-        },
-        skin_index: Some(args.target.skin),
-        selected_animations: std::collections::BTreeSet::from([0]),
-        ..GlbExportSelection::default()
-    };
-
-    let exported = retarget_export::export_retargeted_glb(
-        &target.document,
-        clip,
-        &selection,
-        &args.out,
-    );
-    let exported = match exported {
-        Ok(report) => report,
-        Err(error) => return fail(output::retarget_export_error(error)),
-    };
-
-    if let Err(error) = GlbDocument::load(&args.out) {
-        return fail(output::glb_error(error));
-    }
-
-    output::emit_success(
-        COMMAND,
-        json!({
-            "source": args.source.source.display().to_string(),
-            "target": args.target.target.display().to_string(),
-            "output": args.out.display().to_string(),
-            "preset": match args.preset {
-                RetargetPresetArg::Character => "character",
-                RetargetPresetArg::Skeleton => "skeleton",
-            },
-            "report": report_json(&exported),
-        }),
-        report.warnings,
-    )
 }
-
 fn report_json(
     report: &aio_asset_normalizer::modules::glb::GlbExportReport,
 ) -> Value {
-    json!({
-        "source_animations": report.source.animations,
-        "output_animations": report.output.animations,
-        "output_nodes": report.output.nodes,
-        "output_meshes": report.output.meshes,
-        "output_bin_bytes": report.output_bin_bytes,
-        "output_glb_bytes": report.output_glb_bytes,
-    })
+    let mut value = json!(report);
+    if let Some(fields) = value.as_object_mut() {
+        fields.insert(
+            "source_animations".into(),
+            json!(report.source.animations),
+        );
+        fields.insert(
+            "output_animations".into(),
+            json!(report.output.animations),
+        );
+        fields.insert("output_nodes".into(), json!(report.output.nodes));
+        fields.insert("output_meshes".into(), json!(report.output.meshes));
+    }
+    value
 }

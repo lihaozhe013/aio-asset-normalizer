@@ -1,5 +1,4 @@
 use std::collections::{BTreeSet, HashSet};
-use std::fs;
 use std::path::Path;
 use std::sync::mpsc;
 
@@ -82,107 +81,43 @@ impl App {
     }
 
     pub(crate) fn refresh_glb_retarget_mapping(&mut self) {
-        let Some(source_document) = self.glb.as_ref() else {
+        let (Some(source), Some(target), Some(mapping)) = (
+            self.glb.as_ref(),
+            self.glb_retarget_target.as_ref(),
+            self.retarget_mapping.as_ref(),
+        ) else {
             self.retarget_validation = None;
             return;
         };
-        let Some(target_document) = self.glb_retarget_target.as_ref() else {
-            self.retarget_validation = None;
-            return;
-        };
-        let runtime = (!self.glb_retarget_preview_active)
-            .then(|| self.canvas.animation_runtime())
-            .flatten()
-            .or_else(|| {
-                source_document.to_bytes().ok().and_then(|bytes| {
-                    AnimationRuntime::from_bytes_skeleton_only(
-                        &bytes,
-                        source_document
-                            .source_path
-                            .as_deref()
-                            .and_then(Path::parent),
-                    )
-                    .ok()
-                })
-            });
-        let Some(runtime) = runtime else {
-            self.retarget_validation = None;
-            return;
-        };
-        let source_clip = match runtime.clips.get(self.glb_animation_index) {
-            Some(clip) => clip,
-            None => {
-                self.retarget_validation = Some(invalid_report(
-                    "Selected source animation does not exist".to_owned(),
-                ));
-                return;
-            }
-        };
-        if !source_clip.is_playable() {
-            self.retarget_validation = Some(invalid_report(format!(
-                "Selected source animation is unsupported: {}",
-                source_clip.unsupported.join(", ")
-            )));
-            return;
-        }
-        let animated_nodes = source_clip
-            .channels
-            .iter()
-            .map(|channel| channel.node)
-            .collect::<HashSet<_>>();
-        let source_descriptor = match SkeletonDescriptor::from_runtime(
-            &runtime,
-            source_document,
-            self.retarget_source_skin_index,
-            &animated_nodes,
-            file_hash(source_document.source_path.as_deref()),
-            "Y".to_owned(),
-            "-Z".to_owned(),
-            "m".to_owned(),
-        ) {
-            Ok(descriptor) => descriptor,
-            Err(error) => {
-                self.retarget_validation =
-                    Some(invalid_report(error.to_string()));
-                return;
-            }
-        };
-        let target_skin = match target_document
-            .skin_data_at(self.retarget_target_skin_index)
-        {
-            Ok(skin) => skin,
-            Err(error) => {
-                self.retarget_validation =
-                    Some(invalid_report(error.to_string()));
-                return;
-            }
-        };
-        let target_descriptor = match SkeletonDescriptor::from_skin(
-            &target_skin,
-            SourceKind::Glb,
-            file_hash(target_document.source_path.as_deref()),
-            String::new(),
-            "Y",
-            "-Z",
-            "m",
-            &HashSet::new(),
-        ) {
-            Ok(descriptor) => descriptor,
-            Err(error) => {
-                self.retarget_validation =
-                    Some(invalid_report(error.to_string()));
-                return;
-            }
-        };
-        let Some(mapping) = self.retarget_mapping.as_ref() else {
-            self.retarget_validation = None;
-            return;
-        };
-        self.retarget_validation = Some(retarget::validate_mapping(
-            mapping,
-            &source_descriptor,
-            &target_descriptor,
-        ));
+        let report = (|| {
+            let edits =
+                crate::modules::operations::spec::EditSpec::from_export_edits(
+                    &self.glb_export_edits(false),
+                );
+            let source = crate::modules::operations::retarget::glb_source(
+                source,
+                self.glb_path.as_deref().and_then(Path::parent),
+                self.glb_animation_index,
+                self.retarget_source_skin_index,
+                &edits,
+                ["Y", "-Z", "m"],
+            )?;
+            let target = crate::modules::operations::retarget::target(
+                target.clone(),
+                self.retarget_target_skin_index,
+                crate::modules::operations::retarget::document_fingerprint(
+                    target,
+                )?,
+                ["Y", "-Z", "m"],
+            )?;
+            Ok::<_, crate::modules::operations::OperationError>(
+                crate::modules::operations::retarget::validate(
+                    &source, &target, mapping,
+                ),
+            )
+        })();
+        self.retarget_validation =
+            Some(report.unwrap_or_else(|e| invalid_report(e.to_string())));
     }
 
     pub(crate) fn retarget_options(&self) -> RetargetOptions {
@@ -212,53 +147,39 @@ impl App {
             self.retarget_validation = None;
             return;
         };
-        let source_descriptor = match SkeletonDescriptor::from_bvh(
-            bvh,
-            file_hash(bvh.source_path.as_deref()),
-            self.bvh_up_axis.clone(),
-            self.bvh_forward_axis.clone(),
-            self.bvh_unit.clone(),
-        ) {
-            Ok(descriptor) => descriptor,
-            Err(error) => {
-                self.retarget_validation =
-                    Some(invalid_report(error.to_string()));
+        let context = (|| {
+            let source = crate::modules::operations::retarget::bvh_source(
+                bvh.clone(),
+                [&self.bvh_up_axis, &self.bvh_forward_axis, &self.bvh_unit],
+            )?;
+            let target = crate::modules::operations::retarget::target(
+                target.clone(),
+                self.retarget_target_skin_index,
+                crate::modules::operations::retarget::document_fingerprint(
+                    target,
+                )?,
+                ["Y", "-Z", "m"],
+            )?;
+            Ok::<_, crate::modules::operations::OperationError>((
+                source, target,
+            ))
+        })();
+        let (source, target) = match context {
+            Ok(v) => v,
+            Err(e) => {
+                self.retarget_validation = Some(invalid_report(e.to_string()));
                 return;
             }
         };
-        let skin_index = self.retarget_target_skin_index;
-        let skin = match target.skin_data_at(skin_index) {
-            Ok(skin) => skin,
-            Err(error) => {
-                self.retarget_validation =
-                    Some(invalid_report(error.to_string()));
-                return;
-            }
-        };
-        let target_descriptor = match SkeletonDescriptor::from_skin(
-            &skin,
-            SourceKind::Glb,
-            file_hash(target.source_path.as_deref()),
-            String::new(),
-            "Y",
-            "-Z",
-            "m",
-            &HashSet::new(),
-        ) {
-            Ok(descriptor) => descriptor,
-            Err(error) => {
-                self.retarget_validation =
-                    Some(invalid_report(error.to_string()));
-                return;
-            }
-        };
+        let source_descriptor = source.descriptor();
+        let target_descriptor = &target.descriptor;
         let mapping = if let Some(mapping) = self.retarget_mapping.clone() {
             mapping
         } else if let Some(legacy) = self.mapping.as_ref() {
             match retarget::from_legacy_bvh_mapping(
                 legacy,
-                &source_descriptor,
-                &target_descriptor,
+                source_descriptor,
+                target_descriptor,
             ) {
                 Ok(mapping) => mapping,
                 Err(error) => {
@@ -273,8 +194,8 @@ impl App {
         };
         let report = retarget::validate_mapping(
             &mapping,
-            &source_descriptor,
-            &target_descriptor,
+            source_descriptor,
+            target_descriptor,
         );
         self.retarget_mapping = Some(mapping);
         self.retarget_validation = Some(report);
@@ -363,29 +284,47 @@ impl App {
         };
         export_selection.selected_animations = BTreeSet::from([0]);
         export_selection.animation_output = AnimationOutputMode::Combined;
+        let request = crate::modules::operations::retarget::RetargetJob::for_snapshot_export(
+            self.bvh_path.clone().unwrap_or_default(), self.bvh_target_path.clone().unwrap_or_default(), path.clone(),
+            crate::modules::operations::retarget::SnapshotExportSettings {
+                source_skin: 0, target_skin: target_skin_index, source_axes: [self.bvh_up_axis.clone(),self.bvh_forward_axis.clone(),self.bvh_unit.clone()],
+                edits: Default::default(), options, clip_name: "BVH Retarget".into(), selection: export_selection,
+                reduce_keys: reduce_keys.then_some(key_tolerance), overwrite: self.output_overwrite,
+            });
         std::thread::spawn(move || {
             let mut paths = Vec::new();
             let mut details = Vec::new();
             let result = (|| {
-                let skin = target
-                    .skin_data_at(target_skin_index)
-                    .map_err(|error| error.to_string())?;
-                let clip = retarget_export::retarget_clip_from_bvh(
-                    &source,
-                    &skin,
-                    &mapping,
-                    options,
-                    "BVH Retarget",
-                    reduce_keys.then_some(key_tolerance),
+                let source = crate::modules::operations::retarget::bvh_source(
+                    source,
+                    [
+                        &request.source_up_axis,
+                        &request.source_forward_axis,
+                        request.source_unit.as_deref().unwrap_or("cm"),
+                    ],
                 )
-                .map_err(|error| error.to_string())?;
-                let report = retarget_export::export_retargeted_glb(
-                    &target,
-                    clip,
-                    &export_selection,
-                    &path,
+                .map_err(|e| e.to_string())?;
+                let fingerprint =
+                    crate::modules::operations::retarget::document_fingerprint(
+                        &target,
+                    )
+                    .map_err(|e| e.to_string())?;
+                let target = crate::modules::operations::retarget::target(
+                    target,
+                    target_skin_index,
+                    fingerprint,
+                    ["Y", "-Z", "m"],
                 )
-                .map_err(|error| error.to_string())?;
+                .map_err(|e| e.to_string())?;
+                let job = crate::modules::operations::retarget::prepare(
+                    &source, &target, &mapping, &request,
+                )
+                .map_err(|e| e.to_string())?;
+                let report = crate::modules::operations::glb::execute_job(
+                    &job,
+                    request.overwrite,
+                )
+                .map_err(|e| e.to_string())?;
                 details.push(format_export_report(&report));
                 paths.push(path.clone());
                 Ok(())
@@ -648,7 +587,33 @@ impl App {
             );
             return;
         }
-        match retarget::save_mapping(&path, mapping) {
+        let sources: Vec<_> = [
+            self.bvh_path.as_deref(),
+            self.bvh_target_path.as_deref(),
+            self.glb_path.as_deref(),
+            self.glb_retarget_target_path.as_deref(),
+            original_mapping_path,
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        let result = (|| {
+            crate::modules::operations::check_output(
+                &path,
+                &sources,
+                self.output_overwrite,
+            )
+            .map_err(|e| e.to_string())?;
+            let bytes = serde_json::to_vec_pretty(mapping)
+                .map_err(|e| e.to_string())?;
+            crate::modules::atomic_file::write(
+                &path,
+                &bytes,
+                self.output_overwrite,
+            )
+            .map_err(|e| e.to_string())
+        })();
+        match result {
             Ok(()) => {
                 self.file_tree.refresh();
                 self.bvh_file_tree.refresh();
@@ -763,31 +728,48 @@ impl App {
             task_id,
             "Building the selected animation in background"
         );
+        let mut request = crate::modules::operations::retarget::RetargetJob::for_snapshot_export(
+            source_path.clone(), target_path.clone(), output_path.clone(),
+            crate::modules::operations::retarget::SnapshotExportSettings {
+                source_skin: self.retarget_source_skin_index, target_skin: target_skin_index, source_axes: ["Y".into(),"-Z".into(),"m".into()],
+                edits: crate::modules::operations::spec::EditSpec::from_export_edits(&self.glb_export_edits(false)), options,
+                clip_name: "GLB Retarget".into(), selection: export_selection, reduce_keys: reduce_keys.then_some(key_tolerance), overwrite: self.output_overwrite,
+            });
+        request.source_animation = source_clip_index;
         std::thread::spawn(move || {
             let mut paths = Vec::new();
             let mut details = Vec::new();
             let result = (|| {
-                let target_skin = target
-                    .skin_data_at(target_skin_index)
-                    .map_err(|error| error.to_string())?;
-                let clip = retarget_export::retarget_clip_from_glb(
+                let source = crate::modules::operations::retarget::glb_source(
                     &source,
                     source_path.parent(),
                     source_clip_index,
-                    &target_skin,
-                    &mapping,
-                    options,
-                    "GLB Retarget",
-                    reduce_keys.then_some(key_tolerance),
+                    request.source_skin,
+                    &Default::default(),
+                    ["Y", "-Z", "m"],
                 )
-                .map_err(|error| error.to_string())?;
-                let report = retarget_export::export_retargeted_glb(
-                    &target,
-                    clip,
-                    &export_selection,
-                    &output_path,
+                .map_err(|e| e.to_string())?;
+                let fingerprint =
+                    crate::modules::operations::retarget::document_fingerprint(
+                        &target,
+                    )
+                    .map_err(|e| e.to_string())?;
+                let target = crate::modules::operations::retarget::target(
+                    target,
+                    target_skin_index,
+                    fingerprint,
+                    ["Y", "-Z", "m"],
                 )
-                .map_err(|error| error.to_string())?;
+                .map_err(|e| e.to_string())?;
+                let job = crate::modules::operations::retarget::prepare(
+                    &source, &target, &mapping, &request,
+                )
+                .map_err(|e| e.to_string())?;
+                let report = crate::modules::operations::glb::execute_job(
+                    &job,
+                    request.overwrite,
+                )
+                .map_err(|e| e.to_string())?;
                 details.push(format_export_report(&report));
                 paths.push(output_path.clone());
                 Ok(())
@@ -963,12 +945,6 @@ impl App {
     }
 }
 
-fn file_hash(path: Option<&Path>) -> String {
-    path.and_then(|path| fs::read(path).ok())
-        .map(|bytes| retarget::sha256_hex(&bytes))
-        .unwrap_or_default()
-}
-
 fn invalid_report(error: String) -> retarget::MappingValidationReport {
     retarget::MappingValidationReport {
         errors: vec![error],
@@ -978,18 +954,6 @@ fn invalid_report(error: String) -> retarget::MappingValidationReport {
 
 fn same_path(path: &Path, source: Option<&Path>) -> bool {
     source.is_some_and(|source| {
-        let left =
-            std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-        let right = std::fs::canonicalize(source)
-            .unwrap_or_else(|_| source.to_path_buf());
-        #[cfg(windows)]
-        {
-            left.to_string_lossy()
-                .eq_ignore_ascii_case(&right.to_string_lossy())
-        }
-        #[cfg(not(windows))]
-        {
-            left == right
-        }
+        crate::modules::operations::same_path(path, source)
     })
 }

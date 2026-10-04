@@ -115,7 +115,7 @@ impl GlbExportValidation {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct GlbExportReport {
     pub source: GlbSummary,
     pub output: GlbSummary,

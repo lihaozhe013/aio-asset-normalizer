@@ -12,7 +12,7 @@ fn main() {
     let commit = git_commit_hash().unwrap_or_else(|| "unknown".to_owned());
     println!("cargo:rustc-env=AIO_ASSET_NORMALIZER_COMMIT={commit}");
 
-    #[cfg(windows)]
+    #[cfg(all(windows, feature = "desktop"))]
     {
         let mut resource = winres::WindowsResource::new();
         resource.set_icon("assets/icon/aio-asset-normalizer.ico");

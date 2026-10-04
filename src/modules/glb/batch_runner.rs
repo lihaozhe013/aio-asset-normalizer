@@ -11,10 +11,11 @@ use std::path::{Path, PathBuf};
 use sha2::{Digest, Sha256};
 
 use crate::modules::logging::safe_path_label;
+use crate::modules::operation_support::{ErrorKind, OperationError};
 
 use super::{
-    AnimationOutputMode, GlbBatchRecipe, GlbDocument, GlbExportPreset,
-    GlbExportReport, GlbExportSelection, GlbSummary,
+    GlbBatchRecipe, GlbDocument, GlbExportPreset, GlbExportReport,
+    GlbExportSelection, GlbSummary,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,6 +44,7 @@ pub struct BatchEntry {
     pub summary: Option<GlbSummary>,
     pub warnings: Vec<String>,
     pub error: Option<String>,
+    pub error_kind: Option<ErrorKind>,
     pub status: BatchFileStatus,
     pub completed_outputs: Vec<PathBuf>,
 }
@@ -53,6 +55,7 @@ pub struct BatchRequest {
     pub inputs: Vec<PathBuf>,
     pub output_root: PathBuf,
     pub recipe: GlbBatchRecipe,
+    pub selection: Option<super::request_spec::SelectionSpec>,
     pub overwrite_existing: bool,
 }
 
@@ -91,6 +94,7 @@ pub fn empty_entry(input: PathBuf) -> BatchEntry {
         summary: None,
         warnings: Vec::new(),
         error: None,
+        error_kind: None,
         status: BatchFileStatus::Error,
         completed_outputs: Vec::new(),
     }
@@ -120,6 +124,24 @@ pub fn run_preflight(
         entries.push(entry);
     }
     apply_path_conflicts(request, &mut entries);
+    let sources: Vec<_> = request.inputs.iter().map(|p| p.as_path()).collect();
+    for entry in &mut entries {
+        if entry.error.is_some() {
+            continue;
+        }
+        for output in &entry.outputs {
+            if let Err(error) = crate::modules::operation_support::check_output(
+                &output.path,
+                &sources,
+                request.overwrite_existing,
+            ) {
+                entry.error_kind = Some(error.kind);
+                entry.error = Some(error.to_string());
+                entry.status = BatchFileStatus::Error;
+                break;
+            }
+        }
+    }
     let all_valid = entries.iter().all(|entry| {
         matches!(
             entry.status,
@@ -137,26 +159,29 @@ pub fn run_export(
     entries: &[BatchEntry],
     task_id: u64,
     progress: &mut dyn FnMut(BatchProgress),
-) -> Result<(), String> {
+) -> Result<(), OperationError> {
     if entries.iter().any(|entry| {
         !matches!(
             entry.status,
             BatchFileStatus::Ready | BatchFileStatus::ReadyWithWarnings
         )
     }) {
-        return Err("Batch preflight contains errors; run it again".to_owned());
+        return Err(OperationError::validation(
+            "Batch preflight contains errors; run it again",
+        ));
     }
+    let mut snapshots = Vec::with_capacity(entries.len());
     for entry in entries {
-        let bytes = fs::read(&entry.input).map_err(|error| {
-            format!("{}: cannot re-read source: {error}", entry.input.display())
-        })?;
+        let bytes = fs::read(&entry.input)?;
         let actual = sha256_hex(&bytes);
         if entry.source_sha256.as_deref() != Some(actual.as_str()) {
-            return Err(format!(
+            return Err(OperationError::validation(format!(
                 "{} changed after preflight; run preflight again",
                 entry.input.display()
-            ));
+            )));
         }
+        snapshots
+            .push(GlbDocument::from_bytes(&bytes, Some(entry.input.clone()))?);
     }
     let source_paths = request
         .inputs
@@ -166,17 +191,17 @@ pub fn run_export(
     for entry in entries {
         for output in &entry.outputs {
             if source_paths.contains(&path_identity(&output.path)) {
-                return Err(format!(
+                return Err(OperationError::validation(format!(
                     "Output {} would overwrite a selected source GLB",
                     output.path.display()
-                ));
+                )));
             }
             if let Some(existing) = existing_equivalent_path(&output.path) {
                 if existing != output.path || !request.overwrite_existing {
-                    return Err(format!(
+                    return Err(OperationError::validation(format!(
                         "Output {} appeared after preflight; run preflight again",
                         output.path.display()
-                    ));
+                    )));
                 }
             }
         }
@@ -191,28 +216,22 @@ pub fn run_export(
             "GLB batch export file started"
         );
         let mut completed = Vec::new();
-        let result = (|| -> Result<(), String> {
-            let document = GlbDocument::load(&entry.input)
-                .map_err(|error| error.to_string())?;
+        let result = (|| -> Result<(), OperationError> {
+            let document = &snapshots[index];
             for output in &entry.outputs {
-                let mut candidate = document.clone();
-                candidate.prune_for_export(&output.selection).map_err(
-                    |error| format!("{}: {error}", output.path.display()),
+                super::pipeline::execute_job(
+                    &super::pipeline::ExportJob {
+                        document: document.clone(),
+                        selection: output.selection.clone(),
+                        path: output.path.clone(),
+                    },
+                    request.overwrite_existing,
                 )?;
-                candidate.export_atomic(&output.path).map_err(|error| {
-                    format!("{}: {error}", output.path.display())
-                })?;
-                GlbDocument::load(&output.path).map_err(|error| {
-                    format!(
-                        "{}: generated GLB failed re-parse: {error}",
-                        output.path.display()
-                    )
-                })?;
                 completed.push(output.path.clone());
             }
             Ok(())
         })();
-        let error = result.as_ref().err().cloned();
+        let error = result.as_ref().err().map(ToString::to_string);
         progress(BatchProgress::ExportFinished {
             index,
             completed: completed.clone(),
@@ -242,21 +261,29 @@ fn preflight_entry(request: &BatchRequest, input: &Path) -> BatchEntry {
         Ok(bytes) => bytes,
         Err(error) => {
             entry.error = Some(format!("Cannot read source: {error}"));
+            entry.error_kind = Some(ErrorKind::Io);
             entry.status = BatchFileStatus::Error;
             return entry;
         }
     };
     entry.source_sha256 = Some(sha256_hex(&bytes));
-    let document = match GlbDocument::load(input) {
-        Ok(document) => document,
-        Err(error) => {
-            entry.error = Some(error.to_string());
-            entry.status = BatchFileStatus::Error;
-            return entry;
-        }
-    };
+    let document =
+        match GlbDocument::from_bytes(&bytes, Some(input.to_path_buf())) {
+            Ok(document) => document,
+            Err(error) => {
+                entry.error = Some(error.to_string());
+                entry.error_kind = Some(OperationError::from(error).kind);
+                entry.status = BatchFileStatus::Error;
+                return entry;
+            }
+        };
     entry.summary = Some(document.summary());
-    let selection = match request.recipe.resolve(&document) {
+    let selection = match request
+        .selection
+        .as_ref()
+        .map(|spec| spec.resolve(&document))
+        .unwrap_or_else(|| request.recipe.resolve(&document))
+    {
         Ok(selection) => selection,
         Err(error) => {
             entry.error = Some(error.to_string());
@@ -332,44 +359,17 @@ fn build_outputs(
     };
     let base = format!("{stem}_{preset_suffix}");
     let parent = request.output_root.join(relative_parent);
-    if selection.animation_output == AnimationOutputMode::Split {
-        if selection.selected_animations.is_empty() {
-            return Err(
-                "Split animation output requires at least one animation"
-                    .to_owned(),
-            );
-        }
-        let names = document.animation_names();
-        let mut used = BTreeSet::new();
-        let mut outputs = Vec::new();
-        for animation_index in &selection.selected_animations {
-            let name = names
-                .get(*animation_index)
-                .cloned()
-                .unwrap_or_else(|| format!("animation-{animation_index}"));
-            let cleaned = clean_filename_component(&name);
-            let mut suffix = cleaned.clone();
-            let mut count = 1;
-            while !used.insert(suffix.to_ascii_lowercase()) {
-                count += 1;
-                suffix = format!("{cleaned}-{count}");
-            }
-            let mut split_selection = selection.clone();
-            split_selection.selected_animations =
-                BTreeSet::from([*animation_index]);
-            split_selection.animation_output = AnimationOutputMode::Combined;
-            outputs.push(PlannedOutput {
-                path: parent.join(format!("{base}--{suffix}.glb")),
-                selection: split_selection,
-            });
-        }
-        Ok(outputs)
-    } else {
-        Ok(vec![PlannedOutput {
-            path: parent.join(format!("{base}.glb")),
-            selection: selection.clone(),
-        }])
-    }
+    let base_path = parent.join(format!("{base}.glb"));
+    super::pipeline::build_export_jobs(document, selection, &base_path)
+        .map(|jobs| {
+            jobs.into_iter()
+                .map(|job| PlannedOutput {
+                    path: job.path,
+                    selection: job.selection,
+                })
+                .collect()
+        })
+        .map_err(|error| error.to_string())
 }
 
 fn apply_path_conflicts(request: &BatchRequest, entries: &mut [BatchEntry]) {
@@ -444,15 +444,9 @@ fn sha256_hex(bytes: &[u8]) -> String {
 }
 
 fn path_identity(path: &Path) -> String {
-    let absolute = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        std::env::current_dir()
-            .map(|directory| directory.join(path))
-            .unwrap_or_else(|_| path.to_path_buf())
-    };
-    let normalized = fs::canonicalize(&absolute).unwrap_or(absolute);
-    normalized.to_string_lossy().to_ascii_lowercase()
+    crate::modules::operation_support::path_identity(path)
+        .to_string_lossy()
+        .to_ascii_lowercase()
 }
 
 fn existing_equivalent_path(path: &Path) -> Option<PathBuf> {
@@ -469,30 +463,7 @@ fn existing_equivalent_path(path: &Path) -> Option<PathBuf> {
 }
 
 /// Sanitize one authored name into a portable file-name component.
-pub fn clean_filename_component(value: &str) -> String {
-    let cleaned = value
-        .chars()
-        .map(|character| {
-            if character.is_control()
-                || matches!(
-                    character,
-                    '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'
-                )
-            {
-                '_'
-            } else {
-                character
-            }
-        })
-        .collect::<String>();
-    let trimmed =
-        cleaned.trim_matches(|character| character == ' ' || character == '.');
-    if trimmed.is_empty() {
-        "animation".to_owned()
-    } else {
-        trimmed.to_owned()
-    }
-}
+pub use super::filename::clean_filename_component;
 
 #[cfg(test)]
 mod tests {
@@ -526,6 +497,7 @@ mod tests {
             input_root: root.clone(),
             inputs: vec![input.clone()],
             output_root: root.clone(),
+            selection: None,
             recipe: GlbBatchRecipe {
                 preset: GlbExportPreset::SkeletonAnimation,
                 ..Default::default()
@@ -543,6 +515,7 @@ mod tests {
             summary: None,
             warnings: Vec::new(),
             error: None,
+            error_kind: None,
             status: BatchFileStatus::Ready,
             completed_outputs: Vec::new(),
         }];

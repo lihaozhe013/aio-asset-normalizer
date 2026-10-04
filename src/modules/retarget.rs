@@ -570,7 +570,7 @@ pub struct ResolvedMapping {
     pub warnings: Vec<String>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RetargetOptions {
     pub root_motion: bool,
     pub normalize_initial_heading: bool,
@@ -646,12 +646,7 @@ pub fn save_mapping(
     mapping.validate_schema()?;
     let bytes = serde_json::to_vec_pretty(mapping)
         .map_err(|error| RetargetError::Mapping(error.to_string()))?;
-    let temporary = path.with_extension("json.tmp");
-    fs::write(&temporary, bytes)?;
-    if let Err(error) = crate::modules::atomic_file::replace(&temporary, path) {
-        let _ = fs::remove_file(&temporary);
-        return Err(RetargetError::Io(error));
-    }
+    crate::modules::atomic_file::write(path, &bytes, true)?;
     Ok(())
 }
 
@@ -1035,7 +1030,8 @@ pub fn retarget_bvh(
     let source_file_sha256 = source
         .source_path
         .as_deref()
-        .and_then(|path| fs::read(path).ok())
+        .map(fs::read)
+        .transpose()?
         .map(|bytes| sha256_hex(&bytes))
         .unwrap_or_default();
     let source_descriptor = SkeletonDescriptor::from_bvh(
@@ -1121,10 +1117,11 @@ pub fn retarget_glb(
         .iter()
         .map(|channel| channel.node)
         .collect::<HashSet<_>>();
-    let source_file_sha256 = source_document
-        .to_bytes()
-        .map(|bytes| sha256_hex(&bytes))
-        .unwrap_or_default();
+    let source_file_sha256 = sha256_hex(
+        &source_document
+            .to_bytes()
+            .map_err(|error| RetargetError::Source(error.to_string()))?,
+    );
     let mut source_descriptor = SkeletonDescriptor::from_runtime(
         source_runtime,
         source_document,

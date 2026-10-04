@@ -39,15 +39,11 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
             return;
         };
         let mut validation = document.validate_export_selection(&selection);
-        if selection.preset != GlbExportPreset::PreserveAll
-            && selection.remove_root_motion
-            && app.smart_loop_enabled
-        {
-            validation.errors.push(
-                app.i18n
-                    .tr("glb.export_root_motion_smart_loop_error")
-                    .to_owned(),
-            );
+        if let Err(error) = crate::modules::operations::glb::validate_edits(
+            &selection,
+            &app.glb_export_edits(app.bake_root_transform),
+        ) {
+            validation.errors.push(error.to_string());
         }
         let summary = document.summary();
         let bin_size = document.binary_size();
@@ -115,6 +111,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
             app.i18n.tr("glb.export_estimate_hint"),
         );
     }
+    ui.checkbox(&mut app.output_overwrite, "Overwrite existing outputs");
     app.glb_export_selection = selection;
     if app.task_busy {
         ui.label(app.i18n.tr("glb.export_busy"));

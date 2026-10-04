@@ -1,0 +1,57 @@
+name: Verify shared core and agent workflows
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  platforms:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - name: Verify CLI has no desktop dependencies
+        run: python scripts/verify-headless.py
+      - name: Test core and real CLI without desktop or Blender
+        run: cargo test --locked --no-default-features --features cli --all-targets
+      - name: Build standalone CLI
+        run: cargo build --locked --no-default-features --features cli --bin aio-asset-normalizer-cli
+      - name: Install Linux desktop build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libx11-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libgl1-mesa-dev libegl1-mesa-dev libwayland-dev libxkbcommon-dev libdbus-1-dev libglib2.0-dev pkg-config
+      - name: Test desktop adapters and default build
+        run: cargo test --locked --all-targets
+      - name: Check desktop-only feature
+        run: cargo check --locked --no-default-features --features desktop --bin aio-asset-normalizer
+      - name: Verify CLI archive with skill
+        run: python packaging/build-cli.py --debug
+
+  blender:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install fixed Blender runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libx11-6 libxi6 libxfixes3 libxrender1 libxxf86vm1 libxkbcommon0 libsm6 libgl1
+          curl --fail --location --retry 3 https://download.blender.org/release/Blender5.1/blender-5.1.2-linux-x64.tar.xz --output blender.tar.xz
+          tar -xf blender.tar.xz
+          echo "$PWD/blender-5.1.2-linux-x64" >> "$GITHUB_PATH"
+      - name: Verify fixed version
+        run: blender --version | rg '^Blender 5\.1\.2$'
+      - name: Compare Converter CLI and snapshot requests
+        run: cargo test --locked --no-default-features --features cli --test converter -- --include-ignored

@@ -1,31 +1,8 @@
 //! Small path and hashing helpers shared by the command modules.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use aio_asset_normalizer::modules::retarget::sha256_hex;
-
-pub fn file_sha256(path: &Path) -> String {
-    std::fs::read(path)
-        .map(|bytes| sha256_hex(&bytes))
-        .unwrap_or_default()
-}
-
-pub fn same_path(left: &Path, right: &Path) -> bool {
-    let left =
-        std::fs::canonicalize(left).unwrap_or_else(|_| left.to_path_buf());
-    let right =
-        std::fs::canonicalize(right).unwrap_or_else(|_| right.to_path_buf());
-
-    #[cfg(windows)]
-    {
-        left.to_string_lossy()
-            .eq_ignore_ascii_case(&right.to_string_lossy())
-    }
-    #[cfg(not(windows))]
-    {
-        left == right
-    }
-}
+pub use aio_asset_normalizer::modules::operations::same_path;
 
 /// Longest shared parent directory of the given files. A single input maps to
 /// its own directory so batch output keeps the input tree below it.

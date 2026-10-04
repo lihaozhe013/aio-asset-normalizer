@@ -103,6 +103,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
         if ui.button(app.i18n.tr("bvh.trim_apply")).clicked() {
             app.trim_bvh();
         }
+        ui.checkbox(&mut app.output_overwrite, "Overwrite existing outputs");
         if ui.button(app.i18n.tr("menu.export")).clicked() {
             app.dispatch_action(&MenuAction::Export);
         }

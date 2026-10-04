@@ -130,12 +130,7 @@ pub fn save_agent_prompt(
     path: &std::path::Path,
     prompt: &str,
 ) -> Result<(), RetargetError> {
-    let temporary = path.with_extension("md.tmp");
-    std::fs::write(&temporary, prompt)?;
-    if let Err(error) = crate::modules::atomic_file::replace(&temporary, path) {
-        let _ = std::fs::remove_file(&temporary);
-        return Err(RetargetError::Io(error));
-    }
+    crate::modules::atomic_file::write(path, prompt.as_bytes(), true)?;
     Ok(())
 }
 

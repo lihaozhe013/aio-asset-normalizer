@@ -121,3 +121,16 @@ rg "\[fbx_converter\]" \
   "/path/to/aio-asset-normalizer/logs/fbx-converter.log" \
   > fbx-converter-debug.log
 ```
+
+## Shared execution and output policy
+
+GUI and CLI execute `operations::converter::ConversionRequest` using the same
+fixed profile. Overwrite is opt-in in both interfaces. Each conversion uses a
+unique temporary script directory and temporary GLB in the destination directory.
+The core re-parses the generated GLB before atomic commit. Failed conversion or
+validation preserves the old output; no-clobber commit also protects a file
+created after preflight. Batch output collisions are rejected before execution.
+
+CLI `--dry-run` checks inputs, supported formats, dependency discovery, and path
+conflicts without starting Blender or creating destination directories. Its
+`preflight-only` report is not a successful import or generated-GLB validation.

@@ -1,5 +1,45 @@
 use std::io;
+use std::io::Write;
 use std::path::Path;
+
+/// Stage beside the destination so the final commit never crosses filesystems.
+pub fn stage(destination: &Path) -> io::Result<tempfile::NamedTempFile> {
+    let parent = destination
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    std::fs::create_dir_all(parent)?;
+    tempfile::Builder::new()
+        .prefix(".aio-")
+        .suffix(".glb")
+        .tempfile_in(parent)
+}
+
+pub fn commit(
+    staged: tempfile::NamedTempFile,
+    destination: &Path,
+    overwrite: bool,
+) -> io::Result<()> {
+    staged.as_file().sync_all()?;
+    if overwrite {
+        staged.persist(destination).map_err(|error| error.error)?;
+    } else {
+        staged
+            .persist_noclobber(destination)
+            .map_err(|error| error.error)?;
+    }
+    Ok(())
+}
+
+pub fn write(
+    destination: &Path,
+    bytes: &[u8],
+    overwrite: bool,
+) -> io::Result<()> {
+    let mut staged = stage(destination)?;
+    staged.write_all(bytes)?;
+    commit(staged, destination, overwrite)
+}
 
 #[cfg(any(not(windows), test))]
 use std::fs;

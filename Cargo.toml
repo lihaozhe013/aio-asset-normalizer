@@ -6,26 +6,55 @@ description = "A cross-platform GLB editor and generic BVH motion standardizatio
 license = "MIT"
 authors = []
 
+[features]
+default = ["desktop", "cli"]
+desktop = ["dep:three-d", "dep:three-d-asset", "dep:egui-phosphor", "dep:winit", "dep:rfd", "dep:arboard", "dep:open", "dep:sys-locale", "dep:serde_yaml", "dep:winres"]
+cli = ["dep:clap"]
+
+[[bin]]
+name = "aio-asset-normalizer"
+path = "src/main.rs"
+required-features = ["desktop"]
+
+[[bin]]
+name = "aio-asset-normalizer-cli"
+path = "src/bin/aio-asset-normalizer-cli/main.rs"
+required-features = ["cli"]
+
+[[test]]
+name = "cli"
+required-features = ["cli"]
+
+[[test]]
+name = "agent_workflows"
+required-features = ["cli"]
+
+[[test]]
+name = "converter"
+required-features = ["cli"]
+
 [dependencies]
-three-d = { version = "0.19", features = ["egui-gui"] }
+three-d = { version = "0.19", features = ["egui-gui"], optional = true }
 gltf = { version = "1.4", features = ["KHR_lights_punctual", "extensions", "names"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-serde_yaml = "0.9"
+serde_yaml = { version = "0.9", optional = true }
 sha2 = "0.10"
-sys-locale = "0.3"
+schemars = "1.2"
+tempfile = "3"
+sys-locale = { version = "0.3", optional = true }
 dirs = "5"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-rfd = "0.15"
-arboard = "3"
-open = "5"
+rfd = { version = "0.15", optional = true }
+arboard = { version = "3", optional = true }
+open = { version = "5", optional = true }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
-winit = "0.28"
+winit = { version = "0.28", optional = true }
 
-three-d-asset = { version = "0.10", features = ["gltf", "image"] }
-egui-phosphor = "0.12"
-clap = { version = "4", features = ["derive"] }
+three-d-asset = { version = "0.10", features = ["gltf", "image"], optional = true }
+egui-phosphor = { version = "0.12", optional = true }
+clap = { version = "4", features = ["derive"], optional = true }
 
 [target.'cfg(windows)'.build-dependencies]
-winres = "0.1"
+winres = { version = "0.1", optional = true }

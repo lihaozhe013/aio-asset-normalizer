@@ -1,20 +1,19 @@
-use std::fs;
 use std::path::Path;
 use std::sync::mpsc;
 
 use crate::app::{App, ExportTaskResult, TaskKind};
-use crate::modules::bvh;
 use crate::modules::glb::pipeline::{
-    apply_export_edits, build_export_jobs, ExportEdits,
-    ExportJob as GlbExportJob,
+    apply_export_edits, ExportEdits, ExportJob as GlbExportJob,
 };
-use crate::modules::glb::{
-    AnimationOutputMode, GlbDocument, GlbExportPreset, GlbExportSelection,
-};
+use crate::modules::glb::{GlbDocument, GlbExportSelection};
 use crate::modules::logging::{next_task_id, safe_path_label};
 
 pub(crate) use crate::modules::glb::pipeline::format_export_report;
 
+#[cfg(test)]
+use crate::modules::glb::pipeline::build_export_jobs;
+#[cfg(test)]
+use crate::modules::glb::{AnimationOutputMode, GlbExportPreset};
 #[cfg(test)]
 use std::collections::BTreeSet;
 
@@ -49,6 +48,31 @@ impl App {
         self.build_glb_export_snapshot_with_root_transform(false)
     }
 
+    pub(crate) fn glb_export_edits(
+        &self,
+        include_root_transform: bool,
+    ) -> ExportEdits {
+        ExportEdits {
+            orientation_euler_degrees: self.orientation_euler_degrees,
+            root_scale: self.root_scale,
+            root_translation: self.root_translation,
+            trim: self.trim_enabled.then_some((
+                self.trim_animation,
+                self.trim_start,
+                self.trim_end,
+            )),
+            animation_rate: ((self.glb_animation_rate - 1.0).abs()
+                > f32::EPSILON
+                || !self.glb_animation_rate.is_finite())
+            .then_some((self.glb_animation_index, self.glb_animation_rate)),
+            smart_loop: self.smart_loop_enabled.then_some((
+                self.glb_animation_index,
+                self.smart_loop_transition,
+            )),
+            bake_root_transform: include_root_transform,
+        }
+    }
+
     fn build_glb_export_snapshot_with_root_transform(
         &self,
         include_root_transform: bool,
@@ -57,52 +81,7 @@ impl App {
             return Err("Nothing to export".to_owned());
         };
 
-        let rate = self.glb_animation_rate;
-        if !rate.is_finite() || rate <= 0.0 {
-            return Err("Animation rate must be finite and greater than zero"
-                .to_owned());
-        }
-        let animation_rate = if (rate - 1.0).abs() > f32::EPSILON {
-            let animation = self.glb_animation_index;
-            let clip = self
-                .canvas
-                .animation_clips()
-                .get(animation)
-                .ok_or_else(|| {
-                    format!(
-                        "Cannot export animation rate: animation {animation} is unavailable"
-                    )
-                })?;
-            if !clip.is_playable() {
-                return Err(format!(
-                    "Cannot export animation rate: animation {animation} is unavailable"
-                ));
-            }
-            Some((animation, rate))
-        } else {
-            None
-        };
-        let trim = if self.trim_enabled {
-            Some((self.trim_animation, self.trim_start, self.trim_end))
-        } else {
-            None
-        };
-        let smart_loop = if self.smart_loop_enabled {
-            Some((self.glb_animation_index, self.smart_loop_transition))
-        } else {
-            None
-        };
-
-        let edits = ExportEdits {
-            orientation_euler_degrees: self.orientation_euler_degrees,
-            root_scale: self.root_scale,
-            root_translation: self.root_translation,
-            trim,
-            animation_rate,
-            smart_loop,
-            bake_root_transform: include_root_transform,
-        };
-
+        let edits = self.glb_export_edits(include_root_transform);
         let mut snapshot = document.clone();
         apply_export_edits(&mut snapshot, &edits)
             .map_err(|error| error.to_string())?;
@@ -422,7 +401,14 @@ impl App {
                 return;
             }
         };
-        let jobs = match build_export_jobs(&document, &selection, &path) {
+        let jobs = match crate::modules::operations::glb::prepare_export(
+            &document,
+            &self.glb_export_edits(self.bake_root_transform),
+            &selection,
+            &path,
+            &self.glb_path.as_deref().into_iter().collect::<Vec<_>>(),
+            self.output_overwrite,
+        ) {
             Ok(jobs) => jobs,
             Err(error) => {
                 tracing::error!(
@@ -450,68 +436,11 @@ impl App {
         &self,
         selection: &GlbExportSelection,
     ) -> Result<(), String> {
-        if selection.animation_output == AnimationOutputMode::Split
-            && selection.preset == GlbExportPreset::PreserveAll
-        {
-            return Err(
-                "Split animation output requires Character Package or Skeleton Animation"
-                    .to_owned(),
-            );
-        }
-        if selection.animation_output == AnimationOutputMode::Split
-            && selection.selected_animations.is_empty()
-        {
-            return Err(
-                "Split animation output requires at least one selected animation"
-                .to_owned(),
-            );
-        }
-        if selection.preset != GlbExportPreset::PreserveAll
-            && selection.remove_root_motion
-            && self.smart_loop_enabled
-        {
-            return Err(self
-                .i18n
-                .tr("glb.export_root_motion_smart_loop_error")
-                .to_owned());
-        }
-        if let Some(document) = self.glb.as_ref() {
-            if let Some(error) = self.glb_trim_settings_error(document) {
-                return Err(error);
-            }
-        }
-        if selection.preset == GlbExportPreset::PreserveAll {
-            return Ok(());
-        }
-        if self.trim_enabled
-            && !selection.selected_animations.contains(&self.trim_animation)
-        {
-            return Err(format!(
-                "Trim animation {} must be included in the export selection",
-                self.trim_animation
-            ));
-        }
-        if self.smart_loop_enabled
-            && !selection
-                .selected_animations
-                .contains(&self.glb_animation_index)
-        {
-            return Err(format!(
-                "Smart LOOP animation {} must be included in the export selection",
-                self.glb_animation_index
-            ));
-        }
-        if (self.glb_animation_rate - 1.0).abs() > f32::EPSILON
-            && !selection
-                .selected_animations
-                .contains(&self.glb_animation_index)
-        {
-            return Err(format!(
-                "Animation rate target {} must be included in the export selection",
-                self.glb_animation_index
-            ));
-        }
-        Ok(())
+        crate::modules::operations::glb::validate_edits(
+            selection,
+            &self.glb_export_edits(self.bake_root_transform),
+        )
+        .map_err(|e| e.to_string())
     }
 
     fn start_glb_export_task(&mut self, jobs: Vec<GlbExportJob>) {
@@ -533,25 +462,21 @@ impl App {
             baked_note,
             "Building outputs in background"
         );
+        let overwrite = self.output_overwrite;
         std::thread::spawn(move || {
             let mut paths = Vec::new();
             let mut details = Vec::new();
             let result = (|| {
                 for job in jobs {
-                    let mut output = job.document;
-                    let report = output
-                        .prune_for_export(&job.selection)
-                        .map_err(|error| {
-                            format!("{}: {error}", safe_path_label(&job.path))
-                        })?;
+                    let report = crate::modules::operations::glb::execute_job(
+                        &job, overwrite,
+                    )
+                    .map_err(|e| e.to_string())?;
                     details.push(format!(
                         "Export report {}: {}",
                         safe_path_label(&job.path),
                         format_export_report(&report)
                     ));
-                    output.export_atomic(&job.path).map_err(|error| {
-                        format!("{}: {error}", safe_path_label(&job.path))
-                    })?;
                     paths.push(job.path);
                 }
                 Ok(())
@@ -590,7 +515,31 @@ impl App {
             );
             return;
         }
-        match bvh::save_mapping(&path, mapping) {
+        let sources: Vec<_> = [
+            self.mapping_path.as_deref(),
+            self.bvh_path.as_deref(),
+            self.bvh_target_path.as_deref(),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        let result = (|| {
+            crate::modules::operations::check_output(
+                &path,
+                &sources,
+                self.output_overwrite,
+            )
+            .map_err(|e| e.to_string())?;
+            let bytes = serde_json::to_vec_pretty(mapping)
+                .map_err(|e| e.to_string())?;
+            crate::modules::atomic_file::write(
+                &path,
+                &bytes,
+                self.output_overwrite,
+            )
+            .map_err(|e| e.to_string())
+        })();
+        match result {
             Ok(()) => {
                 self.file_tree.refresh();
                 self.bvh_file_tree.refresh();
@@ -628,7 +577,12 @@ impl App {
             );
             return;
         }
-        match document.write(&path) {
+        match crate::modules::operations::bvh::write(
+            document,
+            &path,
+            self.bvh_path.as_deref().unwrap_or(Path::new("")),
+            self.output_overwrite,
+        ) {
             Ok(()) => {
                 self.file_tree.refresh();
                 self.bvh_file_tree.refresh();
@@ -652,16 +606,5 @@ fn is_source_path(path: &Path, source: Option<&Path>) -> bool {
 }
 
 fn same_path(left: &Path, right: &Path) -> bool {
-    let left = fs::canonicalize(left).unwrap_or_else(|_| left.to_path_buf());
-    let right = fs::canonicalize(right).unwrap_or_else(|_| right.to_path_buf());
-
-    #[cfg(windows)]
-    {
-        left.to_string_lossy()
-            .eq_ignore_ascii_case(&right.to_string_lossy())
-    }
-    #[cfg(not(windows))]
-    {
-        left == right
-    }
+    crate::modules::operations::same_path(left, right)
 }

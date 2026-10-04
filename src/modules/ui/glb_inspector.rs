@@ -502,6 +502,7 @@ fn render_retarget_tab(app: &mut App, ui: &mut three_d::egui::Ui) {
         if ui.button("Import Mapping").clicked() {
             app.import_mapping();
         }
+        ui.checkbox(&mut app.output_overwrite, "Overwrite existing outputs");
         if ui.button("Export Agent Mapping Prompt").clicked() {
             app.export_glb_retarget_agent_prompt();
         }

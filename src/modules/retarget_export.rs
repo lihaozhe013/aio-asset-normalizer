@@ -5,7 +5,6 @@
 //! validation, key reduction, animation replacement, and atomic export stay in
 //! one place.
 
-use std::collections::HashSet;
 use std::path::Path;
 
 use crate::modules::bvh::{BvhDocument, BvhError, RetargetClip};
@@ -14,7 +13,7 @@ use crate::modules::glb::{
     GlbExportReport, GlbExportSelection, SkinData,
 };
 use crate::modules::retarget::{
-    self, RetargetError, RetargetOptions, SkeletonDescriptor, SkeletonMapping,
+    self, RetargetError, RetargetOptions, SkeletonMapping,
 };
 
 #[derive(Debug)]
@@ -92,19 +91,12 @@ pub fn retarget_clip_from_glb(
                 error.to_string(),
             ))
         })?;
-    let effective_mapping = mapping_for_glb_snapshot(
-        mapping,
-        &runtime,
-        source_document,
-        clip_index,
-        &source_bytes,
-    )?;
     let mut clip = retarget::retarget_glb(
         &runtime,
         source_document,
         clip_index,
         target_skin,
-        &effective_mapping,
+        mapping,
         options,
         name,
     )?;
@@ -148,44 +140,4 @@ fn reduce_clip_keys(
         clip.reduce_keys(tolerance)?;
     }
     Ok(())
-}
-
-/// Rebuild the source fingerprint in `mapping` from the concrete runtime that
-/// will be retargeted, so validation compares the same skeleton and file.
-fn mapping_for_glb_snapshot(
-    mapping: &SkeletonMapping,
-    runtime: &AnimationRuntime,
-    source_document: &GlbDocument,
-    clip_index: usize,
-    source_bytes: &[u8],
-) -> Result<SkeletonMapping, RetargetExportError> {
-    let clip = runtime.clips.get(clip_index).ok_or_else(|| {
-        RetargetExportError::Retarget(RetargetError::Source(format!(
-            "Animation {clip_index} does not exist"
-        )))
-    })?;
-    let animated_nodes = clip
-        .channels
-        .iter()
-        .map(|channel| channel.node)
-        .collect::<HashSet<_>>();
-    let descriptor = SkeletonDescriptor::from_runtime(
-        runtime,
-        source_document,
-        mapping
-            .source
-            .skin
-            .as_ref()
-            .map(|skin| skin.index)
-            .unwrap_or(0),
-        &animated_nodes,
-        retarget::sha256_hex(source_bytes),
-        mapping.source.up_axis.clone(),
-        mapping.source.forward_axis.clone(),
-        mapping.source.unit.clone(),
-    )?;
-    let mut effective = mapping.clone();
-    effective.source.file_sha256 = descriptor.file_sha256;
-    effective.source.skeleton_sha256 = descriptor.skeleton_sha256;
-    Ok(effective)
 }

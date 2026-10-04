@@ -168,7 +168,11 @@ pub fn run_task(task: &ConversionTask) -> Result<(), BlenderError> {
 
     let blender = find_blender(task.blender_path.as_deref())
         .ok_or(BlenderError::BlenderNotFound)?;
-    let script = materialize_script()?;
+    let script_directory = tempfile::tempdir()
+        .map_err(|e| BlenderError::ScriptWrite(e.to_string()))?;
+    let script = script_directory.path().join(SCRIPT_FILE_NAME);
+    std::fs::write(&script, SCRIPT_SOURCE)
+        .map_err(|e| BlenderError::ScriptWrite(e.to_string()))?;
 
     tracing::info!(
         target: "fbx_converter",
@@ -204,7 +208,7 @@ pub fn run_task(task: &ConversionTask) -> Result<(), BlenderError> {
 
     let input_label = safe_path_label(&task.input);
     let stdout_task_id = task.task_id;
-    std::thread::spawn(move || {
+    let stdout_reader = std::thread::spawn(move || {
         let reader = std::io::BufReader::new(stdout);
         for line in reader.lines().map_while(Result::ok) {
             if !line.trim().is_empty() {
@@ -222,7 +226,7 @@ pub fn run_task(task: &ConversionTask) -> Result<(), BlenderError> {
 
     let input_label = safe_path_label(&task.input);
     let stderr_task_id = task.task_id;
-    std::thread::spawn(move || {
+    let stderr_reader = std::thread::spawn(move || {
         let reader = std::io::BufReader::new(stderr);
         for line in reader.lines().map_while(Result::ok) {
             if !line.trim().is_empty() {
@@ -241,6 +245,8 @@ pub fn run_task(task: &ConversionTask) -> Result<(), BlenderError> {
     let status = child
         .wait()
         .map_err(|error| BlenderError::Spawn(error.to_string()))?;
+    let _ = stdout_reader.join();
+    let _ = stderr_reader.join();
     if !status.success() {
         return Err(BlenderError::ExitCode(status.code()));
     }

@@ -12,6 +12,9 @@ use serde_json::{json, Value};
 mod transform;
 use self::transform::*;
 
+mod document_io;
+mod document_validation;
+mod filename;
 mod resources;
 pub use self::resources::{PrimitiveTarget, TextureSlot};
 
@@ -29,6 +32,7 @@ mod batch;
 pub mod batch_runner;
 mod orientation_presets;
 pub mod pipeline;
+pub mod request_spec;
 mod root_motion;
 mod smart_loop;
 #[allow(unused_imports)]
@@ -106,7 +110,7 @@ pub enum ForwardAxis {
     NegativeZ,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct GlbSummary {
     pub scenes: usize,
     pub nodes: usize,
@@ -933,67 +937,6 @@ impl GlbDocument {
             ));
         }
         Ok(())
-    }
-
-    pub fn export_atomic(&self, path: &Path) -> Result<(), GlbError> {
-        let bytes = self.to_bytes()?;
-        Self::from_bytes(&bytes, None)?;
-        let parent = path.parent().unwrap_or_else(|| Path::new("."));
-        fs::create_dir_all(parent)?;
-        let temporary = path.with_extension("glb.tmp");
-        fs::write(&temporary, bytes)?;
-        if let Err(error) =
-            crate::modules::atomic_file::replace(&temporary, path)
-        {
-            let _ = fs::remove_file(&temporary);
-            return Err(error.into());
-        }
-        Ok(())
-    }
-
-    fn from_bytes(
-        bytes: &[u8],
-        source_path: Option<PathBuf>,
-    ) -> Result<Self, GlbError> {
-        let glb = gltf::binary::Glb::from_slice(bytes)?;
-        let json =
-            serde_json::from_slice::<Value>(&glb.json).map_err(|error| {
-                GlbError::Invalid(format!("JSON chunk: {error}"))
-            })?;
-        gltf::Gltf::from_slice(bytes)?;
-        Ok(Self {
-            source_path,
-            json,
-            bin: glb.bin.map(Cow::into_owned),
-            dirty: false,
-        })
-    }
-
-    pub fn to_bytes(&self) -> Result<Vec<u8>, GlbError> {
-        let mut json_bytes =
-            serde_json::to_vec(&self.json).map_err(|error| {
-                GlbError::Invalid(format!("Serialize JSON: {error}"))
-            })?;
-        while json_bytes.len() % 4 != 0 {
-            json_bytes.push(b' ');
-        }
-        let bin = self.bin.as_deref().map(|data| {
-            let mut padded = data.to_vec();
-            while padded.len() % 4 != 0 {
-                padded.push(0);
-            }
-            padded
-        });
-        let glb = gltf::binary::Glb {
-            header: gltf::binary::Header {
-                magic: *b"glTF",
-                version: 2,
-                length: 0,
-            },
-            json: Cow::Owned(json_bytes),
-            bin: bin.map(Cow::Owned),
-        };
-        glb.to_vec().map_err(GlbError::from)
     }
 
     fn map_root_nodes<F>(&mut self, mut operation: F) -> Result<(), GlbError>

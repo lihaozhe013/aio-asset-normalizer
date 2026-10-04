@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 use aio_asset_normalizer::modules::bvh::{BvhChannel, BvhDocument};
 
 use crate::output::{self, CliError};
-use crate::util::same_path;
+use aio_asset_normalizer::modules::operations::{self, bvh as core};
 
 #[derive(Args)]
 pub struct BvhArgs {
@@ -33,12 +33,15 @@ pub struct InspectArgs {
 
 #[derive(Args)]
 pub struct ProcessArgs {
+    /// Shared BVH processing request
+    #[arg(long)]
+    pub job: Option<PathBuf>,
     /// Source BVH
-    #[arg(value_name = "BVH")]
-    pub input: PathBuf,
+    #[arg(value_name = "BVH", required_unless_present = "job")]
+    pub input: Option<PathBuf>,
     /// Destination BVH
-    #[arg(long, value_name = "FILE")]
-    pub output: PathBuf,
+    #[arg(long, value_name = "FILE", required_unless_present = "job")]
+    pub output: Option<PathBuf>,
     /// Keep only the seconds between START and END
     #[arg(long, num_args = 2, value_names = ["START", "END"])]
     pub trim: Option<Vec<f32>>,
@@ -134,34 +137,57 @@ fn process(args: &ProcessArgs) -> i32 {
     let fail =
         |error: CliError| output::emit_failure(COMMAND, json!({}), &error);
 
-    let mut document = match BvhDocument::load(&args.input) {
+    let request = match &args.job {
+        Some(path) => match operations::load_json::<core::BvhProcessRequest>(
+            path, "BVH job",
+        ) {
+            Ok(request) => request,
+            Err(error) => return fail(output::operation_error(error)),
+        },
+        None => core::BvhProcessRequest {
+            command: None,
+            input: match &args.input {
+                Some(path) => path.clone(),
+                None => return fail(CliError::usage("Source BVH is required")),
+            },
+            output: match &args.output {
+                Some(path) => path.clone(),
+                None => return fail(CliError::usage("--output is required")),
+            },
+            trim: args.trim.as_ref().map(|v| [v[0], v[1]]),
+            overwrite: args.overwrite,
+        },
+    };
+    if request.command.as_deref().is_some_and(|v| v != COMMAND) {
+        return fail(CliError::validation(
+            "BVH job declares a different command",
+        ));
+    }
+    let mut document = match BvhDocument::load(&request.input) {
         Ok(document) => document,
         Err(error) => return fail(output::bvh_error(error)),
     };
     let original_frames = document.frames.len();
 
-    if let Some(range) = &args.trim {
-        let (start, end) = (range[0], range[1]);
-        if let Err(error) = document.trim(start, end) {
-            return fail(output::bvh_error(error));
-        }
-    }
+    document = match aio_asset_normalizer::modules::operations::bvh::prepare(
+        &document,
+        request.trim,
+    ) {
+        Ok(document) => document,
+        Err(e) => return fail(output::operation_error(e)),
+    };
 
-    if same_path(&args.output, &args.input) {
-        return fail(CliError::validation(
-            "output must not replace the source BVH",
-        ));
+    if let Err(error) = core::validate_output(
+        &document,
+        &request.output,
+        &request.input,
+        request.overwrite,
+    ) {
+        return fail(output::operation_error(error));
     }
-    if args.output.exists() && !args.overwrite {
-        return fail(CliError::validation(format!(
-            "output already exists: {} (pass --overwrite)",
-            args.output.display()
-        )));
-    }
-
     let result = json!({
-        "input": args.input.display().to_string(),
-        "output": args.output.display().to_string(),
+        "input": request.input.display().to_string(),
+        "output": request.output.display().to_string(),
         "original_frame_count": original_frames,
         "output_frame_count": document.frames.len(),
         "written": !args.dry_run,
@@ -171,8 +197,13 @@ fn process(args: &ProcessArgs) -> i32 {
         return output::emit_success(COMMAND, result, Vec::new());
     }
 
-    if let Err(error) = document.write(&args.output) {
-        return fail(output::bvh_error(error));
+    if let Err(error) = aio_asset_normalizer::modules::operations::bvh::write(
+        &document,
+        &request.output,
+        &request.input,
+        request.overwrite,
+    ) {
+        return fail(output::operation_error(error));
     }
     output::emit_success(COMMAND, result, Vec::new())
 }

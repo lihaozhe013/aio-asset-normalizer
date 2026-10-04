@@ -56,6 +56,11 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
     });
     ui.add_space(8.0);
 
+    ui.checkbox(
+        &mut app.converter_overwrite,
+        "Overwrite existing conversion outputs",
+    );
+
     let selected_count = app.converter_file_tree.selected_files().len();
     let blender_available = app.converter_blender_status().is_some();
     let can_start =

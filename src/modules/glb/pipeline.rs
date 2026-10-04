@@ -3,9 +3,10 @@
 //! The desktop application and the CLI apply the same pending edits, split
 //! animation output, and export selection so both front ends stay identical.
 
+use crate::modules::operation_support::{check_output, OperationError};
 use std::path::PathBuf;
 
-use super::batch_runner::clean_filename_component;
+use super::filename::clean_filename_component;
 use super::{
     AnimationOutputMode, EditOperation, GlbDocument, GlbError, GlbExportReport,
     GlbExportSelection, RootTransformPreview, SmartLoopOptions,
@@ -45,7 +46,7 @@ pub fn apply_export_edits(
     document: &mut GlbDocument,
     edits: &ExportEdits,
 ) -> Result<(), GlbError> {
-    if edits.bake_root_transform {
+    {
         RootTransformPreview {
             euler_degrees: edits.orientation_euler_degrees,
             scale: edits.root_scale,
@@ -211,4 +212,23 @@ pub fn format_export_report(report: &GlbExportReport) -> String {
         report.source_glb_bytes,
         report.output_glb_bytes,
     )
+}
+
+pub fn preview_job(job: &ExportJob) -> Result<GlbExportReport, OperationError> {
+    let mut output = job.document.clone();
+    let report = output.prune_for_export(&job.selection)?;
+    GlbDocument::from_bytes(&output.to_bytes()?, None)?;
+    Ok(report)
+}
+pub fn execute_job(
+    job: &ExportJob,
+    overwrite: bool,
+) -> Result<GlbExportReport, OperationError> {
+    let mut output = job.document.clone();
+    let report = output.prune_for_export(&job.selection)?;
+    if let Some(source) = job.document.source_path.as_deref() {
+        check_output(&job.path, &[source], overwrite)?;
+    }
+    output.export_atomic_with_policy(&job.path, overwrite)?;
+    Ok(report)
 }

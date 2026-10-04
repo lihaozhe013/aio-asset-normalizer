@@ -23,6 +23,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CARGO_TOML = PROJECT_ROOT / "Cargo.toml"
 TARGET_DIR = PROJECT_ROOT / "target"
 CLI_REFERENCE = PROJECT_ROOT / "docs" / CLI_REFERENCE_NAME
+SKILL_SOURCE = PROJECT_ROOT / "skills" / APP_ID
 
 
 def read_version() -> str:
@@ -92,11 +93,12 @@ def readme_text(version: str, platform_label: str) -> str:
         "--overwrite.\n"
         "\n"
         f"Full reference: {CLI_REFERENCE_NAME}\n"
+        "Generic agent skill: skills/aio-asset-normalizer/SKILL.md\n"
     )
 
 
 def write_archive(archive_path: Path, staging: Path, platform_label: str) -> None:
-    names = [executable_name(platform_label), CLI_REFERENCE_NAME, CLI_README_NAME]
+    names = [path.relative_to(staging).as_posix() for path in sorted(staging.rglob("*")) if path.is_file()]
     if archive_path.exists():
         archive_path.unlink()
     if platform_label == "win":
@@ -134,14 +136,14 @@ def build_cli_archive(
         command: list[object] = ["cargo", "build"]
         if profile == "release":
             command.append("--release")
-        command += ["--bin", CLI_BINARY_NAME]
+        command += ["--locked", "--no-default-features", "--features", "cli", "--bin", CLI_BINARY_NAME]
         run(command, cwd=PROJECT_ROOT)
 
     if not binary_source.exists():
         print(f"[ERROR] CLI executable not found: {binary_source}")
         print(
             "        Build it first with: "
-            f"cargo build --release --bin {CLI_BINARY_NAME}"
+            f"cargo build --locked --release --no-default-features --features cli --bin {CLI_BINARY_NAME}"
         )
         raise SystemExit(1)
     if not CLI_REFERENCE.exists():
@@ -162,6 +164,7 @@ def build_cli_archive(
         shutil.copy2(binary_source, binary_target)
         binary_target.chmod(0o755)
         shutil.copy2(CLI_REFERENCE, staging / CLI_REFERENCE_NAME)
+        shutil.copytree(SKILL_SOURCE, staging / "skills" / APP_ID)
         (staging / CLI_README_NAME).write_text(
             readme_text(version, platform_label), encoding="utf-8"
         )

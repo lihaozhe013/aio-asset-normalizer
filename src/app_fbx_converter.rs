@@ -2,11 +2,10 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 
 use crate::app::App;
-use crate::modules::blender::bridge::{self, BlenderError};
+use crate::modules::blender::bridge;
 use crate::modules::blender::task::{
     normalized_output_path, ConversionTask, ConverterMessage,
 };
-use crate::modules::glb::GlbDocument;
 use crate::modules::logging::{next_task_id, safe_path_label};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,6 +95,35 @@ impl App {
                 blender_path: self.blender_path.clone(),
             })
             .collect();
+        let requests: Vec<_> = tasks
+            .iter()
+            .map(|task| {
+                crate::modules::operations::converter::ConversionRequest {
+                    input: task.input.clone(),
+                    output: task.output.clone(),
+                    blender: task.blender_path.as_ref().map(PathBuf::from),
+                    overwrite: self.converter_overwrite,
+                }
+            })
+            .collect();
+        if let Err(error) =
+            crate::modules::operations::converter::validate_batch_outputs(
+                &requests,
+            )
+        {
+            self.converter_results = tasks
+                .iter()
+                .map(|task| ConverterFileState {
+                    task_id: Some(task.task_id),
+                    input: task.input.clone(),
+                    output: task.output.clone(),
+                    status: ConverterStatus::Failed,
+                    error: Some(error.to_string()),
+                })
+                .collect();
+            tracing::error!(target: "fbx_converter", error = %error, "Conversion output preflight failed");
+            return;
+        }
         self.converter_results = tasks
             .iter()
             .map(|task| ConverterFileState {
@@ -116,6 +144,7 @@ impl App {
             "Starting conversion batch"
         );
 
+        let overwrite = self.converter_overwrite;
         std::thread::spawn(move || {
             for task in tasks {
                 let input = task.input.clone();
@@ -130,7 +159,7 @@ impl App {
                     input = %safe_path_label(&input),
                     "Conversion file started"
                 );
-                let result = run_and_validate(&task, &output);
+                let result = run_and_validate(&task, &output, overwrite);
                 let _ = tx.send(ConverterMessage::FileFinished {
                     task_id: task.task_id,
                     input,
@@ -249,13 +278,19 @@ impl App {
 fn run_and_validate(
     task: &ConversionTask,
     output: &Path,
+    overwrite: bool,
 ) -> Result<(), String> {
-    bridge::run_task(task).map_err(|error: BlenderError| error.to_string())?;
-    GlbDocument::load(output)
-        .map_err(|error| {
-            format!("conversion produced an unreadable GLB: {error}")
-        })
-        .map(|_| ())
+    crate::modules::operations::converter::execute(
+        &crate::modules::operations::converter::ConversionRequest {
+            input: task.input.clone(),
+            output: output.to_path_buf(),
+            blender: task.blender_path.as_ref().map(PathBuf::from),
+            overwrite,
+        },
+        task.task_id,
+    )
+    .map(|_| ())
+    .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

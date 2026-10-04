@@ -1,12 +1,8 @@
-use std::collections::HashSet;
-use std::fs;
 use std::path::Path;
 use std::sync::mpsc;
 
 use crate::app::{App, ExportTaskResult, TaskKind};
-use crate::modules::glb::AnimationRuntime;
 use crate::modules::logging::{next_task_id, safe_path_label};
-use crate::modules::retarget::{self, SkeletonDescriptor, SourceKind};
 
 impl App {
     pub(crate) fn export_retarget_agent_prompt(&mut self) {
@@ -29,18 +25,6 @@ impl App {
             return;
         };
         let target_skin_index = self.retarget_target_skin_index;
-        let target_skin = match target_document.skin_data_at(target_skin_index)
-        {
-            Ok(skin) => skin,
-            Err(error) => {
-                tracing::error!(
-                    target: "retarget_agent",
-                    error = %error,
-                    "Target Skin is unavailable"
-                );
-                return;
-            }
-        };
         let source_path = bvh.source_path.clone();
         let target_path = target_document.source_path.clone();
         let source_name = source_path
@@ -76,6 +60,10 @@ impl App {
         let source_forward_axis = self.bvh_forward_axis.clone();
         let source_unit = self.bvh_unit.clone();
         let mapping = self.retarget_mapping.clone();
+        let mapping_path = self
+            .retarget_mapping_path
+            .clone()
+            .or_else(|| self.mapping_path.clone());
         let (sender, receiver) = mpsc::channel();
         self.task_rx = Some(receiver);
         self.task_busy = true;
@@ -87,36 +75,49 @@ impl App {
             "Building BVH mapping prompt in background"
         );
         let result_path = path.clone();
+        let overwrite = self.output_overwrite;
         std::thread::spawn(move || {
             let result = (|| {
-                let source = SkeletonDescriptor::from_bvh(
-                    &bvh,
-                    file_hash(source_path.as_deref()),
-                    source_up_axis,
-                    source_forward_axis,
-                    source_unit,
+                let source = crate::modules::operations::retarget::bvh_source(
+                    bvh,
+                    [&source_up_axis, &source_forward_axis, &source_unit],
                 )
-                .map_err(|error| error.to_string())?;
-                let target = SkeletonDescriptor::from_skin(
-                    &target_skin,
-                    SourceKind::Glb,
-                    file_hash(target_path.as_deref()),
-                    String::new(),
-                    "Y",
-                    "-Z",
-                    "m",
-                    &HashSet::new(),
+                .map_err(|e| e.to_string())?;
+                let fingerprint =
+                    crate::modules::operations::retarget::document_fingerprint(
+                        &target_document,
+                    )
+                    .map_err(|e| e.to_string())?;
+                let target = crate::modules::operations::retarget::target(
+                    target_document,
+                    target_skin_index,
+                    fingerprint,
+                    ["Y", "-Z", "m"],
                 )
-                .map_err(|error| error.to_string())?;
-                let prompt = retarget::build_bvh_agent_prompt(
-                    &bvh,
+                .map_err(|e| e.to_string())?;
+                let prompt = crate::modules::operations::retarget::prompt(
                     &source,
                     &target,
                     mapping.as_ref(),
                 )
-                .map_err(|error| error.to_string())?;
-                retarget::save_agent_prompt(&result_path, &prompt)
-                    .map_err(|error| error.to_string())
+                .map_err(|e| e.to_string())?;
+                crate::modules::operations::check_output(
+                    &result_path,
+                    &source_path
+                        .as_deref()
+                        .into_iter()
+                        .chain(target_path.as_deref())
+                        .chain(mapping_path.as_deref())
+                        .collect::<Vec<_>>(),
+                    overwrite,
+                )
+                .map_err(|e| e.to_string())?;
+                crate::modules::atomic_file::write(
+                    &result_path,
+                    prompt.as_bytes(),
+                    overwrite,
+                )
+                .map_err(|e| e.to_string())
             })();
             let _ = sender.send(ExportTaskResult {
                 task_id,
@@ -208,6 +209,10 @@ impl App {
             return;
         }
         let mapping = self.retarget_mapping.clone();
+        let mapping_path = self
+            .retarget_mapping_path
+            .clone()
+            .or_else(|| self.mapping_path.clone());
         let (sender, receiver) = mpsc::channel();
         self.task_rx = Some(receiver);
         self.task_busy = true;
@@ -219,59 +224,52 @@ impl App {
             "Building GLB mapping prompt in background"
         );
         let result_path = path.clone();
+        let overwrite = self.output_overwrite;
         std::thread::spawn(move || {
             let result = (|| {
-                let source_bytes = source_snapshot
-                    .to_bytes()
-                    .map_err(|error| error.to_string())?;
-                let runtime = AnimationRuntime::from_bytes_skeleton_only(
-                    &source_bytes,
-                    source_path.parent(),
-                )
-                .map_err(|error| error.to_string())?;
-                let clip =
-                    runtime.clips.get(source_clip_index).ok_or_else(|| {
-                        format!("Animation {source_clip_index} does not exist")
-                    })?;
-                let animated_nodes = clip
-                    .channels
-                    .iter()
-                    .map(|channel| channel.node)
-                    .collect::<HashSet<_>>();
-                let source = SkeletonDescriptor::from_runtime(
-                    &runtime,
+                let source = crate::modules::operations::retarget::glb_source(
                     &source_snapshot,
+                    source_path.parent(),
+                    source_clip_index,
                     source_skin_index,
-                    &animated_nodes,
-                    retarget::sha256_hex(&source_bytes),
-                    "Y".to_owned(),
-                    "-Z".to_owned(),
-                    "m".to_owned(),
+                    &Default::default(),
+                    ["Y", "-Z", "m"],
                 )
-                .map_err(|error| error.to_string())?;
-                let target_skin = target_document
-                    .skin_data_at(target_skin_index)
-                    .map_err(|error| error.to_string())?;
-                let target = SkeletonDescriptor::from_skin(
-                    &target_skin,
-                    SourceKind::Glb,
-                    file_hash(Some(&target_path)),
-                    String::new(),
-                    "Y",
-                    "-Z",
-                    "m",
-                    &HashSet::new(),
+                .map_err(|e| e.to_string())?;
+                let fingerprint =
+                    crate::modules::operations::retarget::document_fingerprint(
+                        &target_document,
+                    )
+                    .map_err(|e| e.to_string())?;
+                let target = crate::modules::operations::retarget::target(
+                    target_document,
+                    target_skin_index,
+                    fingerprint,
+                    ["Y", "-Z", "m"],
                 )
-                .map_err(|error| error.to_string())?;
-                let prompt = retarget::build_agent_prompt(
+                .map_err(|e| e.to_string())?;
+                let prompt = crate::modules::operations::retarget::prompt(
                     &source,
                     &target,
-                    Some(clip),
                     mapping.as_ref(),
                 )
-                .map_err(|error| error.to_string())?;
-                retarget::save_agent_prompt(&result_path, &prompt)
-                    .map_err(|error| error.to_string())
+                .map_err(|e| e.to_string())?;
+                crate::modules::operations::check_output(
+                    &result_path,
+                    &Some(source_path.as_path())
+                        .into_iter()
+                        .chain(Some(target_path.as_path()))
+                        .chain(mapping_path.as_deref())
+                        .collect::<Vec<_>>(),
+                    overwrite,
+                )
+                .map_err(|e| e.to_string())?;
+                crate::modules::atomic_file::write(
+                    &result_path,
+                    prompt.as_bytes(),
+                    overwrite,
+                )
+                .map_err(|e| e.to_string())
             })();
             let _ = sender.send(ExportTaskResult {
                 task_id,
@@ -284,26 +282,8 @@ impl App {
     }
 }
 
-fn file_hash(path: Option<&Path>) -> String {
-    path.and_then(|path| fs::read(path).ok())
-        .map(|bytes| retarget::sha256_hex(&bytes))
-        .unwrap_or_default()
-}
-
 fn same_path(path: &Path, source: Option<&Path>) -> bool {
     source.is_some_and(|source| {
-        let left =
-            fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-        let right =
-            fs::canonicalize(source).unwrap_or_else(|_| source.to_path_buf());
-        #[cfg(windows)]
-        {
-            left.to_string_lossy()
-                .eq_ignore_ascii_case(&right.to_string_lossy())
-        }
-        #[cfg(not(windows))]
-        {
-            left == right
-        }
+        crate::modules::operations::same_path(path, source)
     })
 }

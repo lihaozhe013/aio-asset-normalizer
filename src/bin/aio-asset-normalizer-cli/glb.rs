@@ -10,20 +10,18 @@ use aio_asset_normalizer::modules::glb::batch_runner::{
     run_export, run_preflight, BatchEntry, BatchFileStatus, BatchProgress,
     BatchRequest,
 };
-use aio_asset_normalizer::modules::glb::pipeline::{
-    apply_export_edits, build_export_jobs, export_selection_atomic, ExportEdits,
-};
 use aio_asset_normalizer::modules::glb::{
     GlbDocument, GlbExportCatalog, GlbExportReport, GlbSummary,
 };
 use aio_asset_normalizer::modules::logging::next_task_id;
+use aio_asset_normalizer::modules::operations::glb as operations;
 
 use crate::job::{
     self, AnimationOutputArg, EditJobFile, ExportJobFile, PresetArg,
     RecipeOptions, RootMotionModeArg,
 };
 use crate::output::{self, CliError};
-use crate::util::{common_parent, same_path};
+use crate::util::common_parent;
 
 #[derive(Args)]
 pub struct GlbArgs {
@@ -211,6 +209,7 @@ fn export(args: &ExportArgs) -> i32 {
         root_motion_node: job::name_selector(&args.root_motion_node),
     };
     let mut dry_run = args.dry_run;
+    let mut selection = None;
 
     if let Some(job_path) = &args.job {
         if !args.inputs.is_empty() || args.output_root.is_some() {
@@ -223,9 +222,7 @@ fn export(args: &ExportArgs) -> i32 {
         }
         let file: ExportJobFile = match job::load_json(job_path, "export job") {
             Ok(file) => file,
-            Err(message) => {
-                return fail(json!({}), CliError::validation(message))
-            }
+            Err(message) => return fail(json!({}), message),
         };
         if let Some(command) = &file.command {
             if command != "glb.export" {
@@ -241,7 +238,24 @@ fn export(args: &ExportArgs) -> i32 {
         input_root = file.input_root;
         output_root = Some(file.output_root);
         overwrite = file.overwrite;
-        options = file.recipe.to_options();
+        if file.recipe.is_some() && file.selection.is_some() {
+            return fail(
+                json!({}),
+                CliError::validation(
+                    "Recipe and selection are mutually exclusive",
+                ),
+            );
+        }
+        let recipe = file.recipe.unwrap_or_default().to_options();
+        options = RecipeOptions {
+            preset: recipe.preset,
+            skin: recipe.skin,
+            animation_output: recipe.animation_output,
+            remove_root_motion: recipe.remove_root_motion,
+            root_motion_mode: recipe.root_motion_mode,
+            root_motion_node: recipe.root_motion_node,
+        };
+        selection = file.selection;
         // A job file is explicit; --dry-run still applies from the flags.
         dry_run = args.dry_run;
     }
@@ -254,7 +268,7 @@ fn export(args: &ExportArgs) -> i32 {
                     CliError::validation("--recursive requires --input-root"),
                 );
             };
-            match discover_glb_files(root) {
+            match discover_glb_files(root, output_root.as_deref()) {
                 Ok(found) => inputs = found,
                 Err(error) => return fail(json!({}), error),
             }
@@ -287,6 +301,7 @@ fn export(args: &ExportArgs) -> i32 {
         inputs,
         output_root,
         recipe: options.to_recipe(),
+        selection,
         overwrite_existing: overwrite,
     };
 
@@ -301,7 +316,7 @@ fn export(args: &ExportArgs) -> i32 {
                 "overwrite": overwrite,
                 "entries": entries_json(&entries, None),
             }),
-            CliError::validation("preflight found errors"),
+            CliError { code: if entries.iter().any(|e| e.error_kind == Some(aio_asset_normalizer::modules::operations::ErrorKind::Io)) { output::ErrorCode::Io } else { output::ErrorCode::Validation }, message: "preflight found errors".into() },
         );
     }
 
@@ -340,7 +355,7 @@ fn export(args: &ExportArgs) -> i32 {
 
     match result {
         Ok(()) => output::emit_success(COMMAND, results, Vec::new()),
-        Err(message) => fail(results, CliError::validation(message)),
+        Err(error) => fail(results, output::operation_error(error)),
     }
 }
 
@@ -348,150 +363,88 @@ fn export(args: &ExportArgs) -> i32 {
 
 fn edit(args: &EditArgs) -> i32 {
     const COMMAND: &str = "glb.edit";
-    let fail = |results: Value, error: CliError| {
-        output::emit_failure(COMMAND, results, &error)
-    };
-
+    let fail = |results, error| output::emit_failure(COMMAND, results, &error);
     let file: EditJobFile = match job::load_json(&args.job, "edit job") {
         Ok(file) => file,
-        Err(message) => return fail(json!({}), CliError::validation(message)),
+        Err(e) => return fail(json!({}), e),
     };
-    if let Some(command) = &file.command {
-        if command != "glb.edit" {
-            return fail(
-                json!({}),
-                CliError::validation(format!(
-                    "edit job declares command {command:?}, expected \"glb.edit\""
-                )),
-            );
-        }
-    }
-
-    let document = match GlbDocument::load(&file.input) {
-        Ok(document) => document,
-        Err(error) => return fail(json!({}), output::glb_error(error)),
-    };
-
-    let edits = ExportEdits {
-        orientation_euler_degrees: file.edits.rotate_roots_degrees,
-        root_scale: file.edits.scale_roots,
-        root_translation: file.edits.translate_roots,
-        trim: file
-            .edits
-            .trim
-            .as_ref()
-            .map(|trim| (trim.animation, trim.start, trim.end)),
-        animation_rate: file
-            .edits
-            .animation_rate
-            .as_ref()
-            .map(|rate| (rate.animation, rate.rate)),
-        smart_loop: file
-            .edits
-            .smart_loop
-            .as_ref()
-            .map(|smart| (smart.animation, smart.transition_seconds)),
-        bake_root_transform: true,
-    };
-
-    let mut edited = document.clone();
-    if let Err(error) = apply_export_edits(&mut edited, &edits) {
-        return fail(json!({}), output::glb_error(error));
-    }
-
-    let recipe = file.export.to_options().to_recipe();
-    let selection = match recipe.resolve(&edited) {
-        Ok(selection) => selection,
-        Err(error) => return fail(json!({}), output::glb_error(error)),
-    };
-    let validation = edited.validate_export_selection(&selection);
-    if !validation.is_valid() {
+    if file.command.as_deref().is_some_and(|v| v != COMMAND) {
         return fail(
-            json!({ "warnings": validation.warnings }),
-            CliError::validation(validation.errors.join("; ")),
+            json!({}),
+            CliError::validation("Edit job declares a different command"),
         );
     }
-
-    let jobs = match build_export_jobs(&edited, &selection, &file.output) {
-        Ok(jobs) => jobs,
-        Err(error) => return fail(json!({}), output::glb_error(error)),
+    let prepared = (|| {
+        let source = GlbDocument::load(&file.input)?;
+        let edited = operations::edit_snapshot(&source, &file.edits)?;
+        let selection = operations::resolve_selection(
+            &edited,
+            file.export.as_ref(),
+            file.selection.as_ref(),
+        )?;
+        let jobs = operations::prepare_export(
+            &edited,
+            &file.edits.export_edits(),
+            &selection,
+            &file.output,
+            &[&file.input, &args.job],
+            file.overwrite,
+        )?;
+        Ok::<_, aio_asset_normalizer::modules::operations::OperationError>((
+            jobs,
+            edited.validate_export_selection(&selection).warnings,
+        ))
+    })();
+    let (jobs, warnings) = match prepared {
+        Ok(v) => v,
+        Err(e) => return fail(json!({}), output::operation_error(e)),
     };
-
-    for job in &jobs {
-        if same_path(&job.path, &file.input) {
-            return fail(
-                json!({}),
-                CliError::validation(format!(
-                    "output {} would replace the source GLB",
-                    job.path.display()
-                )),
-            );
-        }
-        if job.path.exists() && !file.overwrite {
-            return fail(
-                json!({}),
-                CliError::validation(format!(
-                    "output already exists: {} (set overwrite in the job)",
-                    job.path.display()
-                )),
-            );
-        }
-    }
-
-    if args.dry_run {
-        return output::emit_success(
-            COMMAND,
-            json!({
-                "dry_run": true,
-                "input": file.input.display().to_string(),
-                "outputs": jobs
-                    .iter()
-                    .map(|job| json!({ "path": job.path.display().to_string() }))
-                    .collect::<Vec<_>>(),
-                "warnings": validation.warnings,
-            }),
-            Vec::new(),
-        );
-    }
-
     let mut outputs = Vec::new();
-    for job in jobs {
-        let path = job.path.clone();
-        match export_selection_atomic(&job.document, &job.selection, &path) {
-            Ok(report) => outputs.push(json!({
-                "path": path.display().to_string(),
-                "report": report_json(&report),
-            })),
-            Err(error) => {
+    for job in &jobs {
+        let result = if args.dry_run {
+            operations::preview_job(job)
+        } else {
+            operations::execute_job(job, file.overwrite)
+        };
+        match result {
+            Ok(report) => outputs
+                .push(json!({"path":job.path,"report":report_json(&report)})),
+            Err(e) => {
                 return fail(
-                    json!({ "outputs": outputs }),
-                    output::glb_error(error),
-                );
+                    json!({"outputs":outputs}),
+                    output::operation_error(e),
+                )
             }
         }
     }
-
     output::emit_success(
         COMMAND,
-        json!({
-            "dry_run": false,
-            "input": file.input.display().to_string(),
-            "outputs": outputs,
-            "warnings": validation.warnings,
-        }),
-        Vec::new(),
+        json!({"dry_run":args.dry_run,"input":file.input,"outputs":outputs,"warnings":warnings}),
+        warnings,
     )
 }
 
 // ---- recursive input discovery ---------------------------------------------
 
-fn discover_glb_files(root: &Path) -> Result<Vec<PathBuf>, CliError> {
+fn discover_glb_files(
+    root: &Path,
+    output_root: Option<&Path>,
+) -> Result<Vec<PathBuf>, CliError> {
     if !root.is_dir() {
         return Err(CliError::validation(format!(
             "--input-root is not a directory: {}",
             root.display()
         )));
     }
+    if output_root.is_some_and(|out| {
+        aio_asset_normalizer::modules::operations::same_path(out, root)
+    }) {
+        return Err(CliError::validation(
+            "Recursive input and output roots must differ",
+        ));
+    }
+    let excluded = output_root
+        .map(aio_asset_normalizer::modules::operations::path_identity);
     let mut found = Vec::new();
     let mut pending = vec![root.to_path_buf()];
     while let Some(directory) = pending.pop() {
@@ -504,6 +457,14 @@ fn discover_glb_files(root: &Path) -> Result<Vec<PathBuf>, CliError> {
                 .file_type()
                 .map_err(|error| CliError::io(error.to_string()))?;
             if file_type.is_dir() {
+                if excluded.as_ref().is_some_and(|out| {
+                    aio_asset_normalizer::modules::operations::path_identity(
+                        &entry.path(),
+                    )
+                    .starts_with(out)
+                }) {
+                    continue;
+                }
                 pending.push(entry.path());
             } else if file_type.is_file() && is_glb(&entry.path()) {
                 found.push(entry.path());

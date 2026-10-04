@@ -4,6 +4,7 @@
 //! through the shared logging pipeline. Run `docs` for the full reference.
 
 mod bvh;
+mod discovery;
 mod docs;
 mod fbx;
 mod glb;
@@ -12,7 +13,7 @@ mod output;
 mod retarget;
 mod util;
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 
 use aio_asset_normalizer::modules::logging::LogRuntime;
 
@@ -53,10 +54,48 @@ enum Command {
     Fbx(fbx::FbxArgs),
     /// Print the embedded CLI reference
     Docs(docs::DocsArgs),
+    /// List supported automation capabilities
+    Capabilities,
+    /// Print a JSON Schema for a shared request type
+    Schema(discovery::SchemaArgs),
 }
 
 fn main() {
-    let cli = Cli::parse();
+    let matches = match Cli::command().try_get_matches() {
+        Ok(matches) => matches,
+        Err(error) => {
+            if matches!(
+                error.kind(),
+                clap::error::ErrorKind::DisplayHelp
+                    | clap::error::ErrorKind::DisplayVersion
+            ) {
+                let _ = error.print();
+                return;
+            }
+            std::process::exit(output::emit_failure(
+                "cli.parse",
+                serde_json::json!({}),
+                &output::CliError::usage(error.to_string()),
+            ));
+        }
+    };
+    if let Err(error) = check_job_conflicts(&matches, &Cli::command()) {
+        std::process::exit(output::emit_failure(
+            "cli.parse",
+            serde_json::json!({}),
+            &error,
+        ));
+    }
+    let cli = match Cli::from_arg_matches(&matches) {
+        Ok(cli) => cli,
+        Err(error) => {
+            std::process::exit(output::emit_failure(
+                "cli.parse",
+                serde_json::json!({}),
+                &output::CliError::usage(error.to_string()),
+            ));
+        }
+    };
     let logging = LogRuntime::init_cli(Some(&cli.log_level));
 
     let code = match cli.command {
@@ -65,9 +104,42 @@ fn main() {
         Command::Retarget(args) => retarget::run(args),
         Command::Fbx(args) => fbx::run(args),
         Command::Docs(args) => docs::run(&args),
+        Command::Capabilities => discovery::capabilities(),
+        Command::Schema(args) => discovery::schema(&args),
     };
 
     // Flush the file log before bypassing destructors with process::exit.
     drop(logging);
     std::process::exit(code);
+}
+
+fn check_job_conflicts(
+    matches: &clap::ArgMatches,
+    command: &clap::Command,
+) -> Result<(), output::CliError> {
+    if let Some((name, child)) = matches.subcommand() {
+        if let Some(command) = command.find_subcommand(name) {
+            return check_job_conflicts(child, command);
+        }
+    }
+    if matches
+        .try_get_one::<std::path::PathBuf>("job")
+        .ok()
+        .flatten()
+        .is_some()
+    {
+        for arg in command.get_arguments() {
+            let id = arg.get_id();
+            if !["job", "dry_run", "log_level"].contains(&id.as_str())
+                && matches.value_source(id.as_str())
+                    == Some(clap::parser::ValueSource::CommandLine)
+            {
+                return Err(output::CliError::usage(format!(
+                    "--job cannot be combined with task argument {}",
+                    id.as_str()
+                )));
+            }
+        }
+    }
+    Ok(())
 }
