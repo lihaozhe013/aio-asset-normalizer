@@ -3,13 +3,13 @@
 default: dev
 
 dev:
-	cargo run
+	cargo run --bin aio-asset-normalizer
 
 build:
-	cargo build --release
+	cargo build --release --all
 
 run:
-	cargo run --release
+	cargo run --release aio-asset-normalizer
 
 clean:
 	cargo clean
