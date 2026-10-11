@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+mod app_automation;
 mod app_bvh;
 mod app_export;
 mod app_fbx_converter;
@@ -17,8 +18,8 @@ mod window;
 /// stay in the desktop binary so the library never links egui or three-d.
 pub mod modules {
     pub use aio_asset_normalizer::modules::{
-        atomic_file, blender, build_info, bvh, glb, i18n, logging, operations, preferences,
-        retarget, retarget_export,
+        atomic_file, automation, blender, build_info, bvh, glb, i18n, logging, operations,
+        preferences, retarget, retarget_export, task_lock,
     };
 
     pub mod ui;
@@ -31,14 +32,21 @@ use three_d::*;
 fn main() {
     let prefs = modules::preferences::load();
     let logging = modules::logging::LogRuntime::init();
+    let (bridge, bridge_rx) = modules::automation::BridgeServer::start()
+        .expect("failed to register the local automation session");
 
-    let window = window::create().expect("Failed to create window");
+    let window = window::Window::create().expect("Failed to create window");
 
     let context = window.gl();
     let mut gui = three_d::GUI::new(&context);
     let mut app = App::new(&context, window.viewport(), &prefs, logging);
+    app.attach_automation(bridge, bridge_rx);
 
-    window.render_loop(move |mut frame_input| {
+    window.render_loop(move |mut frame_input, close_requested| {
+        if close_requested {
+            app.request_shutdown();
+        }
+        app.process_automation_requests(&context);
         let mut content_rect: Option<egui::Rect> = None;
 
         gui.update(
@@ -67,6 +75,7 @@ fn main() {
         if show_scene {
             app.camera.handle_events(&frame_input.events, viewport);
         }
+        app.observe_manual_automation_state();
 
         app.reload_model_if_needed(&context);
 
@@ -193,6 +202,12 @@ fn main() {
         }
 
         clear_rt.write(|| gui.render()).unwrap();
+        app.capture_after_render(
+            &clear_rt,
+            viewport,
+            frame_input.viewport,
+            frame_input.device_pixel_ratio,
+        );
 
         FrameOutput {
             exit: app.quit_requested(),

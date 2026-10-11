@@ -1,4 +1,13 @@
+use serde::Serialize;
 use three_d::*;
+
+#[derive(Debug, Clone, Copy, Serialize)]
+pub(crate) struct CameraBookmark {
+    pub(crate) target: [f32; 3],
+    pub(crate) radius: f32,
+    pub(crate) theta: f32,
+    pub(crate) phi: f32,
+}
 
 pub struct OrbitCamera {
     pub camera: Camera,
@@ -16,6 +25,32 @@ pub struct OrbitCamera {
 }
 
 impl OrbitCamera {
+    pub(crate) fn bookmark(&self) -> CameraBookmark {
+        CameraBookmark {
+            target: [self.target.x, self.target.y, self.target.z],
+            radius: self.radius,
+            theta: self.theta,
+            phi: self.phi,
+        }
+    }
+
+    pub(crate) fn restore_bookmark(&mut self, bookmark: CameraBookmark) {
+        if bookmark.target.iter().any(|value| !value.is_finite())
+            || !bookmark.radius.is_finite()
+            || !bookmark.theta.is_finite()
+            || !bookmark.phi.is_finite()
+            || bookmark.radius <= 0.0
+        {
+            self.reset();
+            return;
+        }
+        self.target = vec3(bookmark.target[0], bookmark.target[1], bookmark.target[2]);
+        self.radius = bookmark.radius.clamp(self.min_radius, self.max_radius);
+        self.theta = bookmark.theta;
+        self.phi = bookmark.phi.clamp(0.05, std::f32::consts::PI - 0.05);
+        self.update_camera_view();
+    }
+
     pub fn new(viewport: Viewport) -> Self {
         let position = vec3(4.0, 3.0, 6.0);
         let target = vec3(0.0, 0.5, 0.0);

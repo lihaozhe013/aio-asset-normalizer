@@ -9,6 +9,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -23,14 +24,14 @@ pub use self::retarget_prompt::{build_agent_prompt, build_bvh_agent_prompt, save
 pub const MAPPING_SCHEMA: &str = "com.aio-asset-normalizer.skeleton-mapping";
 pub const MAPPING_VERSION: u32 = 2;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum SourceKind {
     Bvh,
     Glb,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 pub struct NodeRef {
     pub node: String,
     pub path: Vec<String>,
@@ -47,13 +48,13 @@ impl NodeRef {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 pub struct SkinRef {
     pub index: usize,
     pub name: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub struct MappingEndpoint {
     pub kind: SourceKind,
     #[serde(default)]
@@ -68,7 +69,7 @@ pub struct MappingEndpoint {
     pub unit: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub struct MappingBone {
     pub source: NodeRef,
     pub target: NodeRef,
@@ -76,7 +77,7 @@ pub struct MappingBone {
     pub rotation_offset_xyzw: [f32; 4],
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub struct RootMotionMapping {
     pub source: NodeRef,
     pub target: NodeRef,
@@ -84,7 +85,7 @@ pub struct RootMotionMapping {
     pub translation_scale: f32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub struct SkeletonMapping {
     pub schema: String,
     pub version: u32,

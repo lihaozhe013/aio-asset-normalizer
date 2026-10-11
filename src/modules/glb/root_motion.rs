@@ -608,10 +608,12 @@ fn inspect_root_motion_channel(
                 channel.animation, channel.channel
             )))
         }
-        other => return Err(GlbError::Unsupported(format!(
+        other => {
+            return Err(GlbError::Unsupported(format!(
             "Root motion removal does not support {other} interpolation in animation {} channel {}",
             channel.animation, channel.channel
-        ))),
+        )))
+        }
     }
 
     let input_index = sampler

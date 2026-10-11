@@ -1,5 +1,8 @@
 use std::path::Path;
-use std::sync::mpsc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    mpsc, Arc,
+};
 
 use crate::app::{App, ExportTaskResult, TaskKind};
 use crate::modules::logging::{next_task_id, safe_path_label};
@@ -62,11 +65,20 @@ impl App {
             .retarget_mapping_path
             .clone()
             .or_else(|| self.mapping_path.clone());
+        let host_task_lock = match self.try_asset_task_lock() {
+            Ok(lock) => lock,
+            Err(error) => {
+                tracing::warn!(target: "retarget_agent", error = %error, "Could not start prompt task");
+                return;
+            }
+        };
         let (sender, receiver) = mpsc::channel();
         self.task_rx = Some(receiver);
         self.task_busy = true;
         let task_id = next_task_id();
         self.active_task_id = Some(task_id);
+        let cancellation = Arc::new(AtomicBool::new(false));
+        self.active_task_cancel = Some(cancellation.clone());
         tracing::info!(
             target: "retarget_agent",
             task_id,
@@ -75,7 +87,11 @@ impl App {
         let result_path = path.clone();
         let overwrite = self.output_overwrite;
         std::thread::spawn(move || {
+            let _host_task_lock = host_task_lock;
             let result = (|| {
+                if cancellation.load(Ordering::Acquire) {
+                    return Err("Prompt generation cancelled before preparation".to_owned());
+                }
                 let source = crate::modules::operations::retarget::bvh_source(
                     bvh,
                     [&source_up_axis, &source_forward_axis, &source_unit],
@@ -108,6 +124,9 @@ impl App {
                     overwrite,
                 )
                 .map_err(|e| e.to_string())?;
+                if cancellation.load(Ordering::Acquire) {
+                    return Err("Prompt generation cancelled before output".to_owned());
+                }
                 crate::modules::atomic_file::write(&result_path, prompt.as_bytes(), overwrite)
                     .map_err(|e| e.to_string())
             })();
@@ -203,11 +222,20 @@ impl App {
             .retarget_mapping_path
             .clone()
             .or_else(|| self.mapping_path.clone());
+        let host_task_lock = match self.try_asset_task_lock() {
+            Ok(lock) => lock,
+            Err(error) => {
+                tracing::warn!(target: "retarget_agent", error = %error, "Could not start prompt task");
+                return;
+            }
+        };
         let (sender, receiver) = mpsc::channel();
         self.task_rx = Some(receiver);
         self.task_busy = true;
         let task_id = next_task_id();
         self.active_task_id = Some(task_id);
+        let cancellation = Arc::new(AtomicBool::new(false));
+        self.active_task_cancel = Some(cancellation.clone());
         tracing::info!(
             target: "retarget_agent",
             task_id,
@@ -216,7 +244,11 @@ impl App {
         let result_path = path.clone();
         let overwrite = self.output_overwrite;
         std::thread::spawn(move || {
+            let _host_task_lock = host_task_lock;
             let result = (|| {
+                if cancellation.load(Ordering::Acquire) {
+                    return Err("Prompt generation cancelled before preparation".to_owned());
+                }
                 let source = crate::modules::operations::retarget::glb_source(
                     &source_snapshot,
                     source_path.parent(),
@@ -252,6 +284,9 @@ impl App {
                     overwrite,
                 )
                 .map_err(|e| e.to_string())?;
+                if cancellation.load(Ordering::Acquire) {
+                    return Err("Prompt generation cancelled before output".to_owned());
+                }
                 crate::modules::atomic_file::write(&result_path, prompt.as_bytes(), overwrite)
                     .map_err(|e| e.to_string())
             })();

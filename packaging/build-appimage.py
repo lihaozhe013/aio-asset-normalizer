@@ -15,6 +15,7 @@ from pathlib import Path
 APP_NAME = "AIO Asset Normalizer"
 APP_ID = "aio-asset-normalizer"
 BINARY_NAME = "aio-asset-normalizer"
+MCP_BINARY_NAME = "aio-asset-normalizer-mcp"
 APP_COMMENT = "Cross-platform GLB editor and BVH motion standardization tool"
 APP_CATEGORIES = "Graphics;3DGraphics;Utility;"
 APPIMAGETOOL_URL = "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
@@ -96,9 +97,14 @@ def build_appimage(
 ) -> Path:
     profile = "release" if release else "debug"
     binary_source = TARGET_DIR / profile / BINARY_NAME
+    mcp_binary_source = TARGET_DIR / profile / MCP_BINARY_NAME
     if not binary_source.exists():
         print(f"[ERROR] Executable not found: {binary_source}")
         print(f"        Build it first with: cargo build{' --release' if release else ''}")
+        raise SystemExit(1)
+    if not mcp_binary_source.exists():
+        print(f"[ERROR] MCP executable not found: {mcp_binary_source}")
+        print(f"        Build it first with: cargo build --locked --features mcp --bin {MCP_BINARY_NAME}{' --release' if release else ''}")
         raise SystemExit(1)
 
     appimage_name = f"{APP_ID}-{version}-{architecture}.AppImage"
@@ -120,6 +126,10 @@ def build_appimage(
         shutil.copy2(binary_source, binary_destination)
         binary_destination.chmod(0o755)
         print(f"  [OK] {binary_source.stat().st_size / 1024 / 1024:.1f} MB")
+        mcp_destination = binary_directory / MCP_BINARY_NAME
+        shutil.copy2(mcp_binary_source, mcp_destination)
+        mcp_destination.chmod(0o755)
+        print(f"  [OK] {mcp_binary_source.stat().st_size / 1024 / 1024:.1f} MB MCP service")
 
         print("[2/5] Installing application icon...")
         icon_source = ASSETS_DIR / "icon" / "aio-asset-normalizer-transparent.png"
@@ -158,6 +168,10 @@ SELF=$(readlink -f "$0")
 HERE=${{SELF%/*}}
 export PATH="$HERE/usr/bin:${{PATH}}"
 export APPDIR="$HERE"
+if [ "$1" = "--mcp" ]; then
+    shift
+    exec "$HERE/usr/bin/{MCP_BINARY_NAME}" "$@"
+fi
 exec "$HERE/usr/bin/{BINARY_NAME}" "$@"
 """,
             encoding="utf-8",

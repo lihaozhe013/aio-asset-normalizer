@@ -15,6 +15,7 @@ from pathlib import Path
 APP_NAME = "AIO Asset Normalizer"
 APP_ID = "com.aio.asset.normalizer"
 BINARY_NAME = "aio-asset-normalizer"
+MCP_BINARY_NAME = "aio-asset-normalizer-mcp"
 UNQUARANTINE_SCRIPT_NAME = "Remove Quarantine.command"
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -143,9 +144,14 @@ def build_app(
 ) -> Path:
     profile = "release" if release else "debug"
     binary_source = TARGET_DIR / profile / BINARY_NAME
+    mcp_binary_source = TARGET_DIR / profile / MCP_BINARY_NAME
     if not binary_source.exists():
         print(f"[ERROR] Executable not found: {binary_source}")
         print(f"        Build it first with: cargo build{' --release' if release else ''}")
+        raise SystemExit(1)
+    if not mcp_binary_source.exists():
+        print(f"[ERROR] MCP executable not found: {mcp_binary_source}")
+        print(f"        Build it first with: cargo build --locked --features mcp --bin {MCP_BINARY_NAME}{' --release' if release else ''}")
         raise SystemExit(1)
 
     print("\n" + "=" * 60)
@@ -167,6 +173,10 @@ def build_app(
     shutil.copy2(binary_source, binary_destination)
     binary_destination.chmod(0o755)
     print(f"  [OK] {binary_source.stat().st_size / 1024 / 1024:.1f} MB")
+    mcp_destination = macos_directory / MCP_BINARY_NAME
+    shutil.copy2(mcp_binary_source, mcp_destination)
+    mcp_destination.chmod(0o755)
+    print(f"  [OK] {mcp_binary_source.stat().st_size / 1024 / 1024:.1f} MB MCP service")
 
     print("[2/4] Generating application icon...")
     icon_created = False

@@ -14,6 +14,7 @@ from pathlib import Path
 APP_NAME = "AIO Asset Normalizer"
 APP_ID = "aio-asset-normalizer"
 BINARY_NAME = "aio-asset-normalizer"
+MCP_BINARY_NAME = "aio-asset-normalizer-mcp"
 PUBLISHER = "AIO Asset Normalizer Contributors"
 ICON_NAME = "aio-asset-normalizer.ico"
 REGISTRY_KEY = rf"Software\{PUBLISHER}\{APP_NAME}"
@@ -77,6 +78,7 @@ def inno_path(path: Path) -> str:
 def generate_iss(package_dir: Path, version: str, output_dir: Path) -> Path:
     """Generate the temporary Inno Setup project used for the installer."""
     executable_path = inno_path(package_dir / f"{BINARY_NAME}.exe")
+    mcp_executable_path = inno_path(package_dir / f"{MCP_BINARY_NAME}.exe")
     icon_path = inno_path(package_dir / "assets" / ICON_NAME)
     output_path = inno_path(output_dir)
     registry_key = REGISTRY_KEY.replace('"', '""')
@@ -111,6 +113,7 @@ def generate_iss(package_dir: Path, version: str, output_dir: Path) -> Path:
         "",
         "[Files]",
         f'Source: "{executable_path}"; DestDir: "{{app}}"; Flags: ignoreversion',
+        f'Source: "{mcp_executable_path}"; DestDir: "{{app}}"; Flags: ignoreversion',
         "",
         "[Icons]",
         f'Name: "{{group}}\\{APP_NAME}"; Filename: "{{app}}\\{BINARY_NAME}.exe"',
@@ -143,8 +146,8 @@ def build_installer(
     print("=" * 60 + "\n")
 
     if not skip_build:
-        print("[1/4] Building executable...")
-        command = ["cargo", "build"]
+        print("[1/4] Building GUI and MCP executables...")
+        command = ["cargo", "build", "--locked", "--bin", BINARY_NAME, "--bin", MCP_BINARY_NAME, "--features", "mcp"]
         if release:
             command.append("--release")
         run(command, cwd=PROJECT_ROOT)
@@ -153,10 +156,15 @@ def build_installer(
 
     print("[2/4] Preparing installer files...")
     executable_name = f"{BINARY_NAME}.exe"
+    mcp_executable_name = f"{MCP_BINARY_NAME}.exe"
     executable_source = profile_dir / executable_name
+    mcp_executable_source = profile_dir / mcp_executable_name
     icon_source = ASSETS_DIR / "icon" / ICON_NAME
     if not executable_source.exists():
         print(f"[ERROR] Executable not found: {executable_source}")
+        raise SystemExit(1)
+    if not mcp_executable_source.exists():
+        print(f"[ERROR] MCP executable not found: {mcp_executable_source}")
         raise SystemExit(1)
     if not icon_source.exists():
         print(f"[ERROR] Installer icon not found: {icon_source}")
@@ -171,6 +179,7 @@ def build_installer(
         package_dir = Path(temporary_directory) / "package"
         ensure_dir(package_dir / "assets")
         shutil.copy2(executable_source, package_dir / executable_name)
+        shutil.copy2(mcp_executable_source, package_dir / mcp_executable_name)
         shutil.copy2(icon_source, package_dir / "assets" / ICON_NAME)
 
         print("[3/4] Generating Inno Setup project...")

@@ -279,3 +279,72 @@ $BIN retarget run --source motion.bvh --target target.glb --mapping mapping.json
 5. On Windows, run the CLI from `cmd.exe` and confirm stdout and stderr are
    visible (the CLI is a console application and does not use the GUI
    subsystem).
+
+## MCP and GUI Session Integration
+
+Build the native service and GUI from the same checkout, then configure an MCP
+client with the paths described in `docs/MCP.md`.
+
+1. Launch the MCP executable through the client. Confirm `initialize` negotiates
+   successfully, `tools/list` exposes typed schemas, and stdout contains only
+   protocol messages. Call `session_list` while the GUI is closed and confirm
+   it returns an empty list without launching a window.
+2. Call `glb_inspect` on a known absolute GLB path. Confirm the structured result
+   includes the same summary and export catalog as the CLI. Call it with a
+   missing absolute path and confirm the client receives a structured error.
+3. Call `session_open` with no ID. Confirm the GUI launches, its status panel
+   reports the bridge, and the returned session state has a revision. Call
+   `session_open` again and confirm it reuses the same session. Start a second
+   GUI instance and confirm an unspecified `session_open` reports multiple
+   sessions while an explicit ID selects one.
+4. In GLB Editor, open an animated GLB through `session_glb`, configure a root
+   transform and animation trim through a typed edit request, then capture the
+   viewport. Confirm the preview reflects the edit, capture metadata reports
+   the same revision, and PNG content is present. Export to a new absolute path,
+   poll `job_get`, reopen the output through `glb_inspect`, and compare it with
+   the CLI output for identical inputs and settings.
+5. In BVH Studio, open a BVH, set explicit axes and units, set a valid trim,
+   position playback at a chosen frame, pause, capture, and export. Reopen and
+   inspect the BVH output. Confirm invalid units or trim leave the previous
+   in-memory document unchanged.
+6. Exercise retargeting with both BVH and GLB animation sources. Configure an
+   explicit target GLB and Mapping v2, validate it, preview the retargeted pose,
+   capture the viewport, exit preview, and export. Confirm name suggestions
+   remain suggestions and never replace authored mappings. Reparse each GLB
+   output and compare its report with the file-oriented MCP or CLI request.
+7. Configure a GLB batch with multiple inputs and a recipe, run preflight,
+   query results, export, and verify every per-file output. Repeat with one
+   invalid input and with an output failure; completed outputs must remain and
+   later inputs must be reported as skipped or unprocessed.
+8. Configure the Converter with one valid FBX/OBJ/Blend input and an absolute
+   Blender path. Preflight, run conversion, poll the job, inspect the resulting
+   GLB, and request a window capture. Repeat with Blender unavailable and
+   confirm a clear conversion error while other pages remain usable.
+9. Read a session revision, change a setting manually in the GUI, then submit a
+   mutation with the old revision. Confirm `state_conflict` and no mutation.
+   Repeat from a second MCP client using the same old revision. Submit an
+   invalid multi-setting update and confirm no part of it was applied.
+10. Create a session checkpoint after editing a document and changing view
+    state. Make more changes, restore, and confirm the original in-memory
+    document, mapping, selection, and view are restored, playback is paused,
+    and files already written remain unchanged. Delete the checkpoint and
+    confirm restore then reports `checkpoint_missing`.
+11. Request capture immediately after changing preview settings. Confirm the
+    image is from a frame at or after the requested revision, and the result
+    includes frame, camera, animation time, and preview state. Repeat at high
+    DPI, with a paused animation at a fixed time, with grid and skeleton
+    overlays, after minimizing/restoring the window, and on the Converter page
+    using `scope: "window"`. Confirm unavailable captures return an explicit
+    status rather than a stale image.
+12. Start a multi-output batch or Blender conversion, query progress, and
+    request cancellation. Confirm the GUI Stop MCP task control has the same
+    cooperative behavior, committed atomic outputs remain intact, and the job
+    reports completed files. Close the GUI during a Blender job and confirm
+    the child process is stopped before the application exits.
+13. Stop the GUI and confirm its session manifest becomes unreachable. Restart
+    it and confirm a new session ID is registered; the old session and running
+    jobs are not claimed as restored.
+
+Automated protocol smoke coverage lives in `tests/mcp_server.rs`. These manual
+checks require a real visible desktop session for rendering, high-DPI capture,
+multi-window behavior, and application close handling.

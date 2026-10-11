@@ -46,6 +46,10 @@ impl BvhFileTree {
         self.root.as_ref()
     }
 
+    pub fn selected_file(&self) -> Option<&Path> {
+        self.selected.as_deref()
+    }
+
     pub fn clear(&mut self) {
         self.root = None;
         self.root_entries = None;

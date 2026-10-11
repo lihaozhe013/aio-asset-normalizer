@@ -1,6 +1,9 @@
 use std::collections::{BTreeSet, HashSet};
 use std::path::Path;
-use std::sync::mpsc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    mpsc, Arc,
+};
 
 use crate::app::{App, ExportTaskResult, TaskKind};
 use crate::app_export::format_export_report;
@@ -232,11 +235,20 @@ impl App {
             );
             return;
         }
+        let host_task_lock = match self.try_asset_task_lock() {
+            Ok(lock) => lock,
+            Err(error) => {
+                tracing::warn!(target: "bvh_studio", error = %error, "Could not start retarget export task");
+                return;
+            }
+        };
         let (sender, receiver) = mpsc::channel();
         self.task_rx = Some(receiver);
         self.task_busy = true;
         let task_id = next_task_id();
         self.active_task_id = Some(task_id);
+        let cancellation = Arc::new(AtomicBool::new(false));
+        self.active_task_cancel = Some(cancellation.clone());
         tracing::info!(
             target: "bvh_studio",
             task_id,
@@ -276,9 +288,13 @@ impl App {
             },
         );
         std::thread::spawn(move || {
+            let _host_task_lock = host_task_lock;
             let mut paths = Vec::new();
             let mut details = Vec::new();
             let result = (|| {
+                if cancellation.load(Ordering::Acquire) {
+                    return Err("Retarget export cancelled before preparation".to_owned());
+                }
                 let source = crate::modules::operations::retarget::bvh_source(
                     source,
                     [
@@ -302,6 +318,9 @@ impl App {
                     &source, &target, &mapping, &request,
                 )
                 .map_err(|e| e.to_string())?;
+                if cancellation.load(Ordering::Acquire) {
+                    return Err("Retarget export cancelled before output".to_owned());
+                }
                 let report = crate::modules::operations::glb::execute_job(&job, request.overwrite)
                     .map_err(|e| e.to_string())?;
                 details.push(format_export_report(&report));
@@ -675,11 +694,20 @@ impl App {
             );
             return;
         }
+        let host_task_lock = match self.try_asset_task_lock() {
+            Ok(lock) => lock,
+            Err(error) => {
+                tracing::warn!(target: "glb_retarget", error = %error, "Could not start retarget export task");
+                return;
+            }
+        };
         let (sender, receiver) = std::sync::mpsc::channel();
         self.task_rx = Some(receiver);
         self.task_busy = true;
         let task_id = next_task_id();
         self.active_task_id = Some(task_id);
+        let cancellation = Arc::new(AtomicBool::new(false));
+        self.active_task_cancel = Some(cancellation.clone());
         tracing::info!(
             target: "glb_retarget",
             task_id,
@@ -705,9 +733,13 @@ impl App {
         );
         request.source_animation = source_clip_index;
         std::thread::spawn(move || {
+            let _host_task_lock = host_task_lock;
             let mut paths = Vec::new();
             let mut details = Vec::new();
             let result = (|| {
+                if cancellation.load(Ordering::Acquire) {
+                    return Err("Retarget export cancelled before preparation".to_owned());
+                }
                 let source = crate::modules::operations::retarget::glb_source(
                     &source,
                     source_path.parent(),
@@ -731,6 +763,9 @@ impl App {
                     &source, &target, &mapping, &request,
                 )
                 .map_err(|e| e.to_string())?;
+                if cancellation.load(Ordering::Acquire) {
+                    return Err("Retarget export cancelled before output".to_owned());
+                }
                 let report = crate::modules::operations::glb::execute_job(&job, request.overwrite)
                     .map_err(|e| e.to_string())?;
                 details.push(format_export_report(&report));

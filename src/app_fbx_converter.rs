@@ -1,5 +1,8 @@
 use std::path::{Path, PathBuf};
-use std::sync::mpsc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    mpsc, Arc,
+};
 
 use crate::app::App;
 use crate::modules::blender::bridge;
@@ -122,9 +125,22 @@ impl App {
             })
             .collect();
 
+        let host_task_lock = match self.try_asset_task_lock() {
+            Ok(lock) => lock,
+            Err(error) => {
+                for result in &mut self.converter_results {
+                    result.status = ConverterStatus::Failed;
+                    result.error = Some(error.to_string());
+                }
+                tracing::warn!(target: "fbx_converter", error = %error, "Could not start conversion batch");
+                return;
+            }
+        };
         let (tx, rx) = mpsc::channel();
         self.converter_rx = Some(rx);
         self.converter_busy = true;
+        let cancellation = Arc::new(AtomicBool::new(false));
+        self.converter_cancel = Some(cancellation.clone());
         tracing::info!(
             target: "fbx_converter",
             task_count = tasks.len(),
@@ -133,7 +149,11 @@ impl App {
 
         let overwrite = self.converter_overwrite;
         std::thread::spawn(move || {
+            let _host_task_lock = host_task_lock;
             for task in tasks {
+                if cancellation.load(Ordering::Acquire) {
+                    break;
+                }
                 let input = task.input.clone();
                 let output = task.output.clone();
                 let _ = tx.send(ConverterMessage::FileStarted {
@@ -146,12 +166,15 @@ impl App {
                     input = %safe_path_label(&input),
                     "Conversion file started"
                 );
-                let result = run_and_validate(&task, &output, overwrite);
+                let result = run_and_validate(&task, &output, overwrite, &cancellation);
                 let _ = tx.send(ConverterMessage::FileFinished {
                     task_id: task.task_id,
                     input,
                     result: result.map(|()| output),
                 });
+                if cancellation.load(Ordering::Acquire) {
+                    break;
+                }
             }
             let _ = tx.send(ConverterMessage::Finished);
         });
@@ -214,6 +237,7 @@ impl App {
         }
         if batch_finished {
             self.converter_busy = false;
+            self.converter_cancel = None;
             self.file_tree.refresh();
             self.bvh_file_tree.refresh();
             self.converter_file_tree.refresh();
@@ -259,8 +283,13 @@ impl App {
 
 /// Run one Blender task and re-parse the produced GLB through the project
 /// reader before the caller reports success (repository data-safety rule).
-fn run_and_validate(task: &ConversionTask, output: &Path, overwrite: bool) -> Result<(), String> {
-    crate::modules::operations::converter::execute(
+fn run_and_validate(
+    task: &ConversionTask,
+    output: &Path,
+    overwrite: bool,
+    cancellation: &AtomicBool,
+) -> Result<(), String> {
+    crate::modules::operations::converter::execute_cancellable(
         &crate::modules::operations::converter::ConversionRequest {
             input: task.input.clone(),
             output: output.to_path_buf(),
@@ -268,6 +297,7 @@ fn run_and_validate(task: &ConversionTask, output: &Path, overwrite: bool) -> Re
             overwrite,
         },
         task.task_id,
+        cancellation,
     )
     .map(|_| ())
     .map_err(|e| e.to_string())

@@ -40,10 +40,13 @@ impl App {
             return;
         };
         match document.standardize(&StandardizationProfile::default()) {
-            Ok(()) => tracing::info!(
-                target: "glb_editor",
-                "GLB matches the default contract"
-            ),
+            Ok(()) => {
+                self.note_manual_session_mutation();
+                tracing::info!(
+                    target: "glb_editor",
+                    "GLB matches the default contract"
+                );
+            }
             Err(error) => tracing::error!(
                 target: "glb_editor",
                 error = %error,
@@ -150,6 +153,7 @@ impl App {
                     "Replaced texture"
                 );
                 self.request_glb_reload(GlbReloadKind::EditedModel);
+                self.note_manual_session_mutation();
             }
             Err(error) => tracing::error!(
                 target: "glb_editor",

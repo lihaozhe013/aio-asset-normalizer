@@ -1,5 +1,8 @@
 use std::path::Path;
-use std::sync::mpsc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    mpsc, Arc,
+};
 
 use crate::app::{App, ExportTaskResult, TaskKind};
 use crate::modules::glb::pipeline::{apply_export_edits, ExportEdits, ExportJob as GlbExportJob};
@@ -421,11 +424,20 @@ impl App {
     }
 
     fn start_glb_export_task(&mut self, jobs: Vec<GlbExportJob>) {
+        let host_task_lock = match self.try_asset_task_lock() {
+            Ok(lock) => lock,
+            Err(error) => {
+                tracing::warn!(target: "glb_export", error = %error, "Could not start export task");
+                return;
+            }
+        };
         let (sender, receiver) = mpsc::channel();
         self.task_rx = Some(receiver);
         self.task_busy = true;
         let task_id = next_task_id();
         self.active_task_id = Some(task_id);
+        let cancellation = Arc::new(AtomicBool::new(false));
+        self.active_task_cancel = Some(cancellation.clone());
         let baked_note = if !self.bake_root_transform && self.root_transform_active() {
             " (root transform not baked)"
         } else {
@@ -440,10 +452,17 @@ impl App {
         );
         let overwrite = self.output_overwrite;
         std::thread::spawn(move || {
+            let _host_task_lock = host_task_lock;
             let mut paths = Vec::new();
             let mut details = Vec::new();
             let result = (|| {
                 for job in jobs {
+                    if cancellation.load(Ordering::Acquire) {
+                        return Err(format!(
+                            "Export cancelled after {} completed output(s)",
+                            paths.len()
+                        ));
+                    }
                     let report = crate::modules::operations::glb::execute_job(&job, overwrite)
                         .map_err(|e| e.to_string())?;
                     details.push(format!(

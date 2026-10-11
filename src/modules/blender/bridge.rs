@@ -2,6 +2,8 @@ use std::fmt;
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use crate::modules::logging::safe_path_label;
 
@@ -19,6 +21,7 @@ pub enum BlenderError {
     ScriptWrite(String),
     Spawn(String),
     ExitCode(Option<i32>),
+    Cancelled,
     OutputMissing,
 }
 
@@ -50,6 +53,7 @@ impl fmt::Display for BlenderError {
                     None => "a signal".to_owned(),
                 }
             ),
+            BlenderError::Cancelled => write!(formatter, "Blender conversion was cancelled"),
             BlenderError::OutputMissing => write!(
                 formatter,
                 "Blender reported success but no output file was created"
@@ -160,6 +164,16 @@ pub fn materialize_script() -> Result<PathBuf, BlenderError> {
 /// <config>`. Output lines are submitted to the structured logging pipeline;
 /// callers must not interpret them as success on their own.
 pub fn run_task(task: &ConversionTask) -> Result<(), BlenderError> {
+    run_task_cancellable(task, &AtomicBool::new(false))
+}
+
+/// Run one conversion while polling a cooperative cancellation flag. The
+/// Blender child is terminated only when its owning GUI job is cancelled or
+/// the GUI begins shutting down.
+pub fn run_task_cancellable(
+    task: &ConversionTask,
+    cancellation: &AtomicBool,
+) -> Result<(), BlenderError> {
     if !task.input.is_file() {
         return Err(BlenderError::InputMissing(task.input.clone()));
     }
@@ -239,9 +253,26 @@ pub fn run_task(task: &ConversionTask) -> Result<(), BlenderError> {
         }
     });
 
-    let status = child
-        .wait()
-        .map_err(|error| BlenderError::Spawn(error.to_string()))?;
+    let status = loop {
+        if cancellation.load(Ordering::Acquire) {
+            let _ = child.kill();
+            let _ = child.wait();
+            let _ = stdout_reader.join();
+            let _ = stderr_reader.join();
+            return Err(BlenderError::Cancelled);
+        }
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => std::thread::sleep(Duration::from_millis(50)),
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = stdout_reader.join();
+                let _ = stderr_reader.join();
+                return Err(BlenderError::Spawn(error.to_string()));
+            }
+        }
+    };
     let _ = stdout_reader.join();
     let _ = stderr_reader.join();
     if !status.success() {

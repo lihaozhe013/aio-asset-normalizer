@@ -61,6 +61,9 @@ jobs:
           if ($null -eq $installer) {
             throw "No Windows installer was produced."
           }
+          if (-not (Test-Path target/release/aio-asset-normalizer-mcp.exe)) {
+            throw "The native MCP executable was not built."
+          }
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@v7
@@ -124,13 +127,14 @@ jobs:
 
       - name: Build macOS app and DMG
         run: |
-          cargo build --release
+          cargo build --locked --release --features mcp --bin aio-asset-normalizer --bin aio-asset-normalizer-mcp
           uv run packaging/build-mac-app.py
 
       - name: Verify macOS package
         run: |
           test -s packaging/out/*.dmg
           test -x "packaging/out/AIO Asset Normalizer.app/Contents/MacOS/aio-asset-normalizer"
+          test -x "packaging/out/AIO Asset Normalizer.app/Contents/MacOS/aio-asset-normalizer-mcp"
 
       - name: Upload macOS package
         uses: actions/upload-artifact@v7
@@ -213,7 +217,7 @@ jobs:
 
       - name: Build AppImage
         run: |
-          cargo build --release
+          cargo build --locked --release --features mcp --bin aio-asset-normalizer --bin aio-asset-normalizer-mcp
           uv run packaging/build-appimage.py
 
       - name: Verify AppImage

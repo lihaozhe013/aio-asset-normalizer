@@ -7,6 +7,7 @@
 use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use sha2::{Digest, Sha256};
 
@@ -106,8 +107,26 @@ pub fn run_preflight(
     task_id: u64,
     progress: &mut dyn FnMut(BatchProgress),
 ) -> (Vec<BatchEntry>, bool) {
+    run_preflight_cancellable(request, task_id, &AtomicBool::new(false), progress)
+}
+
+/// Preflight every input until cancellation is requested. No filesystem
+/// outputs are written during this phase.
+pub fn run_preflight_cancellable(
+    request: &BatchRequest,
+    task_id: u64,
+    cancellation: &AtomicBool,
+    progress: &mut dyn FnMut(BatchProgress),
+) -> (Vec<BatchEntry>, bool) {
     let mut entries = Vec::with_capacity(request.inputs.len());
     for (index, input) in request.inputs.iter().enumerate() {
+        if cancellation.load(Ordering::Acquire) {
+            progress(BatchProgress::PreflightFinished {
+                entries: entries.clone(),
+                all_valid: false,
+            });
+            return (entries, false);
+        }
         let entry = preflight_entry(request, input);
         tracing::info!(
             target: "glb_export",
@@ -159,6 +178,18 @@ pub fn run_export(
     task_id: u64,
     progress: &mut dyn FnMut(BatchProgress),
 ) -> Result<(), OperationError> {
+    run_export_cancellable(request, entries, task_id, &AtomicBool::new(false), progress)
+}
+
+/// Export every preflight entry until cancellation is requested. Completed
+/// outputs remain committed, while no new output starts after cancellation.
+pub fn run_export_cancellable(
+    request: &BatchRequest,
+    entries: &[BatchEntry],
+    task_id: u64,
+    cancellation: &AtomicBool,
+    progress: &mut dyn FnMut(BatchProgress),
+) -> Result<(), OperationError> {
     if entries.iter().any(|entry| {
         !matches!(
             entry.status,
@@ -171,6 +202,11 @@ pub fn run_export(
     }
     let mut snapshots = Vec::with_capacity(entries.len());
     for entry in entries {
+        if cancellation.load(Ordering::Acquire) {
+            return Err(OperationError::external(
+                "Batch export cancelled before writing outputs",
+            ));
+        }
         let bytes = fs::read(&entry.input)?;
         let actual = sha256_hex(&bytes);
         if entry.source_sha256.as_deref() != Some(actual.as_str()) {
@@ -206,6 +242,11 @@ pub fn run_export(
     }
 
     for (index, entry) in entries.iter().enumerate() {
+        if cancellation.load(Ordering::Acquire) {
+            return Err(OperationError::external(
+                "Batch export cancelled; completed outputs were preserved",
+            ));
+        }
         progress(BatchProgress::ExportStarted { index });
         tracing::info!(
             target: "glb_export",
@@ -217,6 +258,11 @@ pub fn run_export(
         let result = (|| -> Result<(), OperationError> {
             let document = &snapshots[index];
             for output in &entry.outputs {
+                if cancellation.load(Ordering::Acquire) {
+                    return Err(OperationError::external(
+                        "Batch export cancelled; completed outputs were preserved",
+                    ));
+                }
                 super::pipeline::execute_job(
                     &super::pipeline::ExportJob {
                         document: document.clone(),

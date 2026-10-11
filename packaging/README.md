@@ -13,7 +13,7 @@ Install [Inno Setup 6](https://jrsoftware.org/isinfo.php), then run:
 uv run packaging/build-windows.py
 ```
 
-The script builds the release executable and creates an Inno Setup installer.
+The script builds the release GUI and MCP executables and creates an Inno Setup installer. Both are installed together so the MCP service can find and launch the GUI from the stable installation directory.
 Use `--debug` to package a debug executable or `--skip-build` to package an
 existing executable.
 
@@ -22,11 +22,11 @@ existing executable.
 Run the following commands on macOS:
 
 ```bash
-cargo build --release
+cargo build --locked --release --features mcp --bin aio-asset-normalizer --bin aio-asset-normalizer-mcp
 uv run packaging/build-mac-app.py
 ```
 
-The script creates both an `.app` bundle and a `.dmg`. The DMG includes
+The script creates both an `.app` bundle and a `.dmg`. The GUI and MCP executables are siblings in `Contents/MacOS`. The DMG includes
 `Remove Quarantine.command`, which removes the quarantine attribute from the
 installed unsigned app when Gatekeeper blocks it. Use `--no-dmg` to create
 only the app bundle, or `--no-script` to omit the workaround.
@@ -40,14 +40,18 @@ with `--icon`.
 Run the following commands on Linux:
 
 ```bash
-cargo build --release
+cargo build --locked --release --features mcp --bin aio-asset-normalizer --bin aio-asset-normalizer-mcp
 uv run packaging/build-appimage.py
 ```
 
 The script uses `appimagetool` from `PATH` when available and otherwise caches
 the x86_64 release under the user's cache directory. Use `--appimagetool` for
 an architecture-specific tool, and `--arch aarch64` when packaging an ARM64
-binary.
+binary. The AppImage contains both binaries. Configure MCP clients to launch the stable `.AppImage` path with the `--mcp` argument; `AppRun` dispatches to the bundled service without exposing its temporary mount path.
+
+## MCP service
+
+The native MCP server uses stdio and has no Python or Node.js runtime dependency. Install the desktop package once, then copy the platform-specific client configuration from [`docs/MCP.md`](../docs/MCP.md). File tools do not start the GUI. Call `session_open` when visual review is needed; it connects to a running window or launches the installed GUI. The standalone headless CLI remains available in its existing archive.
 
 ## CLI (headless)
 

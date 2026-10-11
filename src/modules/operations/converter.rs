@@ -11,6 +11,7 @@ use crate::modules::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -83,6 +84,14 @@ pub fn preflight(request: &ConversionRequest) -> Result<(), OperationError> {
     Ok(())
 }
 pub fn execute(request: &ConversionRequest, task_id: u64) -> Result<GlbSummary, OperationError> {
+    execute_cancellable(request, task_id, &AtomicBool::new(false))
+}
+
+pub fn execute_cancellable(
+    request: &ConversionRequest,
+    task_id: u64,
+    cancellation: &AtomicBool,
+) -> Result<GlbSummary, OperationError> {
     preflight(request)?;
     let staged = atomic_file::stage(&request.output)?;
     let task = ConversionTask {
@@ -95,7 +104,8 @@ pub fn execute(request: &ConversionRequest, task_id: u64) -> Result<GlbSummary, 
             .as_ref()
             .map(|p| p.to_string_lossy().into_owned()),
     };
-    bridge::run_task(&task).map_err(|e| OperationError::external(e.to_string()))?;
+    bridge::run_task_cancellable(&task, cancellation)
+        .map_err(|e| OperationError::external(e.to_string()))?;
     let summary = validate_and_commit(staged, &request.output, request.overwrite)?;
     Ok(summary)
 }

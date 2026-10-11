@@ -1,4 +1,5 @@
 pub mod atomic_file;
+pub mod automation;
 pub mod blender;
 pub mod build_info;
 pub mod bvh;
@@ -11,5 +12,6 @@ pub mod operations;
 pub mod preferences;
 pub mod retarget;
 pub mod retarget_export;
+pub mod task_lock;
 
 pub mod operation_support;

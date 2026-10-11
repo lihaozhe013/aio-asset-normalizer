@@ -1,5 +1,8 @@
 use std::path::PathBuf;
-use std::sync::mpsc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    mpsc, Arc,
+};
 use std::time::Instant;
 
 use crate::app_fbx_converter::ConverterFileState;
@@ -117,14 +120,18 @@ pub struct App {
     pub(crate) needs_bvh_target_reload: bool,
     pub(crate) needs_save: bool,
     quit_requested: bool,
+    pub(crate) shutdown_pending: bool,
+    pub(crate) active_task_cancel: Option<Arc<AtomicBool>>,
     pub(crate) task_rx: Option<mpsc::Receiver<ExportTaskResult>>,
     pub converter_file_tree: FileTree,
     pub blender_path: Option<String>,
     pub(crate) converter_busy: bool,
+    pub(crate) converter_cancel: Option<Arc<AtomicBool>>,
     pub(crate) converter_overwrite: bool,
     pub(crate) output_overwrite: bool,
     pub(crate) converter_rx: Option<mpsc::Receiver<ConverterMessage>>,
     pub(crate) converter_results: Vec<ConverterFileState>,
+    pub(crate) automation: Option<crate::app_automation::AutomationState>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -259,14 +266,18 @@ impl App {
             needs_bvh_target_reload: false,
             needs_save: false,
             quit_requested: false,
+            shutdown_pending: false,
+            active_task_cancel: None,
             task_rx: None,
             converter_file_tree,
             blender_path: prefs.converter.blender_path.clone(),
             converter_busy: false,
+            converter_cancel: None,
             converter_overwrite: false,
             output_overwrite: false,
             converter_rx: None,
             converter_results: Vec::new(),
+            automation: None,
         }
     }
 
@@ -274,11 +285,52 @@ impl App {
         self.quit_requested
     }
 
+    pub fn request_shutdown(&mut self) {
+        if self.shutdown_pending {
+            return;
+        }
+        self.shutdown_pending = true;
+        preferences::save(&self.collect_preferences());
+        if let Some(cancel) = self.active_task_cancel.as_ref() {
+            cancel.store(true, Ordering::Release);
+        }
+        if let Some(cancel) = self.converter_cancel.as_ref() {
+            cancel.store(true, Ordering::Release);
+        }
+        self.cancel_active_automation_job();
+        self.finish_shutdown_if_idle();
+    }
+
+    pub(crate) fn try_asset_task_lock(
+        &self,
+    ) -> Result<
+        crate::modules::task_lock::AssetTaskGuard,
+        crate::modules::task_lock::AssetTaskLockError,
+    > {
+        crate::modules::task_lock::AssetTaskGuard::try_acquire()
+    }
+
+    fn finish_shutdown_if_idle(&mut self) {
+        let session_job_running = self
+            .automation
+            .as_ref()
+            .is_some_and(crate::app_automation::AutomationState::has_active_job);
+        if self.shutdown_pending
+            && !self.task_busy
+            && !self.converter_busy
+            && !self.glb_batch.is_busy()
+            && !session_job_running
+        {
+            self.quit_requested = true;
+        }
+    }
+
     pub fn poll_tasks(&mut self) {
         self.poll_logs();
         self.poll_converter();
         self.poll_glb_batch();
         let Some(receiver) = self.task_rx.as_ref() else {
+            self.finish_shutdown_if_idle();
             return;
         };
         match receiver.try_recv() {
@@ -286,6 +338,7 @@ impl App {
                 self.task_busy = false;
                 self.task_rx = None;
                 self.active_task_id = None;
+                self.active_task_cancel = None;
                 match result.result {
                     Ok(()) => {
                         self.file_tree.refresh();
@@ -326,6 +379,7 @@ impl App {
             Err(mpsc::TryRecvError::Disconnected) => {
                 self.task_busy = false;
                 self.task_rx = None;
+                self.active_task_cancel = None;
                 if let Some(task_id) = self.active_task_id.take() {
                     tracing::error!(
                         target: "bvh_studio",
@@ -341,6 +395,7 @@ impl App {
             }
             Err(mpsc::TryRecvError::Empty) => {}
         }
+        self.finish_shutdown_if_idle();
     }
 
     fn poll_logs(&mut self) {
@@ -826,8 +881,7 @@ impl App {
                 self.needs_save = true;
             }
             MenuAction::Quit => {
-                preferences::save(&self.collect_preferences());
-                self.quit_requested = true;
+                self.request_shutdown();
             }
         }
     }
@@ -861,6 +915,7 @@ impl App {
             self.bvh_frame = 0;
             self.bvh_playback_accumulator = 0.0;
             self.needs_bvh_skeleton_reload = true;
+            self.note_manual_session_mutation();
         }
     }
 

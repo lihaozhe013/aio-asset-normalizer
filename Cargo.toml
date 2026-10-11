@@ -10,6 +10,7 @@ authors = []
 default = ["desktop", "cli"]
 desktop = ["dep:three-d", "dep:three-d-asset", "dep:egui-phosphor", "dep:winit", "dep:rfd", "dep:arboard", "dep:open", "dep:sys-locale", "dep:serde_yaml", "dep:winres"]
 cli = ["dep:clap"]
+mcp = ["dep:rmcp", "dep:tokio"]
 
 [[bin]]
 name = "aio-asset-normalizer"
@@ -20,6 +21,11 @@ required-features = ["desktop"]
 name = "aio-asset-normalizer-cli"
 path = "src/bin/aio-asset-normalizer-cli/main.rs"
 required-features = ["cli"]
+
+[[bin]]
+name = "aio-asset-normalizer-mcp"
+path = "src/bin/aio-asset-normalizer-mcp/main.rs"
+required-features = ["mcp"]
 
 [[test]]
 name = "cli"
@@ -32,6 +38,10 @@ required-features = ["cli"]
 [[test]]
 name = "converter"
 required-features = ["cli"]
+
+[[test]]
+name = "mcp_server"
+required-features = ["mcp"]
 
 [dependencies]
 three-d = { version = "0.19", features = ["egui-gui"], optional = true }
@@ -55,6 +65,11 @@ winit = { version = "0.28", optional = true }
 three-d-asset = { version = "0.10", features = ["gltf", "image"], optional = true }
 egui-phosphor = { version = "0.12", optional = true }
 clap = { version = "4", features = ["derive"], optional = true }
+rmcp = { version = "3.5", default-features = false, features = ["server", "transport-io", "macros"], optional = true }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"], optional = true }
+base64 = "0.22"
+uuid = { version = "1", features = ["v4", "serde"] }
+fs2 = "0.4"
 
 [target.'cfg(windows)'.build-dependencies]
 winres = { version = "0.1", optional = true }

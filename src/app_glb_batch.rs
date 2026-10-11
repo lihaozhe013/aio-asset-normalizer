@@ -1,10 +1,9 @@
 use std::path::PathBuf;
-use std::sync::mpsc;
+use std::sync::{atomic::AtomicBool, mpsc, Arc};
 
 use crate::app::App;
 use crate::modules::glb::batch_runner::{
-    empty_entry, run_export, run_preflight, BatchEntry as GlbBatchEntry, BatchProgress,
-    BatchRequest as GlbBatchRequest,
+    self, empty_entry, BatchEntry as GlbBatchEntry, BatchProgress, BatchRequest as GlbBatchRequest,
 };
 use crate::modules::glb::GlbBatchRecipe;
 use crate::modules::logging::next_task_id;
@@ -196,6 +195,13 @@ impl App {
         self.glb_batch.task_generation = self.glb_batch.task_generation.wrapping_add(1);
         let generation = self.glb_batch.task_generation;
         let task_id = next_task_id();
+        let host_task_lock = match self.try_asset_task_lock() {
+            Ok(lock) => lock,
+            Err(error) => {
+                tracing::warn!(target: "glb_export", error = %error, "Could not start batch preflight");
+                return;
+            }
+        };
         let (sender, receiver) = mpsc::channel();
         self.glb_batch.rx = Some(receiver);
         self.glb_batch.task_request = Some(request.clone());
@@ -203,6 +209,8 @@ impl App {
         self.glb_batch.last_result = None;
         self.task_busy = true;
         self.active_task_id = Some(task_id);
+        let cancellation = Arc::new(AtomicBool::new(false));
+        self.active_task_cancel = Some(cancellation.clone());
         tracing::info!(
             target: "glb_export",
             task_id,
@@ -210,6 +218,7 @@ impl App {
             "Starting GLB batch preflight"
         );
         std::thread::spawn(move || {
+            let _host_task_lock = host_task_lock;
             let mut progress = |event: BatchProgress| {
                 if let BatchProgress::PreflightFile { index, entry } = event {
                     let _ = sender.send(GlbBatchMessage::PreflightProgress {
@@ -219,7 +228,12 @@ impl App {
                     });
                 }
             };
-            let (entries, all_valid) = run_preflight(&request, task_id, &mut progress);
+            let (entries, all_valid) = batch_runner::run_preflight_cancellable(
+                &request,
+                task_id,
+                &cancellation,
+                &mut progress,
+            );
             let _ = sender.send(GlbBatchMessage::PreflightFinished {
                 generation,
                 entries,
@@ -248,12 +262,21 @@ impl App {
         self.glb_batch.task_generation = self.glb_batch.task_generation.wrapping_add(1);
         let generation = self.glb_batch.task_generation;
         let task_id = next_task_id();
+        let host_task_lock = match self.try_asset_task_lock() {
+            Ok(lock) => lock,
+            Err(error) => {
+                tracing::warn!(target: "glb_export", error = %error, "Could not start batch export");
+                return;
+            }
+        };
         let (sender, receiver) = mpsc::channel();
         self.glb_batch.rx = Some(receiver);
         self.glb_batch.task_request = Some(request.clone());
         self.glb_batch.last_result = None;
         self.task_busy = true;
         self.active_task_id = Some(task_id);
+        let cancellation = Arc::new(AtomicBool::new(false));
+        self.active_task_cancel = Some(cancellation.clone());
         tracing::info!(
             target: "glb_export",
             task_id,
@@ -261,6 +284,7 @@ impl App {
             "Starting GLB batch export"
         );
         std::thread::spawn(move || {
+            let _host_task_lock = host_task_lock;
             let mut progress = |event: BatchProgress| match event {
                 BatchProgress::ExportStarted { index } => {
                     let _ = sender.send(GlbBatchMessage::ExportStarted { generation, index });
@@ -279,7 +303,13 @@ impl App {
                 }
                 BatchProgress::PreflightFile { .. } | BatchProgress::PreflightFinished { .. } => {}
             };
-            let result = run_export(&request, &preflight.entries, task_id, &mut progress);
+            let result = batch_runner::run_export_cancellable(
+                &request,
+                &preflight.entries,
+                task_id,
+                &cancellation,
+                &mut progress,
+            );
             let _ = sender.send(GlbBatchMessage::Finished {
                 generation,
                 result: result.map_err(|e| e.to_string()),
@@ -425,6 +455,7 @@ impl App {
         if finished {
             self.task_busy = false;
             self.active_task_id = None;
+            self.active_task_cancel = None;
             self.glb_batch.task_request = None;
         } else {
             self.glb_batch.rx = Some(receiver);
