@@ -1,8 +1,7 @@
 use crate::app::App;
 use crate::app_glb_batch::{GlbBatchFileStatus, GlbBatchPreflight};
 use crate::modules::glb::{
-    AnimationOutputMode, BatchNameSelector, GlbExportPreset,
-    RootMotionRemovalMode,
+    AnimationOutputMode, BatchNameSelector, GlbExportPreset, RootMotionRemovalMode,
 };
 
 pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
@@ -23,10 +22,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
     let previous_recipe = app.glb_batch.recipe.clone();
     ui.collapsing(i18n.tr("glb.batch_recipe"), |ui| {
         ComboBox::from_label(i18n.tr("glb.export_preset"))
-            .selected_text(batch_preset_label(
-                &i18n,
-                app.glb_batch.recipe.preset,
-            ))
+            .selected_text(batch_preset_label(&i18n, app.glb_batch.recipe.preset))
             .show_ui(ui, |ui| {
                 for preset in [
                     GlbExportPreset::PreserveAll,
@@ -41,8 +37,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
                 }
             });
 
-        let compact =
-            app.glb_batch.recipe.preset != GlbExportPreset::PreserveAll;
+        let compact = app.glb_batch.recipe.preset != GlbExportPreset::PreserveAll;
         ui.label(app.i18n.tr("glb.batch_scene_default"));
         ui.add_enabled_ui(compact, |ui| {
             render_name_selector(
@@ -96,16 +91,12 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
         }
         if app.glb_batch.recipe.remove_root_motion && compact {
             ComboBox::from_label(i18n.tr("glb.export_root_motion_mode"))
-                .selected_text(
-                    match app.glb_batch.recipe.root_motion_removal_mode {
-                        RootMotionRemovalMode::HorizontalXZ => {
-                            i18n.tr("glb.export_root_motion_horizontal")
-                        }
-                        RootMotionRemovalMode::AllTranslation => {
-                            i18n.tr("glb.export_root_motion_all")
-                        }
-                    },
-                )
+                .selected_text(match app.glb_batch.recipe.root_motion_removal_mode {
+                    RootMotionRemovalMode::HorizontalXZ => {
+                        i18n.tr("glb.export_root_motion_horizontal")
+                    }
+                    RootMotionRemovalMode::AllTranslation => i18n.tr("glb.export_root_motion_all"),
+                })
                 .show_ui(ui, |ui| {
                     ui.selectable_value(
                         &mut app.glb_batch.recipe.root_motion_removal_mode,
@@ -122,9 +113,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
                 RootMotionRemovalMode::HorizontalXZ => {
                     i18n.tr("glb.export_root_motion_horizontal_hint")
                 }
-                RootMotionRemovalMode::AllTranslation => {
-                    i18n.tr("glb.export_root_motion_all_hint")
-                }
+                RootMotionRemovalMode::AllTranslation => i18n.tr("glb.export_root_motion_all_hint"),
             });
             render_name_selector(
                 ui,
@@ -141,10 +130,8 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
     if app.glb_batch.recipe.preset == GlbExportPreset::PreserveAll {
         app.glb_batch.recipe.animation_output = AnimationOutputMode::Combined;
         app.glb_batch.recipe.remove_root_motion = false;
-        app.glb_batch.recipe.root_motion_removal_mode =
-            RootMotionRemovalMode::default();
-        app.glb_batch.recipe.root_motion_node =
-            BatchNameSelector::AutomaticUnique;
+        app.glb_batch.recipe.root_motion_removal_mode = RootMotionRemovalMode::default();
+        app.glb_batch.recipe.root_motion_node = BatchNameSelector::AutomaticUnique;
     }
     if previous_recipe != app.glb_batch.recipe {
         app.invalidate_glb_batch_preflight();
@@ -176,18 +163,15 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
     });
 
     ui.separator();
-    let can_preflight = !app.task_busy
-        && !app.glb_batch.is_busy()
-        && app.glb_batch.output_root.is_some();
+    let can_preflight =
+        !app.task_busy && !app.glb_batch.is_busy() && app.glb_batch.output_root.is_some();
     if ui
         .add_enabled(can_preflight, Button::new(i18n.tr("glb.batch_preflight")))
         .clicked()
     {
         app.start_glb_batch_preflight();
     }
-    let can_export = !app.task_busy
-        && !app.glb_batch.is_busy()
-        && app.batch_preflight_is_current();
+    let can_export = !app.task_busy && !app.glb_batch.is_busy() && app.batch_preflight_is_current();
     if ui
         .add_enabled(can_export, Button::new(i18n.tr("glb.batch_export")))
         .clicked()
@@ -225,11 +209,7 @@ fn render_name_selector(
         })
         .show_ui(ui, |ui| {
             ui.selectable_value(&mut mode, false, i18n.tr(automatic_label_key));
-            ui.selectable_value(
-                &mut mode,
-                true,
-                i18n.tr("glb.batch_exact_name"),
-            );
+            ui.selectable_value(&mut mode, true, i18n.tr("glb.batch_exact_name"));
         });
     if mode {
         let mut name = match selector {
@@ -237,10 +217,7 @@ fn render_name_selector(
             BatchNameSelector::AutomaticUnique => String::new(),
         };
         if ui
-            .add(
-                TextEdit::singleline(&mut name)
-                    .hint_text(i18n.tr("glb.batch_name_hint")),
-            )
+            .add(TextEdit::singleline(&mut name).hint_text(i18n.tr("glb.batch_name_hint")))
             .changed()
             || !matches!(selector, BatchNameSelector::Exact(_))
         {
@@ -251,11 +228,7 @@ fn render_name_selector(
     }
 }
 
-fn render_preflight(
-    ui: &mut three_d::egui::Ui,
-    app: &App,
-    preflight: &GlbBatchPreflight,
-) {
+fn render_preflight(ui: &mut three_d::egui::Ui, app: &App, preflight: &GlbBatchPreflight) {
     use three_d::egui::*;
 
     ui.separator();
@@ -266,8 +239,7 @@ fn render_preflight(
         .filter(|entry| {
             matches!(
                 entry.status,
-                GlbBatchFileStatus::Ready
-                    | GlbBatchFileStatus::ReadyWithWarnings
+                GlbBatchFileStatus::Ready | GlbBatchFileStatus::ReadyWithWarnings
             )
         })
         .count();
@@ -314,27 +286,15 @@ fn render_preflight(
                     .unwrap_or_default()
                     .to_string_lossy();
                 let status = match entry.status {
-                    GlbBatchFileStatus::Ready => {
-                        app.i18n.tr("glb.batch_status_ready")
-                    }
+                    GlbBatchFileStatus::Ready => app.i18n.tr("glb.batch_status_ready"),
                     GlbBatchFileStatus::ReadyWithWarnings => {
                         app.i18n.tr("glb.batch_status_warning")
                     }
-                    GlbBatchFileStatus::Error => {
-                        app.i18n.tr("glb.batch_status_error")
-                    }
-                    GlbBatchFileStatus::Exporting => {
-                        app.i18n.tr("glb.batch_status_exporting")
-                    }
-                    GlbBatchFileStatus::Succeeded => {
-                        app.i18n.tr("glb.batch_status_success")
-                    }
-                    GlbBatchFileStatus::Failed => {
-                        app.i18n.tr("glb.batch_status_failed")
-                    }
-                    GlbBatchFileStatus::Skipped => {
-                        app.i18n.tr("glb.batch_status_skipped")
-                    }
+                    GlbBatchFileStatus::Error => app.i18n.tr("glb.batch_status_error"),
+                    GlbBatchFileStatus::Exporting => app.i18n.tr("glb.batch_status_exporting"),
+                    GlbBatchFileStatus::Succeeded => app.i18n.tr("glb.batch_status_success"),
+                    GlbBatchFileStatus::Failed => app.i18n.tr("glb.batch_status_failed"),
+                    GlbBatchFileStatus::Skipped => app.i18n.tr("glb.batch_status_skipped"),
                 };
                 ui.collapsing(format!("{name} — {status}"), |ui| {
                     for warning in &entry.warnings {
@@ -356,11 +316,7 @@ fn render_preflight(
                     for output in &entry.completed_outputs {
                         ui.colored_label(
                             Color32::LIGHT_GREEN,
-                            format!(
-                                "{}: {}",
-                                app.i18n.tr("glb.batch_written"),
-                                output.display()
-                            ),
+                            format!("{}: {}", app.i18n.tr("glb.batch_written"), output.display()),
                         );
                     }
                 });
@@ -368,10 +324,7 @@ fn render_preflight(
         });
 }
 
-fn batch_preset_label(
-    i18n: &crate::modules::i18n::I18n,
-    preset: GlbExportPreset,
-) -> String {
+fn batch_preset_label(i18n: &crate::modules::i18n::I18n, preset: GlbExportPreset) -> String {
     i18n.tr(match preset {
         GlbExportPreset::PreserveAll => "glb.export_preset_all",
         GlbExportPreset::CharacterPackage => "glb.export_preset_character",

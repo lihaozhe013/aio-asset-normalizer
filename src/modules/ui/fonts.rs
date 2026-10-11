@@ -1,8 +1,7 @@
 use std::sync::Arc;
 use three_d::egui::{Context, FontData, FontDefinitions, FontFamily};
 
-const NOTO_SANS_SC: &[u8] =
-    include_bytes!("../../../assets/fonts/NotoSansSC-Regular.ttf");
+const NOTO_SANS_SC: &[u8] = include_bytes!("../../../assets/fonts/NotoSansSC-Regular.ttf");
 
 pub fn configure(ctx: &Context) {
     let mut fonts = FontDefinitions::default();

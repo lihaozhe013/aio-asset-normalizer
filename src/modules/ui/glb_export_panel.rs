@@ -2,8 +2,8 @@ use std::collections::BTreeSet;
 
 use crate::app::App;
 use crate::modules::glb::{
-    AnimationOutputMode, GlbDocument, GlbExportCatalog, GlbExportPreset,
-    GlbExportSelection, RootMotionRemovalMode,
+    AnimationOutputMode, GlbDocument, GlbExportCatalog, GlbExportPreset, GlbExportSelection,
+    RootMotionRemovalMode,
 };
 use crate::modules::i18n::I18n;
 
@@ -98,18 +98,12 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
                 Err(error) => {
                     ui.colored_label(
                         Color32::YELLOW,
-                        format!(
-                            "{}: {error}",
-                            app.i18n.tr("glb.export_estimate")
-                        ),
+                        format!("{}: {error}", app.i18n.tr("glb.export_estimate")),
                     );
                 }
             }
         }
-        ui.colored_label(
-            Color32::LIGHT_BLUE,
-            app.i18n.tr("glb.export_estimate_hint"),
-        );
+        ui.colored_label(Color32::LIGHT_BLUE, app.i18n.tr("glb.export_estimate_hint"));
     }
     ui.checkbox(&mut app.output_overwrite, "Overwrite existing outputs");
     app.glb_export_selection = selection;
@@ -143,19 +137,14 @@ pub fn render_selection_controls(
                     GlbExportPreset::CharacterPackage,
                     GlbExportPreset::SkeletonAnimation,
                 ] {
-                    ui.selectable_value(
-                        &mut selection.preset,
-                        preset,
-                        preset_label(i18n, preset),
-                    );
+                    ui.selectable_value(&mut selection.preset, preset, preset_label(i18n, preset));
                 }
             });
         if previous_preset != selection.preset {
             if selection.preset == GlbExportPreset::PreserveAll {
                 selection.animation_output = AnimationOutputMode::Combined;
                 selection.remove_root_motion = false;
-                selection.root_motion_removal_mode =
-                    RootMotionRemovalMode::default();
+                selection.root_motion_removal_mode = RootMotionRemovalMode::default();
                 selection.root_motion_node_override = None;
             }
             if selection.preset != GlbExportPreset::PreserveAll
@@ -170,8 +159,7 @@ pub fn render_selection_controls(
             if selection.preset == GlbExportPreset::SkeletonAnimation
                 && selection.skin_index.is_none()
             {
-                selection.skin_index =
-                    catalog.skins.first().map(|skin| skin.index);
+                selection.skin_index = catalog.skins.first().map(|skin| skin.index);
             }
         }
 
@@ -205,10 +193,7 @@ pub fn render_selection_controls(
 
         if show_skin {
             if catalog.skins.is_empty() {
-                ui.colored_label(
-                    Color32::YELLOW,
-                    i18n.tr("glb.export_no_skins"),
-                );
+                ui.colored_label(Color32::YELLOW, i18n.tr("glb.export_no_skins"));
             } else {
                 selection.skin_index = selection
                     .skin_index
@@ -225,10 +210,7 @@ pub fn render_selection_controls(
                             ui.selectable_value(
                                 &mut selection.skin_index,
                                 Some(skin.index),
-                                format!(
-                                    "{} ({} joints)",
-                                    skin.name, skin.joint_count
-                                ),
+                                format!("{} ({} joints)", skin.name, skin.joint_count),
                             );
                         }
                     });
@@ -279,15 +261,7 @@ fn render_node_selection(
     let has_roots = !roots.is_empty();
     let mut rendered_meshes = BTreeSet::new();
     for root in roots {
-        render_node(
-            ui,
-            catalog,
-            selection,
-            root,
-            false,
-            0,
-            &mut rendered_meshes,
-        );
+        render_node(ui, catalog, selection, root, false, 0, &mut rendered_meshes);
     }
     if !has_roots {
         ui.colored_label(Color32::YELLOW, i18n.tr("glb.export_no_nodes"));
@@ -334,13 +308,7 @@ fn render_node(
 
     if let Some(mesh_index) = node.mesh {
         if rendered_meshes.insert(mesh_index) {
-            render_mesh_primitives(
-                ui,
-                catalog,
-                selection,
-                mesh_index,
-                depth + 1,
-            );
+            render_mesh_primitives(ui, catalog, selection, mesh_index, depth + 1);
         }
     }
     let child_selected = selected_ancestor || explicitly_selected;
@@ -430,24 +398,17 @@ fn render_animation_selection(
                 .collect();
         }
         if ui
-            .add_enabled(
-                enabled,
-                Button::new(i18n.tr("glb.export_select_none")),
-            )
+            .add_enabled(enabled, Button::new(i18n.tr("glb.export_select_none")))
             .clicked()
         {
             selection.selected_animations.clear();
         }
     });
     if catalog.animations.is_empty() {
-        ui.colored_label(
-            Color32::LIGHT_BLUE,
-            i18n.tr("glb.export_no_animations"),
-        );
+        ui.colored_label(Color32::LIGHT_BLUE, i18n.tr("glb.export_no_animations"));
     } else {
         for animation in &catalog.animations {
-            let mut checked =
-                selection.selected_animations.contains(&animation.index);
+            let mut checked = selection.selected_animations.contains(&animation.index);
             if ui
                 .add_enabled(
                     enabled,
@@ -472,22 +433,17 @@ fn render_animation_selection(
             AnimationOutputMode::Split => i18n.tr("glb.export_split"),
         })
         .show_ui(ui, |ui| {
-            let combined =
-                selection.animation_output == AnimationOutputMode::Combined;
+            let combined = selection.animation_output == AnimationOutputMode::Combined;
             if ui
                 .add_enabled(
                     enabled,
-                    Button::selectable(
-                        combined,
-                        i18n.tr("glb.export_combined"),
-                    ),
+                    Button::selectable(combined, i18n.tr("glb.export_combined")),
                 )
                 .clicked()
             {
                 selection.animation_output = AnimationOutputMode::Combined;
             }
-            let split =
-                selection.animation_output == AnimationOutputMode::Split;
+            let split = selection.animation_output == AnimationOutputMode::Split;
             if ui
                 .add_enabled(
                     enabled && !catalog.animations.is_empty(),
@@ -538,12 +494,8 @@ fn render_root_motion_controls(
 
     ComboBox::from_label(i18n.tr("glb.export_root_motion_mode"))
         .selected_text(match selection.root_motion_removal_mode {
-            RootMotionRemovalMode::HorizontalXZ => {
-                i18n.tr("glb.export_root_motion_horizontal")
-            }
-            RootMotionRemovalMode::AllTranslation => {
-                i18n.tr("glb.export_root_motion_all")
-            }
+            RootMotionRemovalMode::HorizontalXZ => i18n.tr("glb.export_root_motion_horizontal"),
+            RootMotionRemovalMode::AllTranslation => i18n.tr("glb.export_root_motion_all"),
         })
         .show_ui(ui, |ui| {
             ui.selectable_value(
@@ -562,9 +514,7 @@ fn render_root_motion_controls(
     let mut candidates = info
         .as_ref()
         .map(|info| info.candidates.clone())
-        .unwrap_or_else(|_| {
-            catalog.nodes.iter().map(|node| node.index).collect()
-        });
+        .unwrap_or_else(|_| catalog.nodes.iter().map(|node| node.index).collect());
     if let Some(override_node) = selection.root_motion_node_override {
         candidates.push(override_node);
     }
@@ -610,12 +560,8 @@ fn render_root_motion_controls(
             }
         });
     ui.label(match selection.root_motion_removal_mode {
-        RootMotionRemovalMode::HorizontalXZ => {
-            i18n.tr("glb.export_root_motion_horizontal_hint")
-        }
-        RootMotionRemovalMode::AllTranslation => {
-            i18n.tr("glb.export_root_motion_all_hint")
-        }
+        RootMotionRemovalMode::HorizontalXZ => i18n.tr("glb.export_root_motion_horizontal_hint"),
+        RootMotionRemovalMode::AllTranslation => i18n.tr("glb.export_root_motion_all_hint"),
     });
     if let Err(error) = info {
         ui.colored_label(
@@ -666,9 +612,7 @@ fn scene_label(catalog: &GlbExportCatalog, index: usize) -> String {
         .unwrap_or_else(|| format!("Scene {index}"))
 }
 
-fn scene_label_from_scene(
-    scene: &crate::modules::glb::GlbExportScene,
-) -> String {
+fn scene_label_from_scene(scene: &crate::modules::glb::GlbExportScene) -> String {
     format!("{} [{}]", scene.name, scene.index)
 }
 

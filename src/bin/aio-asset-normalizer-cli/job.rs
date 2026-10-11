@@ -6,8 +6,7 @@ use clap::ValueEnum;
 use serde::Deserialize;
 
 use aio_asset_normalizer::modules::glb::{
-    AnimationOutputMode, BatchNameSelector, GlbBatchRecipe, GlbExportPreset,
-    RootMotionRemovalMode,
+    AnimationOutputMode, BatchNameSelector, GlbBatchRecipe, GlbExportPreset, RootMotionRemovalMode,
 };
 
 /// Sentinel that selects the automatic resolver instead of an exact name.
@@ -86,12 +85,8 @@ impl Default for RootMotionModeArg {
 impl From<RootMotionModeArg> for RootMotionRemovalMode {
     fn from(value: RootMotionModeArg) -> Self {
         match value {
-            RootMotionModeArg::HorizontalXz => {
-                RootMotionRemovalMode::HorizontalXZ
-            }
-            RootMotionModeArg::AllTranslation => {
-                RootMotionRemovalMode::AllTranslation
-            }
+            RootMotionModeArg::HorizontalXz => RootMotionRemovalMode::HorizontalXZ,
+            RootMotionModeArg::AllTranslation => RootMotionRemovalMode::AllTranslation,
         }
     }
 }
@@ -120,9 +115,7 @@ impl RecipeOptions {
     }
 }
 
-pub use aio_asset_normalizer::modules::operations::spec::{
-    EditJobFile, ExportJobFile,
-};
+pub use aio_asset_normalizer::modules::operations::spec::{EditJobFile, ExportJobFile};
 
 pub fn load_json<T: for<'de> Deserialize<'de>>(
     path: &Path,

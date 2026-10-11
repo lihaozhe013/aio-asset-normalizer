@@ -13,9 +13,7 @@ impl App {
             converter: preferences::ConverterPreferences {
                 blender_path: self.blender_path.clone(),
                 show_all_files: converter_tree.show_all_files,
-                last_opened_directory: converter_tree
-                    .last_opened_directory
-                    .clone(),
+                last_opened_directory: converter_tree.last_opened_directory.clone(),
             },
         }
     }
@@ -33,9 +31,7 @@ impl App {
         rect
     }
 
-    pub(crate) fn glb_animation_entries(
-        &self,
-    ) -> Vec<(String, f32, bool, String)> {
+    pub(crate) fn glb_animation_entries(&self) -> Vec<(String, f32, bool, String)> {
         self.canvas
             .animation_clips()
             .iter()
@@ -125,9 +121,7 @@ impl App {
         }
     }
 
-    pub(crate) fn update_glb_animation_preview(
-        &mut self,
-    ) -> Result<(), String> {
+    pub(crate) fn update_glb_animation_preview(&mut self) -> Result<(), String> {
         if self
             .canvas
             .animation_clips()
@@ -136,15 +130,11 @@ impl App {
         {
             return Ok(());
         }
-        self.canvas.update_glb_animation(
-            self.glb_animation_index,
-            self.glb_animation_time,
-        )?;
+        self.canvas
+            .update_glb_animation(self.glb_animation_index, self.glb_animation_time)?;
         if self.glb_retarget_preview_active {
             if let Some(target) = self.glb_retarget_target.as_ref() {
-                if let Ok(skin) =
-                    target.skin_data_at(self.retarget_target_skin_index)
-                {
+                if let Ok(skin) = target.skin_data_at(self.retarget_target_skin_index) {
                     self.canvas.update_target_skeleton_animation_cached(
                         0,
                         self.glb_animation_time,

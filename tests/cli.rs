@@ -11,8 +11,7 @@ use support::*;
 const BIN: &str = env!("CARGO_BIN_EXE_aio-asset-normalizer-cli");
 
 fn workspace(label: &str) -> PathBuf {
-    let dir = std::env::temp_dir()
-        .join(format!("aio-cli-tests-{}-{label}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("aio-cli-tests-{}-{label}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir

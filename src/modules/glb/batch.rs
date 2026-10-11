@@ -7,8 +7,8 @@
 use serde_json::Value;
 
 use super::{
-    AnimationOutputMode, GlbDocument, GlbError, GlbExportPreset,
-    GlbExportSelection, RootMotionRemovalMode,
+    AnimationOutputMode, GlbDocument, GlbError, GlbExportPreset, GlbExportSelection,
+    RootMotionRemovalMode,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -48,10 +48,7 @@ impl Default for GlbBatchRecipe {
 
 impl GlbBatchRecipe {
     /// Resolve semantic batch intent into indices belonging to `document`.
-    pub fn resolve(
-        &self,
-        document: &GlbDocument,
-    ) -> Result<GlbExportSelection, GlbError> {
+    pub fn resolve(&self, document: &GlbDocument) -> Result<GlbExportSelection, GlbError> {
         let catalog = document.export_catalog()?;
         let defaults = document.default_export_selection()?;
         let compact = self.preset != GlbExportPreset::PreserveAll;
@@ -62,9 +59,7 @@ impl GlbBatchRecipe {
             None
         };
 
-        if self.preset == GlbExportPreset::SkeletonAnimation
-            && catalog.animations.is_empty()
-        {
+        if self.preset == GlbExportPreset::SkeletonAnimation && catalog.animations.is_empty() {
             return Err(GlbError::Invalid(
                 "Skeleton Animation requires at least one animation".to_owned(),
             ));
@@ -73,16 +68,13 @@ impl GlbBatchRecipe {
         let root_motion_node_override = if compact && self.remove_root_motion {
             match &self.root_motion_node {
                 BatchNameSelector::AutomaticUnique => None,
-                BatchNameSelector::Exact(name) => {
-                    Some(resolve_node(document, name)?)
-                }
+                BatchNameSelector::Exact(name) => Some(resolve_node(document, name)?),
             }
         } else {
             None
         };
 
-        let selected_nodes = if self.preset == GlbExportPreset::CharacterPackage
-        {
+        let selected_nodes = if self.preset == GlbExportPreset::CharacterPackage {
             catalog
                 .scenes
                 .get(defaults.scene_index)
@@ -208,11 +200,7 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn document(
-        skins: &[&str],
-        nodes: &[&str],
-        animations: usize,
-    ) -> GlbDocument {
+    fn document(skins: &[&str], nodes: &[&str], animations: usize) -> GlbDocument {
         let json = json!({
             "asset": {"version": "2.0"},
             "scene": 0,
@@ -260,8 +248,7 @@ mod tests {
             skin: BatchNameSelector::Exact("Armature".to_owned()),
             root_motion_node: BatchNameSelector::Exact("Root".to_owned()),
             remove_root_motion: true,
-            root_motion_removal_mode:
-                super::RootMotionRemovalMode::AllTranslation,
+            root_motion_removal_mode: super::RootMotionRemovalMode::AllTranslation,
             ..Default::default()
         };
         let selection = recipe.resolve(&document).unwrap();
@@ -283,8 +270,7 @@ mod tests {
             root_motion_node: BatchNameSelector::Exact("Root".to_owned()),
             animation_output: super::AnimationOutputMode::Split,
             remove_root_motion: true,
-            root_motion_removal_mode:
-                super::RootMotionRemovalMode::AllTranslation,
+            root_motion_removal_mode: super::RootMotionRemovalMode::AllTranslation,
         };
         let selection = recipe.resolve(&document).unwrap();
         assert_eq!(selection.preset, GlbExportPreset::PreserveAll);
@@ -325,8 +311,7 @@ mod tests {
         };
         assert!(missing_recipe.resolve(&missing).is_err());
 
-        let duplicate =
-            document(&["Armature", "Armature"], &["Root", "Pelvis"], 1);
+        let duplicate = document(&["Armature", "Armature"], &["Root", "Pelvis"], 1);
         let duplicate_recipe = GlbBatchRecipe {
             preset: GlbExportPreset::SkeletonAnimation,
             skin: BatchNameSelector::Exact("Armature".to_owned()),
@@ -338,8 +323,7 @@ mod tests {
             .to_string();
         assert!(error.contains("exactly one Skin"));
 
-        let duplicate_node =
-            document(&["Armature"], &["Root", "Root", "Joint"], 1);
+        let duplicate_node = document(&["Armature"], &["Root", "Root", "Joint"], 1);
         let duplicate_node_recipe = GlbBatchRecipe {
             preset: GlbExportPreset::SkeletonAnimation,
             root_motion_node: BatchNameSelector::Exact("Root".to_owned()),
@@ -355,8 +339,7 @@ mod tests {
 
     #[test]
     fn skeleton_animation_requires_at_least_one_skin_and_animation() {
-        let zero_animation_document =
-            document(&["Armature"], &["Root", "Joint"], 0);
+        let zero_animation_document = document(&["Armature"], &["Root", "Joint"], 0);
         let recipe = GlbBatchRecipe {
             preset: GlbExportPreset::SkeletonAnimation,
             ..Default::default()
@@ -368,8 +351,7 @@ mod tests {
         assert!(selection.contains("animation"));
 
         let no_skin_document = document(&[], &["Root"], 1);
-        let selection =
-            recipe.resolve(&no_skin_document).unwrap_err().to_string();
+        let selection = recipe.resolve(&no_skin_document).unwrap_err().to_string();
         assert!(selection.contains("Skin"));
     }
 }

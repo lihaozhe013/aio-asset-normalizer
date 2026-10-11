@@ -83,30 +83,21 @@ pub fn render(
 
                 ui.menu_button(i18n.tr("menu.page"), |ui| {
                     if ui
-                        .selectable_label(
-                            page == Page::GlbEditor,
-                            i18n.tr("page.glb_editor"),
-                        )
+                        .selectable_label(page == Page::GlbEditor, i18n.tr("page.glb_editor"))
                         .clicked()
                     {
                         actions.push(MenuAction::OpenGlbEditor);
                         ui.close();
                     }
                     if ui
-                        .selectable_label(
-                            page == Page::BvhStudio,
-                            i18n.tr("page.bvh_studio"),
-                        )
+                        .selectable_label(page == Page::BvhStudio, i18n.tr("page.bvh_studio"))
                         .clicked()
                     {
                         actions.push(MenuAction::OpenBvhStudio);
                         ui.close();
                     }
                     if ui
-                        .selectable_label(
-                            page == Page::FbxConverter,
-                            i18n.tr("page.fbx_converter"),
-                        )
+                        .selectable_label(page == Page::FbxConverter, i18n.tr("page.fbx_converter"))
                         .clicked()
                     {
                         actions.push(MenuAction::OpenFbxConverter);

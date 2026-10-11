@@ -80,8 +80,7 @@ fn animation_rate_scales_shared_inputs_and_preserves_outputs() {
     let second_input = document.json["animations"][0]["samplers"][1]["input"]
         .as_u64()
         .unwrap();
-    let untouched_input = document.json["animations"][1]["samplers"][0]
-        ["input"]
+    let untouched_input = document.json["animations"][1]["samplers"][0]["input"]
         .as_u64()
         .unwrap();
 

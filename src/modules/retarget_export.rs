@@ -9,12 +9,10 @@ use std::path::Path;
 
 use crate::modules::bvh::{BvhDocument, BvhError, RetargetClip};
 use crate::modules::glb::{
-    AnimationClipData, AnimationRuntime, GlbDocument, GlbError,
-    GlbExportReport, GlbExportSelection, SkinData,
+    AnimationClipData, AnimationRuntime, GlbDocument, GlbError, GlbExportReport,
+    GlbExportSelection, SkinData,
 };
-use crate::modules::retarget::{
-    self, RetargetError, RetargetOptions, SkeletonMapping,
-};
+use crate::modules::retarget::{self, RetargetError, RetargetOptions, SkeletonMapping};
 
 #[derive(Debug)]
 pub enum RetargetExportError {
@@ -62,8 +60,7 @@ pub fn retarget_clip_from_bvh(
     name: impl Into<String>,
     reduce_keys: Option<f32>,
 ) -> Result<RetargetClip, RetargetExportError> {
-    let mut clip =
-        retarget::retarget_bvh(source, target_skin, mapping, options, name)?;
+    let mut clip = retarget::retarget_bvh(source, target_skin, mapping, options, name)?;
     reduce_clip_keys(&mut clip, reduce_keys)?;
     Ok(clip)
 }
@@ -84,13 +81,8 @@ pub fn retarget_clip_from_glb(
     reduce_keys: Option<f32>,
 ) -> Result<RetargetClip, RetargetExportError> {
     let source_bytes = source_document.to_bytes()?;
-    let runtime =
-        AnimationRuntime::from_bytes_skeleton_only(&source_bytes, source_dir)
-            .map_err(|error| {
-            RetargetExportError::Retarget(RetargetError::Source(
-                error.to_string(),
-            ))
-        })?;
+    let runtime = AnimationRuntime::from_bytes_skeleton_only(&source_bytes, source_dir)
+        .map_err(|error| RetargetExportError::Retarget(RetargetError::Source(error.to_string())))?;
     let mut clip = retarget::retarget_glb(
         &runtime,
         source_document,
@@ -105,10 +97,7 @@ pub fn retarget_clip_from_glb(
 }
 
 /// Replace every animation in `target` with the retargeted clip.
-pub fn apply_retarget_clip(
-    target: &mut GlbDocument,
-    clip: RetargetClip,
-) -> Result<(), GlbError> {
+pub fn apply_retarget_clip(target: &mut GlbDocument, clip: RetargetClip) -> Result<(), GlbError> {
     target.replace_animations(&AnimationClipData {
         name: clip.name,
         times: clip.times,
@@ -126,9 +115,7 @@ pub fn export_retargeted_glb(
 ) -> Result<GlbExportReport, RetargetExportError> {
     let mut output = target.clone();
     apply_retarget_clip(&mut output, clip)?;
-    let report = crate::modules::glb::pipeline::export_selection_atomic(
-        &output, selection, path,
-    )?;
+    let report = crate::modules::glb::pipeline::export_selection_atomic(&output, selection, path)?;
     Ok(report)
 }
 

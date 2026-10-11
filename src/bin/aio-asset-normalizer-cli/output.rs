@@ -109,11 +109,7 @@ struct Envelope {
     error: Option<Failure>,
 }
 
-pub fn emit_success(
-    command: &'static str,
-    results: Value,
-    warnings: Vec<String>,
-) -> i32 {
+pub fn emit_success(command: &'static str, results: Value, warnings: Vec<String>) -> i32 {
     write(&Envelope {
         schema_version: SCHEMA_VERSION,
         ok: true,
@@ -127,11 +123,7 @@ pub fn emit_success(
 }
 
 /// Emit a failure envelope and return the matching process exit code.
-pub fn emit_failure(
-    command: &'static str,
-    results: Value,
-    error: &CliError,
-) -> i32 {
+pub fn emit_failure(command: &'static str, results: Value, error: &CliError) -> i32 {
     write(&Envelope {
         schema_version: SCHEMA_VERSION,
         ok: false,
@@ -188,8 +180,6 @@ pub fn glb_error(error: GlbError) -> CliError {
 pub fn bvh_error(error: BvhError) -> CliError {
     match error {
         BvhError::Io(error) => CliError::io(error.to_string()),
-        BvhError::Parse(message) | BvhError::Mapping(message) => {
-            CliError::validation(message)
-        }
+        BvhError::Parse(message) | BvhError::Mapping(message) => CliError::validation(message),
     }
 }

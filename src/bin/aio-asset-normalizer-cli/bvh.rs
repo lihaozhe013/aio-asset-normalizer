@@ -83,9 +83,7 @@ fn inspect(args: &InspectArgs) -> i32 {
         }
     }
     match first_error {
-        None => {
-            output::emit_success(COMMAND, json!({ "files": files }), Vec::new())
-        }
+        None => output::emit_success(COMMAND, json!({ "files": files }), Vec::new()),
         Some(error) => output::emit_failure(
             COMMAND,
             json!({ "files": files }),
@@ -134,13 +132,10 @@ fn inspect_one(path: &Path) -> Result<Value, CliError> {
 
 fn process(args: &ProcessArgs) -> i32 {
     const COMMAND: &str = "bvh.process";
-    let fail =
-        |error: CliError| output::emit_failure(COMMAND, json!({}), &error);
+    let fail = |error: CliError| output::emit_failure(COMMAND, json!({}), &error);
 
     let request = match &args.job {
-        Some(path) => match operations::load_json::<core::BvhProcessRequest>(
-            path, "BVH job",
-        ) {
+        Some(path) => match operations::load_json::<core::BvhProcessRequest>(path, "BVH job") {
             Ok(request) => request,
             Err(error) => return fail(output::operation_error(error)),
         },
@@ -159,9 +154,7 @@ fn process(args: &ProcessArgs) -> i32 {
         },
     };
     if request.command.as_deref().is_some_and(|v| v != COMMAND) {
-        return fail(CliError::validation(
-            "BVH job declares a different command",
-        ));
+        return fail(CliError::validation("BVH job declares a different command"));
     }
     let mut document = match BvhDocument::load(&request.input) {
         Ok(document) => document,
@@ -169,13 +162,11 @@ fn process(args: &ProcessArgs) -> i32 {
     };
     let original_frames = document.frames.len();
 
-    document = match aio_asset_normalizer::modules::operations::bvh::prepare(
-        &document,
-        request.trim,
-    ) {
-        Ok(document) => document,
-        Err(e) => return fail(output::operation_error(e)),
-    };
+    document =
+        match aio_asset_normalizer::modules::operations::bvh::prepare(&document, request.trim) {
+            Ok(document) => document,
+            Err(e) => return fail(output::operation_error(e)),
+        };
 
     if let Err(error) = core::validate_output(
         &document,

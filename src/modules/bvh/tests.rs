@@ -120,9 +120,9 @@ fn mapping_suggestions_normalize_common_rig_prefixes() {
     };
     let suggestions = document.suggest_mapping(&target);
     assert_eq!(suggestions.len(), 2);
-    assert!(suggestions.iter().all(|suggestion| {
-        suggestion.confidence == SuggestionConfidence::Normalized
-    }));
+    assert!(suggestions
+        .iter()
+        .all(|suggestion| { suggestion.confidence == SuggestionConfidence::Normalized }));
 }
 
 #[test]
@@ -198,11 +198,7 @@ fn key_reduction_removes_a_redundant_middle_key() {
         channels: vec![AnimationChannelData {
             node: 0,
             rotations: vec![identity_quaternion(); 3],
-            translations: Some(vec![
-                [0.0, 0.0, 0.0],
-                [1.0, 1.0, 1.0],
-                [2.0, 2.0, 2.0],
-            ]),
+            translations: Some(vec![[0.0, 0.0, 0.0], [1.0, 1.0, 1.0], [2.0, 2.0, 2.0]]),
         }],
     };
     assert_eq!(clip.reduce_keys(0.0001).unwrap(), 1);

@@ -57,12 +57,8 @@ fn smart_loop_closes_small_drift_and_preserves_vertical_motion() {
     let rotation = document.json["animations"][0]["samplers"][1]["output"]
         .as_u64()
         .unwrap() as usize;
-    let rotations =
-        read_output(&document, document.accessor(rotation).unwrap()).unwrap();
-    assert!(
-        vector_distance(rotations.first().unwrap(), rotations.last().unwrap())
-            < 1e-5
-    );
+    let rotations = read_output(&document, document.accessor(rotation).unwrap()).unwrap();
+    assert!(vector_distance(rotations.first().unwrap(), rotations.last().unwrap()) < 1e-5);
     gltf::Gltf::from_slice(&document.to_bytes().unwrap()).unwrap();
 }
 

@@ -1,10 +1,7 @@
 use super::*;
 use std::borrow::Cow;
 
-fn meshless_hierarchy_glb(
-    include_skin: bool,
-    animation_interpolation: Option<&str>,
-) -> Vec<u8> {
+fn meshless_hierarchy_glb(include_skin: bool, animation_interpolation: Option<&str>) -> Vec<u8> {
     let mut bin = Vec::new();
     if animation_interpolation.is_some() {
         for value in [0.0_f32, 1.0] {
@@ -90,8 +87,7 @@ fn static_skinned_glb(root_scale: [f32; 3]) -> Vec<u8> {
         }
     }
     for value in [
-        0.5_f32, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, -1.5,
-        -1.0, 0.0, 1.0,
+        0.5_f32, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, -1.5, -1.0, 0.0, 1.0,
     ] {
         bin.extend_from_slice(&value.to_le_bytes());
     }
@@ -227,8 +223,7 @@ fn static_skinned_runtime_rejects_non_invertible_mesh_transform() {
 
 #[test]
 fn affine_inverse_handles_rotation_scale_and_translation() {
-    let matrix =
-        compose([3.0, -2.0, 1.0], [0.3, -0.2, 0.4, 0.8], [2.0, 3.0, 4.0]);
+    let matrix = compose([3.0, -2.0, 1.0], [0.3, -0.2, 0.4, 0.8], [2.0, 3.0, 4.0]);
     let inverse = invert_affine(matrix).unwrap();
     let product = multiply(matrix, inverse);
     for (index, value) in product.iter().enumerate() {
@@ -396,8 +391,7 @@ fn runtime_reads_skin_attributes_and_deforms_a_vertex() {
         );
     }
     for value in [
-        1.0_f32, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0,
-        0.0, 0.0, 1.0,
+        1.0_f32, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
     ] {
         bin.extend_from_slice(&value.to_le_bytes());
     }

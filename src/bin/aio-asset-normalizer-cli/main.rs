@@ -66,8 +66,7 @@ fn main() {
         Err(error) => {
             if matches!(
                 error.kind(),
-                clap::error::ErrorKind::DisplayHelp
-                    | clap::error::ErrorKind::DisplayVersion
+                clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
             ) {
                 let _ = error.print();
                 return;
@@ -131,8 +130,7 @@ fn check_job_conflicts(
         for arg in command.get_arguments() {
             let id = arg.get_id();
             if !["job", "dry_run", "log_level"].contains(&id.as_str())
-                && matches.value_source(id.as_str())
-                    == Some(clap::parser::ValueSource::CommandLine)
+                && matches.value_source(id.as_str()) == Some(clap::parser::ValueSource::CommandLine)
             {
                 return Err(output::CliError::usage(format!(
                     "--job cannot be combined with task argument {}",

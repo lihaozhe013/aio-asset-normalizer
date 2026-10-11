@@ -8,13 +8,10 @@ use crate::modules::blender::task::ConverterMessage;
 use crate::modules::preferences::FileTreePreferences;
 use crate::modules::retarget::{MappingValidationReport, SkeletonMapping};
 use crate::modules::{
-    bvh::{
-        BvhDocument, MappingFile, MappingSuggestion, MappingValidation,
-        RetargetPlan,
-    },
+    bvh::{BvhDocument, MappingFile, MappingSuggestion, MappingValidation, RetargetPlan},
     glb::{
-        AnimationRuntime, EditOperation, GlbDocument, GlbExportReport,
-        GlbExportSelection, SmartLoopOptions, TextureSlot,
+        AnimationRuntime, EditOperation, GlbDocument, GlbExportReport, GlbExportSelection,
+        SmartLoopOptions, TextureSlot,
     },
     i18n::I18n,
     logging::{safe_path_label, LogLevel, LogRuntime},
@@ -49,8 +46,7 @@ pub struct App {
     pub glb: Option<GlbDocument>,
     pub glb_path: Option<PathBuf>,
     pub(crate) glb_export_selection: GlbExportSelection,
-    pub(crate) glb_export_estimate:
-        Option<(GlbExportSelection, Result<GlbExportReport, String>)>,
+    pub(crate) glb_export_estimate: Option<(GlbExportSelection, Result<GlbExportReport, String>)>,
     pub(crate) glb_batch: GlbBatchState,
     pub bvh_target_glb: Option<GlbDocument>,
     pub bvh_target_path: Option<PathBuf>,
@@ -170,10 +166,7 @@ impl App {
         ]);
         converter_file_tree.apply_prefs(&FileTreePreferences {
             show_all_files: prefs.converter.show_all_files,
-            last_opened_directory: prefs
-                .converter
-                .last_opened_directory
-                .clone(),
+            last_opened_directory: prefs.converter.last_opened_directory.clone(),
         });
         if let Some(root) = file_tree.root().cloned() {
             if converter_file_tree.root().is_none() {
@@ -298,12 +291,7 @@ impl App {
                         self.file_tree.refresh();
                         self.bvh_file_tree.refresh();
                         for detail in &result.details {
-                            emit_task_log(
-                                result.kind,
-                                LogLevel::Info,
-                                result.task_id,
-                                detail,
-                            );
+                            emit_task_log(result.kind, LogLevel::Info, result.task_id, detail);
                         }
                         for path in &result.paths {
                             emit_task_log(
@@ -316,22 +304,14 @@ impl App {
                     }
                     Err(error) => {
                         for detail in &result.details {
-                            emit_task_log(
-                                result.kind,
-                                LogLevel::Info,
-                                result.task_id,
-                                detail,
-                            );
+                            emit_task_log(result.kind, LogLevel::Info, result.task_id, detail);
                         }
                         for path in &result.paths {
                             emit_task_log(
                                 result.kind,
                                 LogLevel::Warn,
                                 result.task_id,
-                                &format!(
-                                    "Exported {} before failure",
-                                    safe_path_label(path)
-                                ),
+                                &format!("Exported {} before failure", safe_path_label(path)),
                             );
                         }
                         emit_task_log(
@@ -383,9 +363,7 @@ impl App {
                 return;
             };
             let (document, reused_document) = match self.glb.take() {
-                Some(document)
-                    if document.source_path.as_ref() == Some(&path) =>
-                {
+                Some(document) if document.source_path.as_ref() == Some(&path) => {
                     (Ok(document), true)
                 }
                 _ => (GlbDocument::load(&path), false),
@@ -397,9 +375,7 @@ impl App {
                         input = %safe_path_label(&path),
                         "Loaded GLB"
                     );
-                    let preview_document = if self.trim_enabled
-                        || self.smart_loop_enabled
-                    {
+                    let preview_document = if self.trim_enabled || self.smart_loop_enabled {
                         let mut preview = document.clone();
                         let result = (|| {
                             if self.trim_enabled {
@@ -416,8 +392,7 @@ impl App {
                                     .smart_loop_animation(
                                         self.glb_animation_index,
                                         SmartLoopOptions {
-                                            transition_seconds: self
-                                                .smart_loop_transition,
+                                            transition_seconds: self.smart_loop_transition,
                                         },
                                     )
                                     .map_err(|error| error.to_string())?;
@@ -448,8 +423,7 @@ impl App {
                         document.clone()
                     };
                     let preview_path = if preview_document.dirty {
-                        let path = std::env::temp_dir()
-                            .join("aio-asset-normalizer-preview.glb");
+                        let path = std::env::temp_dir().join("aio-asset-normalizer-preview.glb");
                         match preview_document.export_atomic(&path) {
                             Ok(()) => path,
                             Err(error) => {
@@ -468,15 +442,11 @@ impl App {
                         Ok(()) => {
                             self.glb = Some(document);
                             self.glb_export_estimate = None;
-                            if reload_kind == GlbReloadKind::OpenModel
-                                && !reused_document
-                            {
+                            if reload_kind == GlbReloadKind::OpenModel && !reused_document {
                                 self.glb_export_selection = self
                                     .glb
                                     .as_ref()
-                                    .and_then(|document| {
-                                        document.default_export_selection().ok()
-                                    })
+                                    .and_then(|document| document.default_export_selection().ok())
                                     .unwrap_or_default();
                                 self.reset_glb_trim();
                             }
@@ -492,10 +462,7 @@ impl App {
                                         }
                                     })
                                     .unwrap_or("scene nodes");
-                                let status = if self
-                                    .canvas
-                                    .is_glb_skeleton_only_preview()
-                                {
+                                let status = if self.canvas.is_glb_skeleton_only_preview() {
                                     "Skeleton-only preview ready"
                                 } else {
                                     "GLB skeleton preview ready"
@@ -515,9 +482,8 @@ impl App {
                             if skin_count == 0 {
                                 self.retarget_source_skin_index = 0;
                             } else {
-                                self.retarget_source_skin_index = self
-                                    .retarget_source_skin_index
-                                    .min(skin_count - 1);
+                                self.retarget_source_skin_index =
+                                    self.retarget_source_skin_index.min(skin_count - 1);
                             }
                             self.refresh_glb_retarget_mapping();
                             if reload_kind == GlbReloadKind::OpenModel {
@@ -531,8 +497,7 @@ impl App {
                                 );
                             }
                             if !self.canvas.animation_clips().is_empty() {
-                                self.bottom_panel_tab =
-                                    BottomPanelTab::Animation;
+                                self.bottom_panel_tab = BottomPanelTab::Animation;
                             }
                             let selected = self
                                 .pending_animation_selection
@@ -543,14 +508,10 @@ impl App {
                                         .get(*index)
                                         .is_some_and(|clip| clip.is_playable())
                                 })
-                                .or_else(|| {
-                                    self.first_playable_glb_animation()
-                                });
+                                .or_else(|| self.first_playable_glb_animation());
                             if let Some(index) = selected {
                                 self.glb_animation_index = index;
-                                if let Err(error) =
-                                    self.update_glb_animation_preview()
-                                {
+                                if let Err(error) = self.update_glb_animation_preview() {
                                     tracing::error!(
                                         target: "glb_editor",
                                         error = %error,
@@ -630,8 +591,7 @@ impl App {
         if self.needs_bvh_skeleton_reload {
             self.needs_bvh_skeleton_reload = false;
             if let Some(document) = self.bvh.as_ref() {
-                let frame =
-                    self.bvh_frame.min(document.frames.len().saturating_sub(1));
+                let frame = self.bvh_frame.min(document.frames.len().saturating_sub(1));
                 match self.bvh_preview_pose(document, frame) {
                     Ok(pose) => {
                         let positions = pose.positions.clone();
@@ -645,9 +605,7 @@ impl App {
                                 .unwrap_or(1.0),
                         );
                         if self.bvh_camera_focus_pending {
-                            if let Some((minimum, maximum)) =
-                                self.canvas.preview_bounds()
-                            {
+                            if let Some((minimum, maximum)) = self.canvas.preview_bounds() {
                                 self.camera.focus_on_bounds(minimum, maximum);
                             } else {
                                 self.camera.focus_on_points(&positions);
@@ -665,11 +623,9 @@ impl App {
                             .as_ref()
                             .is_some_and(|report| report.is_valid())
                         {
-                            if let Err(error) =
-                                self.canvas.update_glb_animation(
-                                    0,
-                                    frame as f32 * document.frame_time,
-                                )
+                            if let Err(error) = self
+                                .canvas
+                                .update_glb_animation(0, frame as f32 * document.frame_time)
                             {
                                 tracing::error!(
                                     target: "retarget",
@@ -678,12 +634,11 @@ impl App {
                                 );
                             }
                             if let Some(target) = self.bvh_target_glb.as_ref() {
-                                if let Ok(skin) = target.skin_data_at(
-                                    self.retarget_target_skin_index,
-                                ) {
-                                    if let Err(error) = self
-                                        .canvas
-                                        .update_target_skeleton_animation(
+                                if let Ok(skin) =
+                                    target.skin_data_at(self.retarget_target_skin_index)
+                                {
+                                    if let Err(error) =
+                                        self.canvas.update_target_skeleton_animation(
                                             context,
                                             0,
                                             frame as f32 * document.frame_time,
@@ -724,8 +679,7 @@ impl App {
                 self.bvh_playback_accumulator +=
                     elapsed.as_secs_f32() * self.bvh_playback_speed.max(0.01);
                 if self.bvh_playback_accumulator >= frame_time {
-                    let steps = (self.bvh_playback_accumulator / frame_time)
-                        .floor() as usize;
+                    let steps = (self.bvh_playback_accumulator / frame_time).floor() as usize;
                     self.bvh_playback_accumulator -= steps as f32 * frame_time;
                     let frame_count = self
                         .bvh
@@ -733,9 +687,7 @@ impl App {
                         .map(|document| document.frames.len())
                         .unwrap_or_default();
                     if frame_count > 0 {
-                        self.set_bvh_frame(
-                            (self.bvh_frame + steps) % frame_count,
-                        );
+                        self.set_bvh_frame((self.bvh_frame + steps) % frame_count);
                     }
                 }
             }
@@ -748,8 +700,7 @@ impl App {
                 self.glb_animation_time += self.glb_animation_accumulator;
                 self.glb_animation_accumulator = 0.0;
                 if self.glb_animation_loop {
-                    self.glb_animation_time =
-                        self.glb_animation_time.rem_euclid(duration);
+                    self.glb_animation_time = self.glb_animation_time.rem_euclid(duration);
                 } else if self.glb_animation_time >= duration {
                     self.glb_animation_time = duration;
                     self.glb_animation_playing = false;
@@ -812,8 +763,7 @@ impl App {
                 self.mapping_suggestions.clear();
                 self.glb_retarget_target = None;
                 self.glb_retarget_target_path = None;
-                self.glb_retarget_export_selection =
-                    GlbExportSelection::default();
+                self.glb_retarget_export_selection = GlbExportSelection::default();
                 self.retarget_mapping = None;
                 self.retarget_mapping_path = None;
                 self.retarget_validation = None;
@@ -837,15 +787,9 @@ impl App {
                 self.needs_save = true;
             }
             MenuAction::ResetCamera => self.camera.reset(),
-            MenuAction::ToggleGrid => {
-                self.canvas.show_grid = !self.canvas.show_grid
-            }
-            MenuAction::ToggleAxes => {
-                self.canvas.show_axes = !self.canvas.show_axes
-            }
-            MenuAction::ToggleOrigin => {
-                self.canvas.show_origin = !self.canvas.show_origin
-            }
+            MenuAction::ToggleGrid => self.canvas.show_grid = !self.canvas.show_grid,
+            MenuAction::ToggleAxes => self.canvas.show_axes = !self.canvas.show_axes,
+            MenuAction::ToggleOrigin => self.canvas.show_origin = !self.canvas.show_origin,
             MenuAction::OpenGlbEditor => {
                 self.page = Page::GlbEditor;
                 self.canvas.clear_glb_skeleton();
@@ -896,24 +840,23 @@ impl App {
             );
             return;
         };
-        let trimmed =
-            match document.trim(self.bvh_trim_start, self.bvh_trim_end) {
-                Ok(()) => {
-                    tracing::info!(
-                        target: "bvh_studio",
-                        "Trimmed BVH frames"
-                    );
-                    true
-                }
-                Err(error) => {
-                    tracing::error!(
-                        target: "bvh_studio",
-                        error = %error,
-                        "BVH trim failed"
-                    );
-                    false
-                }
-            };
+        let trimmed = match document.trim(self.bvh_trim_start, self.bvh_trim_end) {
+            Ok(()) => {
+                tracing::info!(
+                    target: "bvh_studio",
+                    "Trimmed BVH frames"
+                );
+                true
+            }
+            Err(error) => {
+                tracing::error!(
+                    target: "bvh_studio",
+                    error = %error,
+                    "BVH trim failed"
+                );
+                false
+            }
+        };
         if trimmed {
             self.bvh_frame = 0;
             self.bvh_playback_accumulator = 0.0;

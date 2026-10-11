@@ -81,9 +81,7 @@ pub fn glb_bytes() -> Vec<u8> {
         (0.0, 2.0, 0.0),
     ]
     .iter()
-    .flat_map(|(x, y, z)| {
-        [x.to_le_bytes(), y.to_le_bytes(), z.to_le_bytes()].concat()
-    })
+    .flat_map(|(x, y, z)| [x.to_le_bytes(), y.to_le_bytes(), z.to_le_bytes()].concat())
     .collect::<Vec<u8>>();
     let position_offset = push(positions.clone());
     let joints = (0..3).flat_map(|_| [0_u8, 0, 0, 0]).collect::<Vec<u8>>();
@@ -93,8 +91,7 @@ pub fn glb_bytes() -> Vec<u8> {
         .collect::<Vec<u8>>();
     let weights_offset = push(weights.clone());
     let identity = [
-        1.0_f32, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0,
-        -1.0, 0.0, 1.0,
+        1.0_f32, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, -1.0, 0.0, 1.0,
     ];
     let mut inverse_bind = Vec::new();
     for matrix in [identity, identity] {

@@ -31,8 +31,7 @@ impl App {
     pub(crate) fn load_bvh_target(&mut self, path: &Path) {
         match GlbDocument::load(path) {
             Ok(document) => {
-                let mut export_selection =
-                    document.default_export_selection().unwrap_or_default();
+                let mut export_selection = document.default_export_selection().unwrap_or_default();
                 export_selection.preset = GlbExportPreset::CharacterPackage;
                 tracing::info!(
                     target: "bvh_studio",
@@ -68,8 +67,7 @@ impl App {
     pub(crate) fn load_bvh_path(&mut self, path: &Path) {
         match BvhDocument::load(path) {
             Ok(document) => {
-                self.bvh_trim_end =
-                    document.duration().max(document.frame_time);
+                self.bvh_trim_end = document.duration().max(document.frame_time);
                 tracing::info!(
                     target: "bvh_studio",
                     input = %safe_path_label(path),
@@ -89,11 +87,7 @@ impl App {
                 self.refresh_v2_retarget_mapping();
                 self.needs_bvh_target_reload = true;
                 if let Some(parent) = path.parent() {
-                    if self
-                        .bvh_file_tree
-                        .root()
-                        .is_none_or(|root| root != parent)
-                    {
+                    if self.bvh_file_tree.root().is_none_or(|root| root != parent) {
                         self.bvh_file_tree.open_folder(parent.to_path_buf());
                     }
                 }
@@ -195,8 +189,7 @@ impl App {
             let Some(transform) = frame_transforms.get(index) else {
                 continue;
             };
-            let endpoint =
-                add_point(transform.0, rotate_point(transform.1, offset));
+            let endpoint = add_point(transform.0, rotate_point(transform.1, offset));
             let mut endpoint = retarget::convert_bvh_position_to_glb(
                 endpoint,
                 &self.bvh_up_axis,
@@ -225,10 +218,7 @@ impl App {
         ))
     }
 
-    pub(crate) fn bvh_span_diagnostic(
-        &self,
-        document: &BvhDocument,
-    ) -> Result<(f32, f32), String> {
+    pub(crate) fn bvh_span_diagnostic(&self, document: &BvhDocument) -> Result<(f32, f32), String> {
         let rest = document
             .rest_transforms_for_retarget()
             .map_err(|error| error.to_string())?;
@@ -269,9 +259,11 @@ impl App {
             self.retarget_plan = None;
             self.mapping_suggestions.clear();
             self.mapping_path = Some(path);
-            if self.retarget_mapping.as_ref().is_some_and(|mapping| {
-                mapping.source.kind == retarget::SourceKind::Bvh
-            }) {
+            if self
+                .retarget_mapping
+                .as_ref()
+                .is_some_and(|mapping| mapping.source.kind == retarget::SourceKind::Bvh)
+            {
                 self.page = Page::BvhStudio;
             }
             self.refresh_v2_retarget_mapping();
@@ -327,8 +319,7 @@ impl App {
             self.retarget_plan = None;
             return;
         };
-        let Ok(skin) = target.skin_data_at(self.retarget_target_skin_index)
-        else {
+        let Ok(skin) = target.skin_data_at(self.retarget_target_skin_index) else {
             self.retarget_plan = None;
             tracing::warn!(
                 target: "bvh_studio",

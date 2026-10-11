@@ -17,8 +17,8 @@ mod window;
 /// stay in the desktop binary so the library never links egui or three-d.
 pub mod modules {
     pub use aio_asset_normalizer::modules::{
-        atomic_file, blender, build_info, bvh, glb, i18n, logging, operations,
-        preferences, retarget, retarget_export,
+        atomic_file, blender, build_info, bvh, glb, i18n, logging, operations, preferences,
+        retarget, retarget_export,
     };
 
     pub mod ui;
@@ -47,16 +47,13 @@ fn main() {
             frame_input.viewport,
             frame_input.device_pixel_ratio,
             |gui_ctx| {
-                content_rect =
-                    Some(app.render_ui(gui_ctx, frame_input.window_width));
+                content_rect = Some(app.render_ui(gui_ctx, frame_input.window_width));
             },
         );
 
         let dpr = frame_input.device_pixel_ratio;
         let viewport = content_rect
-            .map(|rect| {
-                viewport_from_content_rect(rect, frame_input.viewport, dpr)
-            })
+            .map(|rect| viewport_from_content_rect(rect, frame_input.viewport, dpr))
             .unwrap_or(Viewport {
                 x: 0,
                 y: 0,
@@ -76,27 +73,18 @@ fn main() {
         app.camera.set_viewport(viewport);
 
         let screen = frame_input.screen();
-        let mut clear_rt = screen
-            .clear(ClearState::color_and_depth(0.12, 0.13, 0.17, 1.0, 1.0));
+        let mut clear_rt = screen.clear(ClearState::color_and_depth(0.12, 0.13, 0.17, 1.0, 1.0));
 
         if show_scene && app.canvas.show_axes {
             for axis in &app.canvas.axes {
-                clear_rt = clear_rt.render_partially(
-                    viewport.into(),
-                    &app.camera.camera,
-                    axis,
-                    &[],
-                );
+                clear_rt =
+                    clear_rt.render_partially(viewport.into(), &app.camera.camera, axis, &[]);
             }
         }
         if show_scene && app.canvas.show_grid {
             for line in &app.canvas.grid {
-                clear_rt = clear_rt.render_partially(
-                    viewport.into(),
-                    &app.camera.camera,
-                    line,
-                    &[],
-                );
+                clear_rt =
+                    clear_rt.render_partially(viewport.into(), &app.camera.camera, line, &[]);
             }
         }
         if show_scene && app.canvas.show_origin {
@@ -110,12 +98,8 @@ fn main() {
 
         if let Some(model) = app.canvas.model.as_ref().filter(|_| show_scene) {
             let lights = app.canvas.model_lights();
-            clear_rt = clear_rt.render_partially(
-                viewport.into(),
-                &app.camera.camera,
-                model,
-                &lights,
-            );
+            clear_rt =
+                clear_rt.render_partially(viewport.into(), &app.camera.camera, model, &lights);
         }
 
         if show_scene
@@ -153,8 +137,7 @@ fn main() {
             && (app.page == modules::ui::menu_bar::Page::BvhStudio
                 || app.glb_retarget_preview_active)
         {
-            if app.page == modules::ui::menu_bar::Page::BvhStudio
-                && app.canvas.show_source_skeleton
+            if app.page == modules::ui::menu_bar::Page::BvhStudio && app.canvas.show_source_skeleton
             {
                 if let Some(skeleton) = app.canvas.skeleton.as_ref() {
                     clear_rt = clear_rt.render_partially(
@@ -258,11 +241,7 @@ mod tests {
             three_d::egui::pos2(250.0, 32.0),
             three_d::egui::pos2(900.0, 650.0),
         );
-        let viewport = viewport_from_content_rect(
-            rect,
-            Viewport::new_at_origo(1200, 800),
-            1.0,
-        );
+        let viewport = viewport_from_content_rect(rect, Viewport::new_at_origo(1200, 800), 1.0);
 
         assert_eq!(
             viewport,
@@ -282,11 +261,7 @@ mod tests {
             three_d::egui::pos2(100.0, 24.0),
             three_d::egui::pos2(700.0, 600.0),
         );
-        let viewport = viewport_from_content_rect(
-            rect,
-            Viewport::new_at_origo(1400, 1200),
-            2.0,
-        );
+        let viewport = viewport_from_content_rect(rect, Viewport::new_at_origo(1400, 1200), 2.0);
 
         assert_eq!(
             viewport,
@@ -305,11 +280,7 @@ mod tests {
             three_d::egui::pos2(-10.0, -20.0),
             three_d::egui::pos2(1300.0, 900.0),
         );
-        let viewport = viewport_from_content_rect(
-            rect,
-            Viewport::new_at_origo(1200, 800),
-            1.0,
-        );
+        let viewport = viewport_from_content_rect(rect, Viewport::new_at_origo(1200, 800), 1.0);
 
         assert_eq!(viewport, Viewport::new_at_origo(1200, 800));
     }

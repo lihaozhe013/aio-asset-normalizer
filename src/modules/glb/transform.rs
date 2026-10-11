@@ -12,9 +12,7 @@ pub(super) fn node_matrix(node: &Value) -> Result<[[f32; 4]; 4], GlbError> {
         let mut result = [[0.0; 4]; 4];
         for (index, value) in matrix.iter().enumerate() {
             let value = value.as_f64().ok_or_else(|| {
-                GlbError::Invalid(format!(
-                    "Node matrix component {index} is not numeric"
-                ))
+                GlbError::Invalid(format!("Node matrix component {index} is not numeric"))
             })? as f32;
             if !value.is_finite() {
                 return Err(GlbError::Invalid(
@@ -42,9 +40,7 @@ pub(super) fn node_matrix(node: &Value) -> Result<[[f32; 4]; 4], GlbError> {
 
 pub(super) type NodeTrs = ([f32; 3], [f32; 4], [f32; 3]);
 
-pub(super) fn decompose_matrix(
-    matrix: [[f32; 4]; 4],
-) -> Result<NodeTrs, GlbError> {
+pub(super) fn decompose_matrix(matrix: [[f32; 4]; 4]) -> Result<NodeTrs, GlbError> {
     let translation = [matrix[0][3], matrix[1][3], matrix[2][3]];
     if translation.iter().any(|value| !value.is_finite()) {
         return Err(GlbError::Invalid(
@@ -57,8 +53,7 @@ pub(super) fn decompose_matrix(
         [matrix[0][2], matrix[1][2], matrix[2][2]],
     ];
     let mut scale = columns.map(|column| {
-        (column[0] * column[0] + column[1] * column[1] + column[2] * column[2])
-            .sqrt()
+        (column[0] * column[0] + column[1] * column[1] + column[2] * column[2]).sqrt()
     });
     if scale
         .iter()
@@ -76,12 +71,8 @@ pub(super) fn decompose_matrix(
     }
     let determinant = rotation[0][0]
         * (rotation[1][1] * rotation[2][2] - rotation[1][2] * rotation[2][1])
-        - rotation[0][1]
-            * (rotation[1][0] * rotation[2][2]
-                - rotation[1][2] * rotation[2][0])
-        + rotation[0][2]
-            * (rotation[1][0] * rotation[2][1]
-                - rotation[1][1] * rotation[2][0]);
+        - rotation[0][1] * (rotation[1][0] * rotation[2][2] - rotation[1][2] * rotation[2][0])
+        + rotation[0][2] * (rotation[1][0] * rotation[2][1] - rotation[1][1] * rotation[2][0]);
     if determinant < 0.0 {
         scale[0] = -scale[0];
         for row in &mut rotation {
@@ -97,11 +88,8 @@ pub(super) fn decompose_matrix(
             (rotation[1][0] - rotation[0][1]) / root,
             0.25 * root,
         ]
-    } else if rotation[0][0] > rotation[1][1] && rotation[0][0] > rotation[2][2]
-    {
-        let root = (1.0 + rotation[0][0] - rotation[1][1] - rotation[2][2])
-            .sqrt()
-            * 2.0;
+    } else if rotation[0][0] > rotation[1][1] && rotation[0][0] > rotation[2][2] {
+        let root = (1.0 + rotation[0][0] - rotation[1][1] - rotation[2][2]).sqrt() * 2.0;
         [
             0.25 * root,
             (rotation[0][1] + rotation[1][0]) / root,
@@ -109,9 +97,7 @@ pub(super) fn decompose_matrix(
             (rotation[2][1] - rotation[1][2]) / root,
         ]
     } else if rotation[1][1] > rotation[2][2] {
-        let root = (1.0 + rotation[1][1] - rotation[0][0] - rotation[2][2])
-            .sqrt()
-            * 2.0;
+        let root = (1.0 + rotation[1][1] - rotation[0][0] - rotation[2][2]).sqrt() * 2.0;
         [
             (rotation[0][1] + rotation[1][0]) / root,
             0.25 * root,
@@ -119,9 +105,7 @@ pub(super) fn decompose_matrix(
             (rotation[0][2] - rotation[2][0]) / root,
         ]
     } else {
-        let root = (1.0 + rotation[2][2] - rotation[0][0] - rotation[1][1])
-            .sqrt()
-            * 2.0;
+        let root = (1.0 + rotation[2][2] - rotation[0][0] - rotation[1][1]).sqrt() * 2.0;
         [
             (rotation[0][2] + rotation[2][0]) / root,
             (rotation[1][2] + rotation[2][1]) / root,
@@ -158,16 +142,13 @@ pub(super) fn set_matrix(node: &mut Value, matrix: [[f32; 4]; 4]) {
     }
 }
 
-fn array3(
-    value: Option<&Value>,
-    default: [f32; 3],
-) -> Result<[f32; 3], GlbError> {
+fn array3(value: Option<&Value>, default: [f32; 3]) -> Result<[f32; 3], GlbError> {
     let Some(value) = value else {
         return Ok(default);
     };
-    let values = value.as_array().ok_or_else(|| {
-        GlbError::Invalid("Node TRS component must be an array".to_owned())
-    })?;
+    let values = value
+        .as_array()
+        .ok_or_else(|| GlbError::Invalid("Node TRS component must be an array".to_owned()))?;
     if values.len() != 3 {
         return Err(GlbError::Invalid(
             "Node translation/scale must contain three values".to_owned(),
@@ -178,9 +159,7 @@ fn array3(
         .enumerate()
         .map(|(index, value)| {
             let value = value.as_f64().ok_or_else(|| {
-                GlbError::Invalid(format!(
-                    "Node TRS component {index} is not numeric"
-                ))
+                GlbError::Invalid(format!("Node TRS component {index} is not numeric"))
             })? as f32;
             if !value.is_finite() {
                 return Err(GlbError::Invalid(
@@ -193,16 +172,13 @@ fn array3(
     Ok([values[0], values[1], values[2]])
 }
 
-fn array4(
-    value: Option<&Value>,
-    default: [f32; 4],
-) -> Result<[f32; 4], GlbError> {
+fn array4(value: Option<&Value>, default: [f32; 4]) -> Result<[f32; 4], GlbError> {
     let Some(value) = value else {
         return Ok(default);
     };
-    let values = value.as_array().ok_or_else(|| {
-        GlbError::Invalid("Node TRS component must be an array".to_owned())
-    })?;
+    let values = value
+        .as_array()
+        .ok_or_else(|| GlbError::Invalid("Node TRS component must be an array".to_owned()))?;
     if values.len() != 4 {
         return Err(GlbError::Invalid(
             "Node rotation must contain four values".to_owned(),
@@ -213,9 +189,7 @@ fn array4(
         .enumerate()
         .map(|(index, value)| {
             let value = value.as_f64().ok_or_else(|| {
-                GlbError::Invalid(format!(
-                    "Node rotation component {index} is not numeric"
-                ))
+                GlbError::Invalid(format!("Node rotation component {index} is not numeric"))
             })? as f32;
             if !value.is_finite() {
                 return Err(GlbError::Invalid(
@@ -252,8 +226,7 @@ pub(super) fn multiply(a: [[f32; 4]; 4], b: [[f32; 4]; 4]) -> [[f32; 4]; 4] {
     let mut result = [[0.0; 4]; 4];
     for row in 0..4 {
         for column in 0..4 {
-            result[row][column] =
-                (0..4).map(|index| a[row][index] * b[index][column]).sum();
+            result[row][column] = (0..4).map(|index| a[row][index] * b[index][column]).sum();
         }
     }
     result

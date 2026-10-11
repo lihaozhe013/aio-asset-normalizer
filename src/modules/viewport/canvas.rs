@@ -1,7 +1,5 @@
 use super::helpers;
-use super::skeleton_visual::{
-    SkeletonPose, SkeletonVisual, SkeletonVisualConfig,
-};
+use super::skeleton_visual::{SkeletonPose, SkeletonVisual, SkeletonVisualConfig};
 use crate::modules::glb::{
     AnimationClip, AnimationRuntime, RuntimeNode, RuntimeNodePose, RuntimePose,
 };
@@ -69,13 +67,8 @@ impl ViewportCanvas {
         }
     }
 
-    pub fn load_glb(
-        &mut self,
-        context: &Context,
-        path: &Path,
-    ) -> Result<(), String> {
-        let runtime =
-            AnimationRuntime::load(path).map_err(|error| error.to_string())?;
+    pub fn load_glb(&mut self, context: &Context, path: &Path) -> Result<(), String> {
+        let runtime = AnimationRuntime::load(path).map_err(|error| error.to_string())?;
         self.load_glb_with_runtime(context, path, runtime)
     }
 
@@ -86,8 +79,7 @@ impl ViewportCanvas {
         context: &Context,
         path: &Path,
     ) -> Result<(), String> {
-        let runtime =
-            AnimationRuntime::load(path).map_err(|error| error.to_string())?;
+        let runtime = AnimationRuntime::load(path).map_err(|error| error.to_string())?;
         self.load_glb_with_runtime_for_target_preview(context, path, runtime)
     }
 
@@ -119,12 +111,8 @@ impl ViewportCanvas {
         initialize_skeleton: bool,
     ) -> Result<(), String> {
         self.clear_glb();
-        let result = self.load_glb_with_runtime_unchecked(
-            context,
-            path,
-            runtime,
-            initialize_skeleton,
-        );
+        let result =
+            self.load_glb_with_runtime_unchecked(context, path, runtime, initialize_skeleton);
         if result.is_err() {
             self.clear_glb();
         }
@@ -138,8 +126,7 @@ impl ViewportCanvas {
         runtime: AnimationRuntime,
         initialize_skeleton: bool,
     ) -> Result<(), String> {
-        let first_playable =
-            runtime.clips.iter().position(AnimationClip::is_playable);
+        let first_playable = runtime.clips.iter().position(AnimationClip::is_playable);
         let renderable_primitive_count = runtime.primitives.len();
         self.glb_animation = Some(runtime);
         if renderable_primitive_count == 0 {
@@ -155,31 +142,24 @@ impl ViewportCanvas {
             return Ok(());
         }
 
-        let mut raw = three_d_asset::io::load(&[path])
-            .map_err(|e| format!("Asset load error: {}", e))?;
+        let mut raw =
+            three_d_asset::io::load(&[path]).map_err(|e| format!("Asset load error: {}", e))?;
 
         let mut cpu_model: CpuModel = raw
             .deserialize(path)
             .map_err(|e| format!("No model found in GLB: {}", e))?;
 
         for geom in cpu_model.geometries.iter_mut() {
-            if let three_d_asset::Geometry::Triangles(ref mut mesh) =
-                geom.geometry
-            {
-                if mesh.tangents.is_none()
-                    && mesh.normals.is_some()
-                    && mesh.uvs.is_some()
-                {
+            if let three_d_asset::Geometry::Triangles(ref mut mesh) = geom.geometry {
+                if mesh.tangents.is_none() && mesh.normals.is_some() && mesh.uvs.is_some() {
                     mesh.compute_tangents();
                 }
             }
         }
 
-        let model =
-            Model::new(context, &cpu_model).map_err(|e| e.to_string())?;
+        let model = Model::new(context, &cpu_model).map_err(|e| e.to_string())?;
 
-        self.model_base_transforms =
-            model.iter().map(|part| part.transformation()).collect();
+        self.model_base_transforms = model.iter().map(|part| part.transformation()).collect();
         self.model = Some(model);
         self.sampled_node_world = None;
         self.root_preview_transform = Mat4::identity();
@@ -192,8 +172,7 @@ impl ViewportCanvas {
             self.model = None;
             return Err(format!(
                 "Preview primitive mapping mismatch: renderer has {}, runtime has {}",
-                render_primitive_count,
-                renderable_primitive_count
+                render_primitive_count, renderable_primitive_count
             ));
         }
         if initialize_skeleton {
@@ -227,10 +206,7 @@ impl ViewportCanvas {
         self.show_origin = false;
     }
 
-    fn initialize_glb_skeleton(
-        &mut self,
-        context: &Context,
-    ) -> Result<(), String> {
+    fn initialize_glb_skeleton(&mut self, context: &Context) -> Result<(), String> {
         let (nodes, selected_nodes, rest_poses) = {
             let runtime = self
                 .glb_animation
@@ -251,32 +227,21 @@ impl ViewportCanvas {
             .iter()
             .map(|pose| pose.world_translation)
             .collect::<Vec<_>>();
-        let pose = skeleton_pose_from_runtime(
-            &nodes,
-            &rest_poses,
-            &selected_nodes,
-            Some(&rest_positions),
-        );
+        let pose =
+            skeleton_pose_from_runtime(&nodes, &rest_poses, &selected_nodes, Some(&rest_positions));
         if !pose.is_valid() {
             return Err("GLB skeleton Rest Pose is invalid".to_owned());
         }
         self.glb_skeleton_nodes = selected_nodes;
         let skeleton = self.glb_skeleton.get_or_insert_with(|| {
-            SkeletonVisual::new(
-                context,
-                Srgba::new(255, 190, 80, 255),
-                self.skeleton_config,
-            )
+            SkeletonVisual::new(context, Srgba::new(255, 190, 80, 255), self.skeleton_config)
         });
         skeleton.set_transformation(self.root_preview_transform);
         skeleton.update_pose(&pose);
         Ok(())
     }
 
-    pub fn set_root_preview_transform(
-        &mut self,
-        transform: Mat4,
-    ) -> Result<(), String> {
+    pub fn set_root_preview_transform(&mut self, transform: Mat4) -> Result<(), String> {
         self.root_preview_transform = transform;
         if let Some(skeleton) = self.glb_skeleton.as_mut() {
             skeleton.set_transformation(transform);
@@ -353,29 +318,23 @@ impl ViewportCanvas {
             return Ok(());
         };
         if model.len() != runtime.primitives.len() {
-            return Err(
-                "Animation runtime and renderer primitive counts differ"
-                    .to_owned(),
-            );
+            return Err("Animation runtime and renderer primitive counts differ".to_owned());
         }
         let root_preview_transform = self.root_preview_transform;
-        for (part, (primitive, positions, normals, tangents)) in
-            model.iter_mut().zip(
-                runtime
-                    .primitives
-                    .iter()
-                    .zip(skinned_positions.iter())
-                    .zip(skinned_normals.iter())
-                    .zip(skinned_tangents.iter())
-                    .map(|(((primitive, positions), normals), tangents)| {
-                        (primitive, positions, normals, tangents)
-                    }),
-            )
-        {
-            let node_world =
-                sampled_node_world.get(primitive.node).ok_or_else(|| {
-                    "Sampled pose references a missing node".to_owned()
-                })?;
+        for (part, (primitive, positions, normals, tangents)) in model.iter_mut().zip(
+            runtime
+                .primitives
+                .iter()
+                .zip(skinned_positions.iter())
+                .zip(skinned_normals.iter())
+                .zip(skinned_tangents.iter())
+                .map(|(((primitive, positions), normals), tangents)| {
+                    (primitive, positions, normals, tangents)
+                }),
+        ) {
+            let node_world = sampled_node_world
+                .get(primitive.node)
+                .ok_or_else(|| "Sampled pose references a missing node".to_owned())?;
             part.set_transformation(root_preview_transform * *node_world);
             // Indexed meshes expose the element count as `vertex_count`; partial
             // writes update the original vertex buffer without duplicating data.
@@ -408,19 +367,19 @@ impl ViewportCanvas {
     }
 
     fn apply_model_transforms(&mut self) -> Result<(), String> {
-        let transforms = if let Some(sampled_node_world) =
-            self.sampled_node_world.as_ref()
-        {
-            let runtime = self.glb_animation.as_ref().ok_or_else(|| {
-                "Sampled GLB preview runtime is missing".to_owned()
-            })?;
+        let transforms = if let Some(sampled_node_world) = self.sampled_node_world.as_ref() {
+            let runtime = self
+                .glb_animation
+                .as_ref()
+                .ok_or_else(|| "Sampled GLB preview runtime is missing".to_owned())?;
             runtime
                 .primitives
                 .iter()
                 .map(|primitive| {
-                    sampled_node_world.get(primitive.node).copied().ok_or_else(
-                        || "Sampled pose references a missing node".to_owned(),
-                    )
+                    sampled_node_world
+                        .get(primitive.node)
+                        .copied()
+                        .ok_or_else(|| "Sampled pose references a missing node".to_owned())
                 })
                 .collect::<Result<Vec<_>, _>>()?
         } else {
@@ -430,10 +389,7 @@ impl ViewportCanvas {
             return Ok(());
         };
         if model.len() != transforms.len() {
-            return Err(
-                "Preview transform and renderer primitive counts differ"
-                    .to_owned(),
-            );
+            return Err("Preview transform and renderer primitive counts differ".to_owned());
         }
         for (part, transform) in model.iter_mut().zip(transforms) {
             part.set_transformation(self.root_preview_transform * transform);
@@ -457,17 +413,9 @@ impl ViewportCanvas {
         );
     }
 
-    pub fn set_bvh_skeleton_pose(
-        &mut self,
-        context: &Context,
-        pose: &SkeletonPose,
-    ) {
+    pub fn set_bvh_skeleton_pose(&mut self, context: &Context, pose: &SkeletonPose) {
         let skeleton = self.skeleton.get_or_insert_with(|| {
-            SkeletonVisual::new(
-                context,
-                Srgba::new(255, 150, 40, 255),
-                self.skeleton_config,
-            )
+            SkeletonVisual::new(context, Srgba::new(255, 150, 40, 255), self.skeleton_config)
         });
         skeleton.update_pose(pose);
     }
@@ -500,22 +448,14 @@ impl ViewportCanvas {
         parents: &[Option<usize>],
         joints: &[usize],
     ) {
-        let pose =
-            SkeletonPose::from_positions(positions.to_vec(), parents.to_vec());
+        let pose = SkeletonPose::from_positions(positions.to_vec(), parents.to_vec());
         self.set_target_skeleton_pose(context, &filter_pose(&pose, joints));
     }
 
-    pub fn set_target_skeleton_pose(
-        &mut self,
-        context: &Context,
-        pose: &SkeletonPose,
-    ) {
+    pub fn set_target_skeleton_pose(&mut self, context: &Context, pose: &SkeletonPose) {
         let skeleton = self.target_skeleton.get_or_insert_with(|| {
-            let mut skeleton = SkeletonVisual::new(
-                context,
-                Srgba::new(70, 220, 255, 255),
-                self.skeleton_config,
-            );
+            let mut skeleton =
+                SkeletonVisual::new(context, Srgba::new(70, 220, 255, 255), self.skeleton_config);
             skeleton.set_transformation(self.root_preview_transform);
             skeleton
         });
@@ -576,14 +516,8 @@ impl ViewportCanvas {
             .sample_nodes(animation_index, time)
             .map_err(|error| error.to_string())?;
         let pose = SkeletonPose {
-            positions: poses
-                .iter()
-                .map(|pose| pose.world_translation)
-                .collect(),
-            world_rotations: poses
-                .iter()
-                .map(|pose| pose.world_rotation)
-                .collect(),
+            positions: poses.iter().map(|pose| pose.world_translation).collect(),
+            world_rotations: poses.iter().map(|pose| pose.world_rotation).collect(),
             parents: runtime.nodes.iter().map(|node| node.parent).collect(),
             end_sites: vec![None; poses.len()],
             rest_positions: None,
@@ -768,10 +702,7 @@ fn skeleton_pose_from_runtime(
             .iter()
             .map(|pose| pose.world_translation)
             .collect(),
-        world_rotations: node_poses
-            .iter()
-            .map(|pose| pose.world_rotation)
-            .collect(),
+        world_rotations: node_poses.iter().map(|pose| pose.world_rotation).collect(),
         parents: nodes.iter().map(|node| node.parent).collect(),
         end_sites: vec![None; node_poses.len()],
         rest_positions: rest_positions.map(|positions| positions.to_vec()),
@@ -779,10 +710,7 @@ fn skeleton_pose_from_runtime(
     filter_pose(&full_pose, selected_nodes)
 }
 
-fn transform_bounds(
-    bounds: ([f32; 3], [f32; 3]),
-    transform: Mat4,
-) -> ([f32; 3], [f32; 3]) {
+fn transform_bounds(bounds: ([f32; 3], [f32; 3]), transform: Mat4) -> ([f32; 3], [f32; 3]) {
     let mut minimum = [f32::INFINITY; 3];
     let mut maximum = [f32::NEG_INFINITY; 3];
     for x in [bounds.0[0], bounds.1[0]] {
@@ -887,12 +815,7 @@ mod tests {
             .map(|pose| pose.world_translation)
             .collect::<Vec<_>>();
 
-        let pose = skeleton_pose_from_runtime(
-            &nodes,
-            &poses,
-            &[1],
-            Some(&rest_positions),
-        );
+        let pose = skeleton_pose_from_runtime(&nodes, &poses, &[1], Some(&rest_positions));
 
         assert!(pose.is_valid());
         assert_eq!(pose.positions, vec![[0.0, 0.0, 0.0], [0.0, 1.0, 0.0]]);

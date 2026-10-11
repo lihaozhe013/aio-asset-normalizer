@@ -7,8 +7,7 @@ use clap::{Args, Subcommand};
 use serde_json::{json, Value};
 
 use aio_asset_normalizer::modules::glb::batch_runner::{
-    run_export, run_preflight, BatchEntry, BatchFileStatus, BatchProgress,
-    BatchRequest,
+    run_export, run_preflight, BatchEntry, BatchFileStatus, BatchProgress, BatchRequest,
 };
 use aio_asset_normalizer::modules::glb::{
     GlbDocument, GlbExportCatalog, GlbExportReport, GlbSummary,
@@ -17,8 +16,8 @@ use aio_asset_normalizer::modules::logging::next_task_id;
 use aio_asset_normalizer::modules::operations::glb as operations;
 
 use crate::job::{
-    self, AnimationOutputArg, EditJobFile, ExportJobFile, PresetArg,
-    RecipeOptions, RootMotionModeArg,
+    self, AnimationOutputArg, EditJobFile, ExportJobFile, PresetArg, RecipeOptions,
+    RootMotionModeArg,
 };
 use crate::output::{self, CliError};
 use crate::util::common_parent;
@@ -132,9 +131,7 @@ fn inspect(args: &InspectArgs) -> i32 {
         }
     }
     match first_error {
-        None => {
-            output::emit_success(COMMAND, json!({ "files": files }), Vec::new())
-        }
+        None => output::emit_success(COMMAND, json!({ "files": files }), Vec::new()),
         Some(error) => output::emit_failure(
             COMMAND,
             json!({ "files": files }),
@@ -192,9 +189,7 @@ fn inspect_one(path: &Path) -> Result<Value, CliError> {
 
 fn export(args: &ExportArgs) -> i32 {
     const COMMAND: &str = "glb.export";
-    let fail = |results: Value, error: CliError| {
-        output::emit_failure(COMMAND, results, &error)
-    };
+    let fail = |results: Value, error: CliError| output::emit_failure(COMMAND, results, &error);
 
     let mut inputs = args.inputs.clone();
     let mut input_root = args.input_root.clone();
@@ -241,9 +236,7 @@ fn export(args: &ExportArgs) -> i32 {
         if file.recipe.is_some() && file.selection.is_some() {
             return fail(
                 json!({}),
-                CliError::validation(
-                    "Recipe and selection are mutually exclusive",
-                ),
+                CliError::validation("Recipe and selection are mutually exclusive"),
             );
         }
         let recipe = file.recipe.unwrap_or_default().to_options();
@@ -290,9 +283,7 @@ fn export(args: &ExportArgs) -> i32 {
     let Some(input_root) = input_root else {
         return fail(
             json!({}),
-            CliError::validation(
-                "cannot derive --input-root from the given inputs",
-            ),
+            CliError::validation("cannot derive --input-root from the given inputs"),
         );
     };
 
@@ -306,8 +297,7 @@ fn export(args: &ExportArgs) -> i32 {
     };
 
     let task_id = next_task_id();
-    let (entries, all_valid) =
-        run_preflight(&request, task_id, &mut |_event: BatchProgress| {});
+    let (entries, all_valid) = run_preflight(&request, task_id, &mut |_event: BatchProgress| {});
 
     if !all_valid {
         return fail(
@@ -316,7 +306,16 @@ fn export(args: &ExportArgs) -> i32 {
                 "overwrite": overwrite,
                 "entries": entries_json(&entries, None),
             }),
-            CliError { code: if entries.iter().any(|e| e.error_kind == Some(aio_asset_normalizer::modules::operations::ErrorKind::Io)) { output::ErrorCode::Io } else { output::ErrorCode::Validation }, message: "preflight found errors".into() },
+            CliError {
+                code: if entries.iter().any(|e| {
+                    e.error_kind == Some(aio_asset_normalizer::modules::operations::ErrorKind::Io)
+                }) {
+                    output::ErrorCode::Io
+                } else {
+                    output::ErrorCode::Validation
+                },
+                message: "preflight found errors".into(),
+            },
         );
     }
 
@@ -332,8 +331,7 @@ fn export(args: &ExportArgs) -> i32 {
         );
     }
 
-    let mut finished: HashMap<usize, (Vec<PathBuf>, Option<String>)> =
-        HashMap::new();
+    let mut finished: HashMap<usize, (Vec<PathBuf>, Option<String>)> = HashMap::new();
     let mut progress = |event: BatchProgress| match event {
         BatchProgress::ExportFinished {
             index,
@@ -377,11 +375,8 @@ fn edit(args: &EditArgs) -> i32 {
     let prepared = (|| {
         let source = GlbDocument::load(&file.input)?;
         let edited = operations::edit_snapshot(&source, &file.edits)?;
-        let selection = operations::resolve_selection(
-            &edited,
-            file.export.as_ref(),
-            file.selection.as_ref(),
-        )?;
+        let selection =
+            operations::resolve_selection(&edited, file.export.as_ref(), file.selection.as_ref())?;
         let jobs = operations::prepare_export(
             &edited,
             &file.edits.export_edits(),
@@ -407,14 +402,8 @@ fn edit(args: &EditArgs) -> i32 {
             operations::execute_job(job, file.overwrite)
         };
         match result {
-            Ok(report) => outputs
-                .push(json!({"path":job.path,"report":report_json(&report)})),
-            Err(e) => {
-                return fail(
-                    json!({"outputs":outputs}),
-                    output::operation_error(e),
-                )
-            }
+            Ok(report) => outputs.push(json!({"path":job.path,"report":report_json(&report)})),
+            Err(e) => return fail(json!({"outputs":outputs}), output::operation_error(e)),
         }
     }
     output::emit_success(
@@ -426,42 +415,35 @@ fn edit(args: &EditArgs) -> i32 {
 
 // ---- recursive input discovery ---------------------------------------------
 
-fn discover_glb_files(
-    root: &Path,
-    output_root: Option<&Path>,
-) -> Result<Vec<PathBuf>, CliError> {
+fn discover_glb_files(root: &Path, output_root: Option<&Path>) -> Result<Vec<PathBuf>, CliError> {
     if !root.is_dir() {
         return Err(CliError::validation(format!(
             "--input-root is not a directory: {}",
             root.display()
         )));
     }
-    if output_root.is_some_and(|out| {
-        aio_asset_normalizer::modules::operations::same_path(out, root)
-    }) {
+    if output_root
+        .is_some_and(|out| aio_asset_normalizer::modules::operations::same_path(out, root))
+    {
         return Err(CliError::validation(
             "Recursive input and output roots must differ",
         ));
     }
-    let excluded = output_root
-        .map(aio_asset_normalizer::modules::operations::path_identity);
+    let excluded = output_root.map(aio_asset_normalizer::modules::operations::path_identity);
     let mut found = Vec::new();
     let mut pending = vec![root.to_path_buf()];
     while let Some(directory) = pending.pop() {
-        let entries = std::fs::read_dir(&directory)
-            .map_err(|error| CliError::io(error.to_string()))?;
+        let entries =
+            std::fs::read_dir(&directory).map_err(|error| CliError::io(error.to_string()))?;
         for entry in entries {
-            let entry =
-                entry.map_err(|error| CliError::io(error.to_string()))?;
+            let entry = entry.map_err(|error| CliError::io(error.to_string()))?;
             let file_type = entry
                 .file_type()
                 .map_err(|error| CliError::io(error.to_string()))?;
             if file_type.is_dir() {
                 if excluded.as_ref().is_some_and(|out| {
-                    aio_asset_normalizer::modules::operations::path_identity(
-                        &entry.path(),
-                    )
-                    .starts_with(out)
+                    aio_asset_normalizer::modules::operations::path_identity(&entry.path())
+                        .starts_with(out)
                 }) {
                     continue;
                 }

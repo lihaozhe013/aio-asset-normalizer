@@ -56,8 +56,7 @@ pub fn load() -> UserPreferences {
         let user_value: serde_yaml::Value =
             serde_yaml::from_str(&user_str).unwrap_or(serde_yaml::Value::Null);
 
-        let merged =
-            merge_yaml_values(template_value.clone(), user_value.clone());
+        let merged = merge_yaml_values(template_value.clone(), user_value.clone());
 
         if merged != user_value {
             let merged_str = serde_yaml::to_string(&merged).unwrap_or_default();
@@ -105,10 +104,8 @@ fn merge_yaml_values(
     mut template: serde_yaml::Value,
     user: serde_yaml::Value,
 ) -> serde_yaml::Value {
-    if let (
-        serde_yaml::Value::Mapping(t_map),
-        serde_yaml::Value::Mapping(u_map),
-    ) = (&mut template, &user)
+    if let (serde_yaml::Value::Mapping(t_map), serde_yaml::Value::Mapping(u_map)) =
+        (&mut template, &user)
     {
         for (key, value) in u_map {
             match t_map.get_mut(key) {

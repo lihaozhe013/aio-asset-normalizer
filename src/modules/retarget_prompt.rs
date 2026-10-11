@@ -22,9 +22,7 @@ pub fn build_agent_prompt(
             let matches = target
                 .nodes
                 .iter()
-                .filter(|target_node| {
-                    normalize_name(&target_node.name) == normalized
-                })
+                .filter(|target_node| normalize_name(&target_node.name) == normalized)
                 .map(|target_node| target.node_ref(target_node.index))
                 .collect::<Vec<_>>();
             json!({
@@ -126,10 +124,7 @@ pub fn build_bvh_agent_prompt(
     ))
 }
 
-pub fn save_agent_prompt(
-    path: &std::path::Path,
-    prompt: &str,
-) -> Result<(), RetargetError> {
+pub fn save_agent_prompt(path: &std::path::Path, prompt: &str) -> Result<(), RetargetError> {
     crate::modules::atomic_file::write(path, prompt.as_bytes(), true)?;
     Ok(())
 }

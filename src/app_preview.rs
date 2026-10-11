@@ -81,13 +81,8 @@ impl App {
     /// or millimetre scales (for example a root node with scale 0.01), so a
     /// fixed default camera can leave the model and skeleton sub-pixel small.
     /// Guide overlays are scaled to the same order as the model.
-    pub(crate) fn frame_glb_preview(
-        &mut self,
-        context: &Context,
-        reload_kind: GlbReloadKind,
-    ) {
-        let part_count =
-            self.canvas.model.as_ref().map_or(0, |model| model.len());
+    pub(crate) fn frame_glb_preview(&mut self, context: &Context, reload_kind: GlbReloadKind) {
+        let part_count = self.canvas.model.as_ref().map_or(0, |model| model.len());
         let Some((minimum, maximum)) = self.canvas.preview_bounds() else {
             tracing::warn!(
                 target: "glb_editor",

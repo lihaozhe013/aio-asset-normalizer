@@ -23,9 +23,7 @@ pub struct ConversionRequest {
     pub overwrite: bool,
 }
 /// Check batch destinations before either front end starts external work.
-pub fn validate_batch_outputs(
-    requests: &[ConversionRequest],
-) -> Result<(), OperationError> {
+pub fn validate_batch_outputs(requests: &[ConversionRequest]) -> Result<(), OperationError> {
     let sources: Vec<_> = requests.iter().map(|r| r.input.as_path()).collect();
     for (index, request) in requests.iter().enumerate() {
         check_output(&request.output, &sources, request.overwrite)?;
@@ -65,9 +63,7 @@ pub fn preflight(request: &ConversionRequest) -> Result<(), OperationError> {
         .and_then(|v| v.to_str())
         .is_none_or(|v| !v.eq_ignore_ascii_case("glb"))
     {
-        return Err(OperationError::validation(
-            "Converter output must be .glb",
-        ));
+        return Err(OperationError::validation("Converter output must be .glb"));
     }
     check_output(&request.output, &[&request.input], request.overwrite)?;
     std::fs::File::open(&request.input)?;
@@ -86,10 +82,7 @@ pub fn preflight(request: &ConversionRequest) -> Result<(), OperationError> {
     }
     Ok(())
 }
-pub fn execute(
-    request: &ConversionRequest,
-    task_id: u64,
-) -> Result<GlbSummary, OperationError> {
+pub fn execute(request: &ConversionRequest, task_id: u64) -> Result<GlbSummary, OperationError> {
     preflight(request)?;
     let staged = atomic_file::stage(&request.output)?;
     let task = ConversionTask {
@@ -102,10 +95,8 @@ pub fn execute(
             .as_ref()
             .map(|p| p.to_string_lossy().into_owned()),
     };
-    bridge::run_task(&task)
-        .map_err(|e| OperationError::external(e.to_string()))?;
-    let summary =
-        validate_and_commit(staged, &request.output, request.overwrite)?;
+    bridge::run_task(&task).map_err(|e| OperationError::external(e.to_string()))?;
+    let summary = validate_and_commit(staged, &request.output, request.overwrite)?;
     Ok(summary)
 }
 pub fn validate_and_commit(

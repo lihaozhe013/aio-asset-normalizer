@@ -14,15 +14,11 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use crate::modules::bvh::{BvhDocument, MappingFile};
-use crate::modules::glb::{
-    AnimationChannelData, AnimationRuntime, GlbDocument, SkinData,
-};
+use crate::modules::glb::{AnimationChannelData, AnimationRuntime, GlbDocument, SkinData};
 
 #[path = "retarget_prompt.rs"]
 mod retarget_prompt;
-pub use self::retarget_prompt::{
-    build_agent_prompt, build_bvh_agent_prompt, save_agent_prompt,
-};
+pub use self::retarget_prompt::{build_agent_prompt, build_bvh_agent_prompt, save_agent_prompt};
 
 pub const MAPPING_SCHEMA: &str = "com.aio-asset-normalizer.skeleton-mapping";
 pub const MAPPING_VERSION: u32 = 2;
@@ -42,11 +38,7 @@ pub struct NodeRef {
 }
 
 impl NodeRef {
-    pub fn new(
-        name: impl Into<String>,
-        path: Vec<String>,
-        index: usize,
-    ) -> Self {
+    pub fn new(name: impl Into<String>, path: Vec<String>, index: usize) -> Self {
         Self {
             node: name.into(),
             path,
@@ -159,9 +151,7 @@ impl SkeletonMapping {
                 "GLB mapping targets must identify a selected Skin".to_owned(),
             ));
         }
-        for (endpoint, label) in
-            [(&self.source, "source"), (&self.target, "target")]
-        {
+        for (endpoint, label) in [(&self.source, "source"), (&self.target, "target")] {
             if let Some(skin) = endpoint.skin.as_ref() {
                 if skin.name.trim().is_empty() {
                     return Err(RetargetError::Mapping(format!(
@@ -202,12 +192,9 @@ impl SkeletonMapping {
             validate_node_reference(&root_motion.target, "root motion target")?;
         }
         if let Some(root_motion) = &self.root_motion {
-            if !root_motion.translation_scale.is_finite()
-                || root_motion.translation_scale <= 0.0
-            {
+            if !root_motion.translation_scale.is_finite() || root_motion.translation_scale <= 0.0 {
                 return Err(RetargetError::Mapping(
-                    "root motion translation scale must be finite and greater than zero"
-                        .to_owned(),
+                    "root motion translation scale must be finite and greater than zero".to_owned(),
                 ));
             }
         }
@@ -306,12 +293,13 @@ impl SkeletonDescriptor {
             }
         }
         let mut unique_joints = HashSet::new();
-        if skin.joints.iter().any(|index| {
-            *index >= skin.nodes.len() || !unique_joints.insert(*index)
-        }) {
+        if skin
+            .joints
+            .iter()
+            .any(|index| *index >= skin.nodes.len() || !unique_joints.insert(*index))
+        {
             return Err(RetargetError::Mapping(
-                "Skin joints must be unique and within the node array"
-                    .to_owned(),
+                "Skin joints must be unique and within the node array".to_owned(),
             ));
         }
         if skin
@@ -328,22 +316,18 @@ impl SkeletonDescriptor {
             .filter(|index| skin.joints.contains(index))
             .or_else(|| {
                 skin.joints.iter().copied().find(|index| {
-                    let mut current =
-                        skin.nodes.get(*index).and_then(|node| node.parent);
+                    let mut current = skin.nodes.get(*index).and_then(|node| node.parent);
                     while let Some(parent) = current {
                         if skin.joints.contains(&parent) {
                             return false;
                         }
-                        current =
-                            skin.nodes.get(parent).and_then(|node| node.parent);
+                        current = skin.nodes.get(parent).and_then(|node| node.parent);
                     }
                     true
                 })
             })
             .or_else(|| skin.skeleton)
-            .ok_or_else(|| {
-                RetargetError::Mapping("skeleton has no root node".to_owned())
-            })?;
+            .ok_or_else(|| RetargetError::Mapping("skeleton has no root node".to_owned()))?;
         if root >= skin.nodes.len() {
             return Err(RetargetError::Mapping(
                 "Skin skeleton root index exceeds the node array".to_owned(),
@@ -374,8 +358,7 @@ impl SkeletonDescriptor {
         );
         let supplied_skeleton_hash = skeleton_sha256.into();
         if !supplied_skeleton_hash.is_empty()
-            && !supplied_skeleton_hash
-                .eq_ignore_ascii_case(&computed_skeleton_hash)
+            && !supplied_skeleton_hash.eq_ignore_ascii_case(&computed_skeleton_hash)
         {
             return Err(RetargetError::Mapping(
                 "provided Skin skeleton fingerprint does not match the computed skeleton"
@@ -428,9 +411,7 @@ impl SkeletonDescriptor {
             .joints
             .iter()
             .position(|joint| joint.parent.is_none())
-            .ok_or_else(|| {
-                RetargetError::Mapping("BVH has no root".to_owned())
-            })?;
+            .ok_or_else(|| RetargetError::Mapping("BVH has no root".to_owned()))?;
         let animated_nodes = nodes
             .iter()
             .filter(|node| node.animated)
@@ -453,8 +434,7 @@ impl SkeletonDescriptor {
     }
 
     pub fn refresh_skeleton_hash(&mut self) {
-        self.skeleton_sha256 =
-            skeleton_hash(self.kind, self.skin.as_ref(), &self.nodes);
+        self.skeleton_sha256 = skeleton_hash(self.kind, self.skin.as_ref(), &self.nodes);
     }
 
     pub fn rest_world_transforms(
@@ -506,9 +486,7 @@ impl SkeletonDescriptor {
         let mesh_nodes = self
             .mesh_nodes
             .iter()
-            .filter_map(|index| {
-                self.nodes.get(*index).map(|_| self.node_ref(*index))
-            })
+            .filter_map(|index| self.nodes.get(*index).map(|_| self.node_ref(*index)))
             .collect::<Vec<_>>();
         let skin_joints = self
             .nodes
@@ -633,16 +611,13 @@ impl From<std::io::Error> for RetargetError {
 
 pub fn load_mapping(path: &Path) -> Result<SkeletonMapping, RetargetError> {
     let text = fs::read_to_string(path)?;
-    let mapping: SkeletonMapping = serde_json::from_str(&text)
-        .map_err(|error| RetargetError::Mapping(error.to_string()))?;
+    let mapping: SkeletonMapping =
+        serde_json::from_str(&text).map_err(|error| RetargetError::Mapping(error.to_string()))?;
     mapping.validate_schema()?;
     Ok(mapping)
 }
 
-pub fn save_mapping(
-    path: &Path,
-    mapping: &SkeletonMapping,
-) -> Result<(), RetargetError> {
+pub fn save_mapping(path: &Path, mapping: &SkeletonMapping) -> Result<(), RetargetError> {
     mapping.validate_schema()?;
     let bytes = serde_json::to_vec_pretty(mapping)
         .map_err(|error| RetargetError::Mapping(error.to_string()))?;
@@ -674,18 +649,14 @@ pub fn validate_mapping(
     }
     validate_identity(&mapping.source, source, "source", &mut report);
     validate_identity(&mapping.target, target, "target", &mut report);
-    let source_root =
-        resolve_node(&mapping.source.root, source, "source", &mut report);
-    let target_root =
-        resolve_node(&mapping.target.root, target, "target", &mut report);
+    let source_root = resolve_node(&mapping.source.root, source, "source", &mut report);
+    let target_root = resolve_node(&mapping.target.root, target, "target", &mut report);
     let mut source_assignments = HashSet::new();
     let mut target_assignments = HashSet::new();
     let mut mapped_sources = HashSet::new();
     for bone in &mapping.bones {
-        let source_index =
-            resolve_node(&bone.source, source, "source", &mut report);
-        let target_index =
-            resolve_node(&bone.target, target, "target", &mut report);
+        let source_index = resolve_node(&bone.source, source, "source", &mut report);
+        let target_index = resolve_node(&bone.target, target, "target", &mut report);
         if let Some(index) = source_index {
             if !source_assignments.insert(index) {
                 report.errors.push(format!(
@@ -694,9 +665,7 @@ pub fn validate_mapping(
                 ));
             }
             mapped_sources.insert(index);
-            if source.kind == SourceKind::Glb
-                && !source.nodes[index].is_skin_joint
-            {
+            if source.kind == SourceKind::Glb && !source.nodes[index].is_skin_joint {
                 report.errors.push(format!(
                     "source node '{}' is not in the selected Skin",
                     bone.source.node
@@ -710,9 +679,7 @@ pub fn validate_mapping(
                     bone.target.node
                 ));
             }
-            if target.kind == SourceKind::Glb
-                && !target.nodes[index].is_skin_joint
-            {
+            if target.kind == SourceKind::Glb && !target.nodes[index].is_skin_joint {
                 report.errors.push(format!(
                     "target node '{}' is not in the selected Skin",
                     bone.target.node
@@ -722,9 +689,7 @@ pub fn validate_mapping(
     }
     let mut ignored_sources = HashSet::new();
     for reference in &mapping.ignored_sources {
-        if let Some(index) =
-            resolve_node(reference, source, "source", &mut report)
-        {
+        if let Some(index) = resolve_node(reference, source, "source", &mut report) {
             if !ignored_sources.insert(index) {
                 report.errors.push(format!(
                     "source node '{}' is ignored more than once",
@@ -758,18 +723,16 @@ pub fn validate_mapping(
     }
     if let (Some(source_root), Some(target_root)) = (source_root, target_root) {
         if !is_skeleton_root(source, source_root) {
-            report.errors.push(
-                "source root reference is not a hierarchy root".to_owned(),
-            );
+            report
+                .errors
+                .push("source root reference is not a hierarchy root".to_owned());
         }
         if !is_skeleton_root(target, target_root) {
-            report.errors.push(
-                "target root reference is not a hierarchy root".to_owned(),
-            );
+            report
+                .errors
+                .push("target root reference is not a hierarchy root".to_owned());
         }
-        if target.kind == SourceKind::Glb
-            && !target.nodes[target_root].is_skin_joint
-        {
+        if target.kind == SourceKind::Glb && !target.nodes[target_root].is_skin_joint {
             report
                 .errors
                 .push("target root is not in the selected Skin".to_owned());
@@ -778,7 +741,9 @@ pub fn validate_mapping(
             report.errors.push("source root is not mapped".to_owned());
         }
         if !target_assignments.contains(&target_root) {
-            report.warnings.push("target root is not a mapped bone; root motion may still target it".to_owned());
+            report.warnings.push(
+                "target root is not a mapped bone; root motion may still target it".to_owned(),
+            );
         }
     }
     if let Some(root_motion) = &mapping.root_motion {
@@ -789,12 +754,10 @@ pub fn validate_mapping(
             &mut report,
         );
         if let Some(source_index) = source_index {
-            if source.kind == SourceKind::Glb
-                && !source.nodes[source_index].is_skin_joint
-            {
-                report.errors.push(
-                    "root motion source is not in the selected Skin".to_owned(),
-                );
+            if source.kind == SourceKind::Glb && !source.nodes[source_index].is_skin_joint {
+                report
+                    .errors
+                    .push("root motion source is not in the selected Skin".to_owned());
             }
         }
         let target_index = resolve_node(
@@ -804,33 +767,25 @@ pub fn validate_mapping(
             &mut report,
         );
         if let Some(target_index) = target_index {
-            if target.kind == SourceKind::Glb
-                && !target.nodes[target_index].is_skin_joint
-            {
-                report.errors.push(
-                    "root motion target is not in the selected Skin".to_owned(),
-                );
+            if target.kind == SourceKind::Glb && !target.nodes[target_index].is_skin_joint {
+                report
+                    .errors
+                    .push("root motion target is not in the selected Skin".to_owned());
             }
         }
     }
     for left in &mapping.bones {
-        let Some(left_source) = resolve_node_no_report(&left.source, source)
-        else {
+        let Some(left_source) = resolve_node_no_report(&left.source, source) else {
             continue;
         };
-        let Some(left_target) = resolve_node_no_report(&left.target, target)
-        else {
+        let Some(left_target) = resolve_node_no_report(&left.target, target) else {
             continue;
         };
         for right in &mapping.bones {
-            let Some(right_source) =
-                resolve_node_no_report(&right.source, source)
-            else {
+            let Some(right_source) = resolve_node_no_report(&right.source, source) else {
                 continue;
             };
-            let Some(right_target) =
-                resolve_node_no_report(&right.target, target)
-            else {
+            let Some(right_target) = resolve_node_no_report(&right.target, target) else {
                 continue;
             };
             if left_source != right_source
@@ -860,10 +815,8 @@ pub fn resolve_mapping(
             report.errors.join("; ")
         )));
     }
-    let source_root =
-        resolve_node_required(&mapping.source.root, source, "source")?;
-    let target_root =
-        resolve_node_required(&mapping.target.root, target, "target")?;
+    let source_root = resolve_node_required(&mapping.source.root, source, "source")?;
+    let target_root = resolve_node_required(&mapping.target.root, target, "target")?;
     let bones = mapping
         .bones
         .iter()
@@ -871,9 +824,7 @@ pub fn resolve_mapping(
             Ok(ResolvedBone {
                 source: resolve_node_required(&bone.source, source, "source")?,
                 target: resolve_node_required(&bone.target, target, "target")?,
-                rotation_offset: normalize_quaternion(
-                    bone.rotation_offset_xyzw,
-                ),
+                rotation_offset: normalize_quaternion(bone.rotation_offset_xyzw),
             })
         })
         .collect::<Result<Vec<_>, RetargetError>>()?;
@@ -934,15 +885,11 @@ pub fn from_legacy_bvh_mapping(
     let source_root = source_lookup
         .get(&mapping.source.root)
         .copied()
-        .ok_or_else(|| {
-            RetargetError::Mapping("legacy source root not found".to_owned())
-        })?;
+        .ok_or_else(|| RetargetError::Mapping("legacy source root not found".to_owned()))?;
     let target_root = target_lookup
         .get(&mapping.target.root)
         .copied()
-        .ok_or_else(|| {
-            RetargetError::Mapping("legacy target root not found".to_owned())
-        })?;
+        .ok_or_else(|| RetargetError::Mapping("legacy target root not found".to_owned()))?;
     let mut converted = SkeletonMapping::new(
         MappingEndpoint {
             kind: SourceKind::Bvh,
@@ -973,11 +920,11 @@ pub fn from_legacy_bvh_mapping(
                 .get(&bone.source_joint)
                 .copied()
                 .ok_or_else(|| {
-                RetargetError::Mapping(format!(
-                    "legacy source joint '{}' is ambiguous or missing",
-                    bone.source_joint
-                ))
-            })?;
+                    RetargetError::Mapping(format!(
+                        "legacy source joint '{}' is ambiguous or missing",
+                        bone.source_joint
+                    ))
+                })?;
             let target_index = target_lookup
                 .get(&bone.target_node)
                 .copied()
@@ -1051,8 +998,7 @@ pub fn retarget_bvh(
         mapping.target.unit.clone(),
         &HashSet::new(),
     )?;
-    let resolved =
-        resolve_mapping(mapping, &source_descriptor, &target_descriptor)?;
+    let resolved = resolve_mapping(mapping, &source_descriptor, &target_descriptor)?;
     let source_rest = bvh_rest_transforms(source)?;
     let source_frames = source
         .frames
@@ -1103,8 +1049,7 @@ pub fn retarget_glb(
         .map_err(|error| RetargetError::Source(error.to_string()))?;
     if valid_times.len() < 2 || clip.duration <= f32::EPSILON {
         return Err(RetargetError::Unsupported(
-            "selected animation must contain at least two distinct samples"
-                .to_owned(),
+            "selected animation must contain at least two distinct samples".to_owned(),
         ));
     }
     if !options.sample_rate.is_finite() || options.sample_rate <= 0.0 {
@@ -1148,29 +1093,21 @@ pub fn retarget_glb(
         mapping.target.unit.clone(),
         &HashSet::new(),
     )?;
-    let resolved =
-        resolve_mapping(mapping, &source_descriptor, &target_descriptor)?;
+    let resolved = resolve_mapping(mapping, &source_descriptor, &target_descriptor)?;
     let clip_start = *valid_times.first().ok_or_else(|| {
-        RetargetError::Unsupported(
-            "selected animation has no finite keyframe times".to_owned(),
-        )
+        RetargetError::Unsupported("selected animation has no finite keyframe times".to_owned())
     })?;
     let clip_end = *valid_times.last().ok_or_else(|| {
-        RetargetError::Unsupported(
-            "selected animation has no finite keyframe times".to_owned(),
-        )
+        RetargetError::Unsupported("selected animation has no finite keyframe times".to_owned())
     })?;
     let duration = (clip_end - clip_start).max(0.0);
-    let estimated_frames =
-        (duration as f64 * options.sample_rate as f64).ceil();
+    let estimated_frames = (duration as f64 * options.sample_rate as f64).ceil();
     if !estimated_frames.is_finite() || estimated_frames > 1_000_000.0 {
         return Err(RetargetError::Unsupported(
-            "selected animation would require more than 1,000,000 baked frames"
-                .to_owned(),
+            "selected animation would require more than 1,000,000 baked frames".to_owned(),
         ));
     }
-    let frame_count =
-        ((duration * options.sample_rate).ceil() as usize + 1).max(2);
+    let frame_count = ((duration * options.sample_rate).ceil() as usize + 1).max(2);
     let mut times = (0..frame_count)
         .map(|index| (index as f32 / options.sample_rate).min(duration))
         .collect::<Vec<_>>();
@@ -1296,19 +1233,14 @@ fn retarget_frames(
             frame
                 .iter()
                 .copied()
-                .map(|transform| {
-                    apply_source_root_transform(transform, options)
-                })
+                .map(|transform| apply_source_root_transform(transform, options))
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
     let target_rest = target_rest_world(target)?;
-    let source_basis =
-        CoordinateBasis::from_axes(&source.up_axis, &source.forward_axis)?;
-    let target_basis =
-        CoordinateBasis::from_axes(&target.up_axis, &target.forward_axis)?;
-    let unit_conversion =
-        unit_to_meters(&source.unit)? / unit_to_meters(&target.unit)?;
+    let source_basis = CoordinateBasis::from_axes(&source.up_axis, &source.forward_axis)?;
+    let target_basis = CoordinateBasis::from_axes(&target.up_axis, &target.forward_axis)?;
+    let unit_conversion = unit_to_meters(&source.unit)? / unit_to_meters(&target.unit)?;
     let heading = if options.normalize_initial_heading {
         initial_heading(
             source_frames[0][mapping.source_root].rotation,
@@ -1329,9 +1261,7 @@ fn retarget_frames(
                 .unwrap_or(mapping.source_root),
         )
         .map(|transform| transform.position)
-        .ok_or_else(|| {
-            RetargetError::Source("source root is invalid".to_owned())
-        })?;
+        .ok_or_else(|| RetargetError::Source("source root is invalid".to_owned()))?;
     let mut output_targets = mapping
         .bones
         .iter()
@@ -1359,13 +1289,11 @@ fn retarget_frames(
         .map(|(index, target)| (target, index))
         .collect::<HashMap<_, _>>();
     let mut target_world = target_rest.clone();
-    let root_translation_channel =
-        root_motion.filter(|_| options.root_motion).and_then(
-            |(_, target_root, _)| channel_by_target.get(&target_root).copied(),
-        );
+    let root_translation_channel = root_motion
+        .filter(|_| options.root_motion)
+        .and_then(|(_, target_root, _)| channel_by_target.get(&target_root).copied());
     if let Some(channel_index) = root_translation_channel {
-        channels[channel_index].translations =
-            Some(Vec::with_capacity(times.len()));
+        channels[channel_index].translations = Some(Vec::with_capacity(times.len()));
     }
     for source_frame in &source_frames {
         target_world.clone_from(&target_rest);
@@ -1376,24 +1304,17 @@ fn retarget_frames(
                 quat_inverse(source_rest[bone.source].rotation),
             );
             let canonical_delta = source_basis.convert_rotation(source_delta);
-            let mut target_delta =
-                target_basis.inverse_convert_rotation(canonical_delta);
+            let mut target_delta = target_basis.inverse_convert_rotation(canonical_delta);
             target_delta = if options.normalize_initial_heading {
                 if bone.source == mapping.source_root {
                     quat_mul(heading, target_delta)
                 } else {
-                    quat_mul(
-                        quat_mul(heading, target_delta),
-                        quat_inverse(heading),
-                    )
+                    quat_mul(quat_mul(heading, target_delta), quat_inverse(heading))
                 }
             } else {
                 target_delta
             };
-            let calibrated_rest = quat_mul(
-                target_rest[bone.target].rotation,
-                bone.rotation_offset,
-            );
+            let calibrated_rest = quat_mul(target_rest[bone.target].rotation, bone.rotation_offset);
             desired_world_rotations.insert(
                 bone.target,
                 quat_normalize(quat_mul(target_delta, calibrated_rest)),
@@ -1408,19 +1329,13 @@ fn retarget_frames(
                     target_world[parent].position,
                     quat_rotate(
                         target_world[parent].rotation,
-                        multiply_vec3(
-                            target_world[parent].scale,
-                            target.nodes[*index].translation,
-                        ),
+                        multiply_vec3(target_world[parent].scale, target.nodes[*index].translation),
                     ),
                 );
-                target_world[*index].scale = multiply_vec3(
-                    target_world[parent].scale,
-                    target.nodes[*index].scale,
-                );
+                target_world[*index].scale =
+                    multiply_vec3(target_world[parent].scale, target.nodes[*index].scale);
             } else {
-                target_world[*index].position =
-                    target.nodes[*index].translation;
+                target_world[*index].position = target.nodes[*index].translation;
                 target_world[*index].scale = target.nodes[*index].scale;
             }
             if let Some(parent) = target.nodes[*index].parent {
@@ -1448,20 +1363,14 @@ fn retarget_frames(
                     .push(quat_normalize(local_rotation));
             }
         }
-        if let Some((source_root, target_root, configured_scale)) = root_motion
-        {
+        if let Some((source_root, target_root, configured_scale)) = root_motion {
             if options.root_motion {
                 let translation_scale = configured_scale;
-                let source_delta =
-                    sub(source_frame[source_root].position, root_start);
+                let source_delta = sub(source_frame[source_root].position, root_start);
                 let canonical_delta = source_basis.convert_vector(source_delta);
-                let mut target_delta =
-                    target_basis.inverse_convert_vector(canonical_delta);
+                let mut target_delta = target_basis.inverse_convert_vector(canonical_delta);
                 target_delta = quat_rotate(heading, target_delta);
-                target_delta = multiply_scalar(
-                    target_delta,
-                    translation_scale * unit_conversion,
-                );
+                target_delta = multiply_scalar(target_delta, translation_scale * unit_conversion);
                 let parent_world = target.nodes[target_root]
                     .parent
                     .map(|parent| target_world[parent])
@@ -1470,10 +1379,7 @@ fn retarget_frames(
                         rotation: identity_quaternion(),
                         scale: [1.0; 3],
                     });
-                let local_delta = quat_rotate(
-                    quat_inverse(parent_world.rotation),
-                    target_delta,
-                );
+                let local_delta = quat_rotate(quat_inverse(parent_world.rotation), target_delta);
                 let local_delta = [
                     if parent_world.scale[0].abs() > f32::EPSILON {
                         local_delta[0] / parent_world.scale[0]
@@ -1491,12 +1397,9 @@ fn retarget_frames(
                         local_delta[2]
                     },
                 ];
-                let local_translation =
-                    add(target.nodes[target_root].translation, local_delta);
+                let local_translation = add(target.nodes[target_root].translation, local_delta);
                 if let Some(channel_index) = root_translation_channel {
-                    if let Some(translations) =
-                        channels[channel_index].translations.as_mut()
-                    {
+                    if let Some(translations) = channels[channel_index].translations.as_mut() {
                         translations.push(local_translation);
                     }
                 }
@@ -1510,8 +1413,7 @@ fn retarget_frames(
             .is_none_or(|values| values.len() != times.len())
         {
             return Err(RetargetError::Target(
-                "root motion track did not produce one value per frame"
-                    .to_owned(),
+                "root motion track did not produce one value per frame".to_owned(),
             ));
         }
     }
@@ -1521,9 +1423,9 @@ fn retarget_frames(
             .iter()
             .any(|rotation| !rotation.iter().all(|value| value.is_finite()))
             || channel.translations.as_ref().is_some_and(|translations| {
-                translations.iter().any(|translation| {
-                    !translation.iter().all(|value| value.is_finite())
-                })
+                translations
+                    .iter()
+                    .any(|translation| !translation.iter().all(|value| value.is_finite()))
             })
     }) {
         return Err(RetargetError::Target(
@@ -1537,10 +1439,7 @@ fn retarget_frames(
     })
 }
 
-fn validate_endpoint(
-    endpoint: &MappingEndpoint,
-    label: &str,
-) -> Result<(), RetargetError> {
+fn validate_endpoint(endpoint: &MappingEndpoint, label: &str) -> Result<(), RetargetError> {
     if endpoint.root.node.trim().is_empty()
         || endpoint.up_axis.trim().is_empty()
         || endpoint.forward_axis.trim().is_empty()
@@ -1575,18 +1474,13 @@ fn validate_endpoint(
     Ok(())
 }
 
-fn validate_node_reference(
-    reference: &NodeRef,
-    label: &str,
-) -> Result<(), RetargetError> {
+fn validate_node_reference(reference: &NodeRef, label: &str) -> Result<(), RetargetError> {
     if reference.node.trim().is_empty() || reference.path.is_empty() {
         return Err(RetargetError::Mapping(format!(
             "{label} node name and complete path are required"
         )));
     }
-    if reference.path.last().map(String::as_str)
-        != Some(reference.node.as_str())
-    {
+    if reference.path.last().map(String::as_str) != Some(reference.node.as_str()) {
         return Err(RetargetError::Mapping(format!(
             "{label} node '{}' does not match the final path component",
             reference.node
@@ -1606,8 +1500,7 @@ fn validate_node_reference(
 }
 
 fn validate_sha256(value: &str, label: &str) -> Result<(), RetargetError> {
-    if value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit())
-    {
+    if value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Err(RetargetError::Mapping(format!(
             "{label} fingerprint must be a 64-character hexadecimal SHA-256"
         )));
@@ -1699,10 +1592,7 @@ fn resolve_node_required(
     })
 }
 
-fn resolve_node_no_report(
-    reference: &NodeRef,
-    descriptor: &SkeletonDescriptor,
-) -> Option<usize> {
+fn resolve_node_no_report(reference: &NodeRef, descriptor: &SkeletonDescriptor) -> Option<usize> {
     let mut candidates = descriptor
         .nodes
         .iter()
@@ -1719,9 +1609,7 @@ fn resolve_node_no_report(
     }
 }
 
-fn unique_name_lookup(
-    descriptor: &SkeletonDescriptor,
-) -> HashMap<String, usize> {
+fn unique_name_lookup(descriptor: &SkeletonDescriptor) -> HashMap<String, usize> {
     let mut lookup = HashMap::new();
     let mut duplicates = HashSet::new();
     for node in &descriptor.nodes {
@@ -1738,11 +1626,7 @@ fn unique_name_lookup(
     lookup
 }
 
-fn is_ancestor(
-    descriptor: &SkeletonDescriptor,
-    ancestor: usize,
-    node: usize,
-) -> bool {
+fn is_ancestor(descriptor: &SkeletonDescriptor, ancestor: usize, node: usize) -> bool {
     if ancestor >= descriptor.nodes.len() || node >= descriptor.nodes.len() {
         return false;
     }
@@ -1776,9 +1660,7 @@ fn is_skeleton_root(descriptor: &SkeletonDescriptor, index: usize) -> bool {
     true
 }
 
-fn hierarchy_order(
-    nodes: &[SkeletonNode],
-) -> Result<Vec<usize>, RetargetError> {
+fn hierarchy_order(nodes: &[SkeletonNode]) -> Result<Vec<usize>, RetargetError> {
     let mut order = Vec::with_capacity(nodes.len());
     let mut visiting = vec![false; nodes.len()];
     for index in 0..nodes.len() {
@@ -1816,9 +1698,7 @@ fn visit_node(
     Ok(())
 }
 
-fn target_rest_world(
-    descriptor: &SkeletonDescriptor,
-) -> Result<Vec<Transform>, RetargetError> {
+fn target_rest_world(descriptor: &SkeletonDescriptor) -> Result<Vec<Transform>, RetargetError> {
     let locals = descriptor
         .nodes
         .iter()
@@ -1852,16 +1732,10 @@ fn world_from_locals(
                     parent_world.position,
                     quat_rotate(
                         parent_world.rotation,
-                        multiply_vec3(
-                            parent_world.scale,
-                            locals[index].position,
-                        ),
+                        multiply_vec3(parent_world.scale, locals[index].position),
                     ),
                 ),
-                rotation: quat_normalize(quat_mul(
-                    parent_world.rotation,
-                    locals[index].rotation,
-                )),
+                rotation: quat_normalize(quat_mul(parent_world.rotation, locals[index].rotation)),
                 scale: multiply_vec3(parent_world.scale, locals[index].scale),
             }
         } else {
@@ -1876,9 +1750,7 @@ fn world_from_locals(
     Ok(world)
 }
 
-fn bvh_rest_transforms(
-    document: &BvhDocument,
-) -> Result<Vec<Transform>, RetargetError> {
+fn bvh_rest_transforms(document: &BvhDocument) -> Result<Vec<Transform>, RetargetError> {
     let values = document
         .rest_transforms_for_retarget()
         .map_err(|error| RetargetError::Source(error.to_string()))?;
@@ -1915,17 +1787,11 @@ struct CoordinateBasis {
 }
 
 impl CoordinateBasis {
-    fn from_axes(
-        up_axis: &str,
-        forward_axis: &str,
-    ) -> Result<Self, RetargetError> {
-        let up = parse_axis(up_axis).ok_or_else(|| {
-            RetargetError::Mapping(format!("unsupported up axis '{up_axis}'"))
-        })?;
+    fn from_axes(up_axis: &str, forward_axis: &str) -> Result<Self, RetargetError> {
+        let up = parse_axis(up_axis)
+            .ok_or_else(|| RetargetError::Mapping(format!("unsupported up axis '{up_axis}'")))?;
         let forward = parse_axis(forward_axis).ok_or_else(|| {
-            RetargetError::Mapping(format!(
-                "unsupported forward axis '{forward_axis}'"
-            ))
+            RetargetError::Mapping(format!("unsupported forward axis '{forward_axis}'"))
         })?;
         if dot(up, forward).abs() > 1.0e-5 {
             return Err(RetargetError::Mapping(
@@ -1968,10 +1834,7 @@ impl CoordinateBasis {
     fn convert_rotation(self, rotation: [f32; 4]) -> [f32; 4] {
         let source = quaternion_matrix(rotation);
         let basis = self.matrix;
-        let result = multiply_matrix(
-            multiply_matrix(basis, source),
-            transpose_matrix(basis),
-        );
+        let result = multiply_matrix(multiply_matrix(basis, source), transpose_matrix(basis));
         quaternion_from_matrix(result)
     }
 
@@ -1995,8 +1858,7 @@ fn initial_heading(
     let source_forward = target_basis.inverse_convert_vector(source_forward);
     let target_forward = target_basis.inverse_convert_vector([0.0, 0.0, -1.0]);
     let target_up = target_basis.inverse_convert_vector([0.0, 1.0, 0.0]);
-    let target_up =
-        multiply_scalar(target_up, 1.0 / length(target_up).max(f32::EPSILON));
+    let target_up = multiply_scalar(target_up, 1.0 / length(target_up).max(f32::EPSILON));
     let source_horizontal = sub(
         source_forward,
         multiply_scalar(target_up, dot(source_forward, target_up)),
@@ -2012,8 +1874,7 @@ fn initial_heading(
     }
     let source = multiply_scalar(source_horizontal, 1.0 / source_length);
     let target = multiply_scalar(target_horizontal, 1.0 / target_length);
-    let angle =
-        dot(cross(source, target), target_up).atan2(dot(source, target));
+    let angle = dot(cross(source, target), target_up).atan2(dot(source, target));
     axis_quaternion(target_up, angle)
 }
 
@@ -2031,9 +1892,7 @@ fn node_path(
             ));
         }
         let node = nodes.get(current_index).ok_or_else(|| {
-            RetargetError::Mapping(format!(
-                "node {current_index} is out of range"
-            ))
+            RetargetError::Mapping(format!("node {current_index} is out of range"))
         })?;
         path.push(node.name.clone());
         current = node.parent;
@@ -2042,10 +1901,7 @@ fn node_path(
     Ok(path)
 }
 
-fn bvh_node_path(
-    document: &BvhDocument,
-    index: usize,
-) -> Result<Vec<String>, RetargetError> {
+fn bvh_node_path(document: &BvhDocument, index: usize) -> Result<Vec<String>, RetargetError> {
     let mut path = Vec::new();
     let mut current = Some(index);
     let mut seen = HashSet::new();
@@ -2056,9 +1912,7 @@ fn bvh_node_path(
             ));
         }
         let node = document.joints.get(current_index).ok_or_else(|| {
-            RetargetError::Mapping(format!(
-                "BVH joint {current_index} is out of range"
-            ))
+            RetargetError::Mapping(format!("BVH joint {current_index} is out of range"))
         })?;
         path.push(node.name.clone());
         current = node.parent;
@@ -2067,11 +1921,7 @@ fn bvh_node_path(
     Ok(path)
 }
 
-fn skeleton_hash(
-    kind: SourceKind,
-    skin: Option<&SkinRef>,
-    nodes: &[SkeletonNode],
-) -> String {
+fn skeleton_hash(kind: SourceKind, skin: Option<&SkinRef>, nodes: &[SkeletonNode]) -> String {
     let mut payload = format!("{kind:?}|{skin:?}|");
     for node in nodes {
         payload.push_str(&format!(
@@ -2121,9 +1971,7 @@ pub fn convert_bvh_position_to_glb(
 /// Convert the editor's Z-Y-X Euler root control into an XYZW quaternion.
 /// Keeping this conversion in the retarget domain makes sampled GLB source
 /// poses match the editor preview's root orientation.
-pub fn euler_rotation_quaternion(
-    degrees: [f32; 3],
-) -> Result<[f32; 4], RetargetError> {
+pub fn euler_rotation_quaternion(degrees: [f32; 3]) -> Result<[f32; 4], RetargetError> {
     if degrees.iter().any(|value| !value.is_finite()) {
         return Err(RetargetError::Mapping(
             "Euler rotation angles must be finite".to_owned(),
@@ -2273,8 +2121,7 @@ fn quaternion_from_matrix(matrix: [[f32; 3]; 3]) -> [f32; 4] {
         ]);
     }
     if matrix[0][0] > matrix[1][1] && matrix[0][0] > matrix[2][2] {
-        let root =
-            (1.0 + matrix[0][0] - matrix[1][1] - matrix[2][2]).sqrt() * 2.0;
+        let root = (1.0 + matrix[0][0] - matrix[1][1] - matrix[2][2]).sqrt() * 2.0;
         return normalize_quaternion([
             0.25 * root,
             (matrix[0][1] + matrix[1][0]) / root,
@@ -2283,8 +2130,7 @@ fn quaternion_from_matrix(matrix: [[f32; 3]; 3]) -> [f32; 4] {
         ]);
     }
     if matrix[1][1] > matrix[2][2] {
-        let root =
-            (1.0 + matrix[1][1] - matrix[0][0] - matrix[2][2]).sqrt() * 2.0;
+        let root = (1.0 + matrix[1][1] - matrix[0][0] - matrix[2][2]).sqrt() * 2.0;
         return normalize_quaternion([
             (matrix[0][1] + matrix[1][0]) / root,
             0.25 * root,
@@ -2311,9 +2157,7 @@ fn transpose_matrix(matrix: [[f32; 3]; 3]) -> [[f32; 3]; 3] {
 
 fn multiply_matrix(a: [[f32; 3]; 3], b: [[f32; 3]; 3]) -> [[f32; 3]; 3] {
     [0, 1, 2].map(|row| {
-        [0, 1, 2].map(|column| {
-            (0..3).map(|index| a[row][index] * b[index][column]).sum()
-        })
+        [0, 1, 2].map(|column| (0..3).map(|index| a[row][index] * b[index][column]).sum())
     })
 }
 
@@ -2355,12 +2199,8 @@ fn transform_is_finite(value: Transform) -> bool {
         && value.scale.iter().all(|component| component.is_finite())
 }
 
-fn validate_source_root_transform(
-    options: RetargetOptions,
-) -> Result<(), RetargetError> {
-    if !options.source_root_scale.is_finite()
-        || options.source_root_scale <= 0.0
-    {
+fn validate_source_root_transform(options: RetargetOptions) -> Result<(), RetargetError> {
+    if !options.source_root_scale.is_finite() || options.source_root_scale <= 0.0 {
         return Err(RetargetError::Mapping(
             "source root scale must be finite and greater than zero".to_owned(),
         ));
@@ -2392,10 +2232,7 @@ fn validate_source_root_transform(
     Ok(())
 }
 
-fn apply_source_root_transform(
-    value: Transform,
-    options: RetargetOptions,
-) -> Transform {
+fn apply_source_root_transform(value: Transform, options: RetargetOptions) -> Transform {
     let rotation = normalize_quaternion(options.source_root_rotation);
     Transform {
         position: add(

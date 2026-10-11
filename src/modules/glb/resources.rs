@@ -52,13 +52,12 @@ impl GlbDocument {
         let image_bytes = fs::read(image_path)?;
         let mime_type = image_mime_type(&image_bytes)?;
         let material_index = self.primitive_material(target)?;
-        let material_index = if duplicate_shared_material
-            && self.material_usage_count(material_index)? > 1
-        {
-            self.duplicate_material(target, material_index)?
-        } else {
-            material_index
-        };
+        let material_index =
+            if duplicate_shared_material && self.material_usage_count(material_index)? > 1 {
+                self.duplicate_material(target, material_index)?
+            } else {
+                material_index
+            };
         let image_index = self.append_image(image_bytes, mime_type)?;
         let texture_index = self.append_texture(image_index)?;
         self.set_material_texture(material_index, slot, texture_index)?;
@@ -66,26 +65,19 @@ impl GlbDocument {
         Ok(())
     }
 
-    fn primitive_material(
-        &self,
-        target: PrimitiveTarget,
-    ) -> Result<usize, GlbError> {
+    fn primitive_material(&self, target: PrimitiveTarget) -> Result<usize, GlbError> {
         let meshes = self
             .json
             .get("meshes")
             .and_then(Value::as_array)
-            .ok_or_else(|| {
-                GlbError::Invalid("GLB has no meshes array".to_owned())
-            })?;
-        let mesh = meshes.get(target.mesh).ok_or_else(|| {
-            GlbError::Invalid(format!("Mesh {} does not exist", target.mesh))
-        })?;
+            .ok_or_else(|| GlbError::Invalid("GLB has no meshes array".to_owned()))?;
+        let mesh = meshes
+            .get(target.mesh)
+            .ok_or_else(|| GlbError::Invalid(format!("Mesh {} does not exist", target.mesh)))?;
         let primitives = mesh
             .get("primitives")
             .and_then(Value::as_array)
-            .ok_or_else(|| {
-                GlbError::Invalid("Mesh has no primitives".to_owned())
-            })?;
+            .ok_or_else(|| GlbError::Invalid("Mesh has no primitives".to_owned()))?;
         let primitive = primitives.get(target.primitive).ok_or_else(|| {
             GlbError::Invalid(format!(
                 "Mesh {} primitive {} does not exist",
@@ -104,30 +96,22 @@ impl GlbDocument {
             })
     }
 
-    fn material_usage_count(
-        &self,
-        material_index: usize,
-    ) -> Result<usize, GlbError> {
+    fn material_usage_count(&self, material_index: usize) -> Result<usize, GlbError> {
         let meshes = self
             .json
             .get("meshes")
             .and_then(Value::as_array)
-            .ok_or_else(|| {
-                GlbError::Invalid("GLB has no meshes array".to_owned())
-            })?;
+            .ok_or_else(|| GlbError::Invalid("GLB has no meshes array".to_owned()))?;
         let mut count = 0;
         for mesh in meshes {
             let primitives = mesh
                 .get("primitives")
                 .and_then(Value::as_array)
-                .ok_or_else(|| {
-                GlbError::Invalid("Mesh has no primitives".to_owned())
-            })?;
+                .ok_or_else(|| GlbError::Invalid("Mesh has no primitives".to_owned()))?;
             count += primitives
                 .iter()
                 .filter(|primitive| {
-                    primitive.get("material").and_then(Value::as_u64)
-                        == Some(material_index as u64)
+                    primitive.get("material").and_then(Value::as_u64) == Some(material_index as u64)
                 })
                 .count();
         }
@@ -146,17 +130,13 @@ impl GlbDocument {
             .and_then(|materials| materials.get(material_index))
             .cloned()
             .ok_or_else(|| {
-                GlbError::Invalid(format!(
-                    "Material {material_index} does not exist"
-                ))
+                GlbError::Invalid(format!("Material {material_index} does not exist"))
             })?;
         let materials = self
             .json
             .get_mut("materials")
             .and_then(Value::as_array_mut)
-            .ok_or_else(|| {
-                GlbError::Invalid("GLB has no materials array".to_owned())
-            })?;
+            .ok_or_else(|| GlbError::Invalid("GLB has no materials array".to_owned()))?;
         let duplicate_index = materials.len();
         materials.push(material);
 
@@ -164,34 +144,25 @@ impl GlbDocument {
             .json
             .get_mut("meshes")
             .and_then(Value::as_array_mut)
-            .ok_or_else(|| {
-                GlbError::Invalid("GLB has no meshes array".to_owned())
-            })?;
-        let mesh = meshes.get_mut(target.mesh).ok_or_else(|| {
-            GlbError::Invalid(format!("Mesh {} does not exist", target.mesh))
-        })?;
+            .ok_or_else(|| GlbError::Invalid("GLB has no meshes array".to_owned()))?;
+        let mesh = meshes
+            .get_mut(target.mesh)
+            .ok_or_else(|| GlbError::Invalid(format!("Mesh {} does not exist", target.mesh)))?;
         let primitives = mesh
             .get_mut("primitives")
             .and_then(Value::as_array_mut)
-            .ok_or_else(|| {
-                GlbError::Invalid("Mesh has no primitives".to_owned())
-            })?;
-        let primitive =
-            primitives.get_mut(target.primitive).ok_or_else(|| {
-                GlbError::Invalid(format!(
-                    "Mesh {} primitive {} does not exist",
-                    target.mesh, target.primitive
-                ))
-            })?;
+            .ok_or_else(|| GlbError::Invalid("Mesh has no primitives".to_owned()))?;
+        let primitive = primitives.get_mut(target.primitive).ok_or_else(|| {
+            GlbError::Invalid(format!(
+                "Mesh {} primitive {} does not exist",
+                target.mesh, target.primitive
+            ))
+        })?;
         primitive["material"] = json!(duplicate_index);
         Ok(duplicate_index)
     }
 
-    fn append_image(
-        &mut self,
-        bytes: Vec<u8>,
-        mime_type: &'static str,
-    ) -> Result<usize, GlbError> {
+    fn append_image(&mut self, bytes: Vec<u8>, mime_type: &'static str) -> Result<usize, GlbError> {
         let buffer_view = self.append_binary_resource(&bytes)?;
         let images = ensure_array(&mut self.json, "images")?;
         let image_index = images.len();
@@ -202,10 +173,7 @@ impl GlbDocument {
         Ok(image_index)
     }
 
-    fn append_texture(
-        &mut self,
-        image_index: usize,
-    ) -> Result<usize, GlbError> {
+    fn append_texture(&mut self, image_index: usize) -> Result<usize, GlbError> {
         let textures = ensure_array(&mut self.json, "textures")?;
         let texture_index = textures.len();
         textures.push(json!({"source": image_index}));
@@ -222,54 +190,35 @@ impl GlbDocument {
             .json
             .get_mut("materials")
             .and_then(Value::as_array_mut)
-            .ok_or_else(|| {
-                GlbError::Invalid("GLB has no materials array".to_owned())
-            })?;
+            .ok_or_else(|| GlbError::Invalid("GLB has no materials array".to_owned()))?;
         let material = materials.get_mut(material_index).ok_or_else(|| {
-            GlbError::Invalid(format!(
-                "Material {material_index} does not exist"
-            ))
+            GlbError::Invalid(format!("Material {material_index} does not exist"))
         })?;
-        let object = material.as_object_mut().ok_or_else(|| {
-            GlbError::Invalid("Material is not an object".to_owned())
-        })?;
+        let object = material
+            .as_object_mut()
+            .ok_or_else(|| GlbError::Invalid("Material is not an object".to_owned()))?;
         let (parent_key, texture_key) = match slot {
-            TextureSlot::BaseColor => {
-                ("pbrMetallicRoughness", "baseColorTexture")
-            }
+            TextureSlot::BaseColor => ("pbrMetallicRoughness", "baseColorTexture"),
             TextureSlot::Normal => ("", "normalTexture"),
-            TextureSlot::MetallicRoughness => {
-                ("pbrMetallicRoughness", "metallicRoughnessTexture")
-            }
+            TextureSlot::MetallicRoughness => ("pbrMetallicRoughness", "metallicRoughnessTexture"),
             TextureSlot::Occlusion => ("", "occlusionTexture"),
             TextureSlot::Emissive => ("", "emissiveTexture"),
         };
         if parent_key.is_empty() {
-            object.insert(
-                texture_key.to_owned(),
-                json!({"index": texture_index}),
-            );
+            object.insert(texture_key.to_owned(), json!({"index": texture_index}));
         } else {
             let parent = object
                 .entry(parent_key.to_owned())
                 .or_insert_with(|| json!({}));
             let parent = parent.as_object_mut().ok_or_else(|| {
-                GlbError::Invalid(format!(
-                    "Material field {parent_key} is not an object"
-                ))
+                GlbError::Invalid(format!("Material field {parent_key} is not an object"))
             })?;
-            parent.insert(
-                texture_key.to_owned(),
-                json!({"index": texture_index}),
-            );
+            parent.insert(texture_key.to_owned(), json!({"index": texture_index}));
         }
         Ok(())
     }
 
-    fn append_binary_resource(
-        &mut self,
-        bytes: &[u8],
-    ) -> Result<usize, GlbError> {
+    fn append_binary_resource(&mut self, bytes: &[u8]) -> Result<usize, GlbError> {
         let bin = self.bin.get_or_insert_with(Vec::new);
         while !bin.len().is_multiple_of(4) {
             bin.push(0);
@@ -296,17 +245,14 @@ impl GlbDocument {
     }
 }
 
-fn ensure_array<'a>(
-    json: &'a mut Value,
-    key: &str,
-) -> Result<&'a mut Vec<Value>, GlbError> {
-    let object = json.as_object_mut().ok_or_else(|| {
-        GlbError::Invalid("GLB JSON root is not an object".to_owned())
-    })?;
+fn ensure_array<'a>(json: &'a mut Value, key: &str) -> Result<&'a mut Vec<Value>, GlbError> {
+    let object = json
+        .as_object_mut()
+        .ok_or_else(|| GlbError::Invalid("GLB JSON root is not an object".to_owned()))?;
     let value = object.entry(key.to_owned()).or_insert_with(|| json!([]));
-    value.as_array_mut().ok_or_else(|| {
-        GlbError::Invalid(format!("GLB field {key} is not an array"))
-    })
+    value
+        .as_array_mut()
+        .ok_or_else(|| GlbError::Invalid(format!("GLB field {key} is not an array")))
 }
 
 fn image_mime_type(bytes: &[u8]) -> Result<&'static str, GlbError> {

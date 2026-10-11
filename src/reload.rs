@@ -23,17 +23,11 @@ mod tests {
     #[test]
     fn opening_a_model_takes_precedence_over_pending_edit_reload() {
         assert_eq!(
-            merge_glb_reload_kind(
-                Some(GlbReloadKind::EditedModel),
-                GlbReloadKind::OpenModel,
-            ),
+            merge_glb_reload_kind(Some(GlbReloadKind::EditedModel), GlbReloadKind::OpenModel,),
             GlbReloadKind::OpenModel
         );
         assert_eq!(
-            merge_glb_reload_kind(
-                Some(GlbReloadKind::OpenModel),
-                GlbReloadKind::EditedModel,
-            ),
+            merge_glb_reload_kind(Some(GlbReloadKind::OpenModel), GlbReloadKind::EditedModel,),
             GlbReloadKind::OpenModel
         );
     }
@@ -45,10 +39,7 @@ mod tests {
             GlbReloadKind::EditedModel
         );
         assert_eq!(
-            merge_glb_reload_kind(
-                Some(GlbReloadKind::EditedModel),
-                GlbReloadKind::EditedModel,
-            ),
+            merge_glb_reload_kind(Some(GlbReloadKind::EditedModel), GlbReloadKind::EditedModel,),
             GlbReloadKind::EditedModel
         );
     }

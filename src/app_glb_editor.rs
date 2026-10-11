@@ -1,9 +1,7 @@
 use std::path::Path;
 
 use crate::app::App;
-use crate::modules::glb::{
-    GlbDocument, PrimitiveTarget, StandardizationProfile,
-};
+use crate::modules::glb::{GlbDocument, PrimitiveTarget, StandardizationProfile};
 use crate::modules::logging::safe_path_label;
 use crate::reload::{merge_glb_reload_kind, GlbReloadKind};
 
@@ -30,8 +28,7 @@ impl App {
     }
 
     pub(crate) fn request_glb_reload(&mut self, requested: GlbReloadKind) {
-        self.reload_request =
-            Some(merge_glb_reload_kind(self.reload_request, requested));
+        self.reload_request = Some(merge_glb_reload_kind(self.reload_request, requested));
     }
 
     pub(crate) fn standardize(&mut self) {
@@ -71,10 +68,7 @@ impl App {
         }
     }
 
-    pub(crate) fn glb_trim_settings_error(
-        &self,
-        document: &GlbDocument,
-    ) -> Option<String> {
+    pub(crate) fn glb_trim_settings_error(&self, document: &GlbDocument) -> Option<String> {
         if !self.trim_enabled {
             return None;
         }
@@ -104,9 +98,11 @@ impl App {
     }
 
     pub(crate) fn trim_setting_changed(&mut self) {
-        if let Some((_, last)) = self.glb.as_ref().and_then(|document| {
-            document.animation_time_range(self.trim_animation).ok()
-        }) {
+        if let Some((_, last)) = self
+            .glb
+            .as_ref()
+            .and_then(|document| document.animation_time_range(self.trim_animation).ok())
+        {
             if last.is_finite() && last >= 0.0 {
                 self.trim_start = self.trim_start.clamp(0.0, last);
                 self.trim_end = self.trim_end.clamp(0.0, last);

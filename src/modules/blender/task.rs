@@ -70,8 +70,7 @@ mod tests {
 
     #[test]
     fn default_config_matches_v2_profile() {
-        let value: serde_json::Value =
-            serde_json::from_str(&default_config_json()).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&default_config_json()).unwrap();
         let expected = serde_json::json!({
             "target_scale": 1.0,
             "up_axis": "Y",

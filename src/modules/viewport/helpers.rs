@@ -39,10 +39,7 @@ pub fn build_axes(context: &Context) -> Vec<Gm<Mesh, ColorMaterial>> {
     build_axes_scaled(context, 3.0)
 }
 
-pub fn build_axes_scaled(
-    context: &Context,
-    len: f32,
-) -> Vec<Gm<Mesh, ColorMaterial>> {
+pub fn build_axes_scaled(context: &Context, len: f32) -> Vec<Gm<Mesh, ColorMaterial>> {
     let len = len.max(0.0001);
     let t = (len * 0.005).clamp(0.00001, len * 0.04);
     vec![
@@ -79,11 +76,7 @@ fn build_line_quad(
 ) -> Gm<Mesh, ColorMaterial> {
     let direction = to - from;
     if direction.magnitude() <= f32::EPSILON {
-        return build_colored_sphere(
-            context,
-            color,
-            (thickness * 3.0).max(0.002),
-        );
+        return build_colored_sphere(context, color, (thickness * 3.0).max(0.002));
     }
     let dir = direction.normalize();
     let up = if dir.y.abs() < 0.99 {
@@ -113,10 +106,7 @@ pub fn build_grid(context: &Context) -> Vec<Gm<Mesh, ColorMaterial>> {
     build_grid_scaled(context, 10.0)
 }
 
-pub fn build_grid_scaled(
-    context: &Context,
-    height: f32,
-) -> Vec<Gm<Mesh, ColorMaterial>> {
+pub fn build_grid_scaled(context: &Context, height: f32) -> Vec<Gm<Mesh, ColorMaterial>> {
     let extent = height.max(0.0001);
     let step = nice_grid_step(extent / 6.0);
     let size = (extent / step).ceil() as i32;
@@ -173,11 +163,7 @@ pub fn build_origin_sphere(context: &Context) -> Gm<Mesh, ColorMaterial> {
     build_colored_sphere(context, Srgba::new(255, 255, 255, 255), 0.1)
 }
 
-fn build_colored_sphere(
-    context: &Context,
-    color: Srgba,
-    radius: f32,
-) -> Gm<Mesh, ColorMaterial> {
+fn build_colored_sphere(context: &Context, color: Srgba, radius: f32) -> Gm<Mesh, ColorMaterial> {
     let mut sphere = CpuMesh::sphere(8);
     sphere.transform(Mat4::from_scale(radius)).unwrap();
     Gm::new(

@@ -69,7 +69,9 @@ pub fn validate_edits(
     .flatten()
     {
         if !selection.selected_animations.contains(&animation) {
-            return Err(OperationError::validation(format!("Edited animation {animation} must be included in the export selection")));
+            return Err(OperationError::validation(format!(
+                "Edited animation {animation} must be included in the export selection"
+            )));
         }
     }
     Ok(())

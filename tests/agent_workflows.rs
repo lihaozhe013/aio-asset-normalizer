@@ -36,8 +36,7 @@ fn material_fixture(path: &Path, unknown_extension: bool) {
     let bytes = support::glb_bytes();
     let glb = gltf::binary::Glb::from_slice(&bytes).unwrap();
     let mut document: Value = serde_json::from_slice(&glb.json).unwrap();
-    document["materials"] =
-        json!([{"name":"Shared","extras":{"preserve":"material"}}]);
+    document["materials"] = json!([{"name":"Shared","extras":{"preserve":"material"}}]);
     document["meshes"][0]["primitives"][0]["material"] = json!(0);
     let primitive = document["meshes"][0]["primitives"][0].clone();
     document["meshes"][0]["primitives"]
@@ -96,14 +95,7 @@ fn glb_texture_selection_and_split_match_desktop_adapters() {
     let source = dir.path().join("model with spaces.glb");
     material_fixture(&source, false);
     let image = dir.path().join("replacement.png");
-    image::save_buffer(
-        &image,
-        &[255, 0, 0, 255],
-        1,
-        1,
-        image::ColorType::Rgba8,
-    )
-    .unwrap();
+    image::save_buffer(&image, &[255, 0, 0, 255], 1, 1, image::ColorType::Rgba8).unwrap();
     let cli_out = dir.path().join("cli/result.glb");
     let gui_out = dir.path().join("gui/result.glb");
     let pending = ExportEdits {
@@ -131,12 +123,10 @@ fn glb_texture_selection_and_split_match_desktop_adapters() {
     selection
         .selected_primitives
         .insert(0, std::collections::BTreeSet::from([0]));
-    selection.animation_output =
-        aio_asset_normalizer::modules::glb::AnimationOutputMode::Split;
+    selection.animation_output = aio_asset_normalizer::modules::glb::AnimationOutputMode::Split;
     let spec = SelectionSpec::from_selection(&selection);
     assert_eq!(spec.resolve(&edited).unwrap(), selection);
-    let request =
-        json!({"input":source,"output":cli_out,"edits":edits,"selection":spec});
+    let request = json!({"input":source,"output":cli_out,"edits":edits,"selection":spec});
     let request_path = job(dir.path(), "edit.json", &request);
     let dry = success(&run(&[
         "glb",
@@ -152,24 +142,16 @@ fn glb_texture_selection_and_split_match_desktop_adapters() {
         "--job",
         request_path.to_str().unwrap(),
     ]));
-    let jobs = operations::glb::prepare_export(
-        &edited,
-        &pending,
-        &selection,
-        &gui_out,
-        &[&source],
-        false,
-    )
-    .unwrap();
+    let jobs =
+        operations::glb::prepare_export(&edited, &pending, &selection, &gui_out, &[&source], false)
+            .unwrap();
     assert_eq!(
         jobs.len(),
         cli["results"]["outputs"].as_array().unwrap().len()
     );
     for (index, gui_job) in jobs.iter().enumerate() {
         let report = operations::glb::execute_job(gui_job, false).unwrap();
-        let cli_path = Path::new(
-            cli["results"]["outputs"][index]["path"].as_str().unwrap(),
-        );
+        let cli_path = Path::new(cli["results"]["outputs"][index]["path"].as_str().unwrap());
         assert_eq!(
             std::fs::read(cli_path).unwrap(),
             std::fs::read(&gui_job.path).unwrap()
@@ -200,22 +182,13 @@ fn invalid_edit_combinations_and_job_conflicts_fail_consistently() {
     ]);
     assert_eq!(output.status.code(), Some(3));
     let request: EditJobFile = operations::load_json(&request, "edit").unwrap();
-    let document = operations::glb::edit_snapshot(
-        &GlbDocument::load(&source).unwrap(),
-        &request.edits,
-    )
-    .unwrap();
-    let selection = operations::glb::resolve_selection(
-        &document,
-        request.export.as_ref(),
-        None,
-    )
-    .unwrap();
-    let error = operations::glb::validate_edits(
-        &selection,
-        &request.edits.export_edits(),
-    )
-    .unwrap_err();
+    let document =
+        operations::glb::edit_snapshot(&GlbDocument::load(&source).unwrap(), &request.edits)
+            .unwrap();
+    let selection =
+        operations::glb::resolve_selection(&document, request.export.as_ref(), None).unwrap();
+    let error =
+        operations::glb::validate_edits(&selection, &request.edits.export_edits()).unwrap_err();
     assert_eq!(value(&output)["error"]["message"], json!(error.message));
     let conflicts = run(&[
         "glb",
@@ -244,10 +217,8 @@ fn bvh_trim_output_matches_desktop_processing() {
         "0",
         "0.034",
     ]));
-    let document =
-        aio_asset_normalizer::modules::bvh::BvhDocument::load(&source).unwrap();
-    let edited =
-        operations::bvh::prepare(&document, Some([0.0, 0.034])).unwrap();
+    let document = aio_asset_normalizer::modules::bvh::BvhDocument::load(&source).unwrap();
+    let edited = operations::bvh::prepare(&document, Some([0.0, 0.034])).unwrap();
     operations::bvh::write(&edited, &gui_out, &source, false).unwrap();
     assert_eq!(
         std::fs::read(cli_out).unwrap(),
@@ -258,14 +229,9 @@ fn mapping_for(
     source: &rt::Source,
     target: &rt::Target,
 ) -> aio_asset_normalizer::modules::retarget::SkeletonMapping {
-    use aio_asset_normalizer::modules::retarget::{
-        MappingBone, SkeletonMapping,
-    };
+    use aio_asset_normalizer::modules::retarget::{MappingBone, SkeletonMapping};
     let descriptor = source.descriptor();
-    let mut mapping = SkeletonMapping::new(
-        descriptor.endpoint(),
-        target.descriptor.endpoint(),
-    );
+    let mut mapping = SkeletonMapping::new(descriptor.endpoint(), target.descriptor.endpoint());
     mapping.bones.push(MappingBone {
         source: descriptor.node_ref(descriptor.root),
         target: target.descriptor.node_ref(target.descriptor.root),
@@ -275,9 +241,12 @@ fn mapping_for(
         if *index == descriptor.root {
             continue;
         }
-        if let Some(node) = target.descriptor.nodes.iter().find(|node| {
-            node.name == descriptor.nodes[*index].name && node.is_skin_joint
-        }) {
+        if let Some(node) = target
+            .descriptor
+            .nodes
+            .iter()
+            .find(|node| node.name == descriptor.nodes[*index].name && node.is_skin_joint)
+        {
             mapping.bones.push(MappingBone {
                 source: descriptor.node_ref(*index),
                 target: target.descriptor.node_ref(node.index),
@@ -321,28 +290,22 @@ fn bvh_and_edited_glb_retarget_match_snapshot_export_adapter() {
         let prepared_target = rt::load_target(&request).unwrap();
         let mapping = mapping_for(&prepared_source, &prepared_target);
         let mapping_path = dir.path().join("mapping.json");
-        std::fs::write(
-            &mapping_path,
-            serde_json::to_vec_pretty(&mapping).unwrap(),
-        )
-        .unwrap();
+        std::fs::write(&mapping_path, serde_json::to_vec_pretty(&mapping).unwrap()).unwrap();
         request.mapping = Some(mapping_path);
         let request_path = job(dir.path(), "retarget.json", &json!(request));
         let prompt_request = rt::RetargetJob {
             out: Some(dir.path().join("prompt.md")),
             ..request.clone()
         };
-        let prompt_path =
-            job(dir.path(), "prompt.json", &json!(prompt_request));
+        let prompt_path = job(dir.path(), "prompt.json", &json!(prompt_request));
         let prompt = success(&run(&[
             "retarget",
             "prompt",
             "--job",
             prompt_path.to_str().unwrap(),
         ]));
-        let context = support::extract_first_json_block(
-            prompt["results"]["prompt"].as_str().unwrap(),
-        );
+        let context =
+            support::extract_first_json_block(prompt["results"]["prompt"].as_str().unwrap());
         assert_eq!(
             context["source"]["skeleton_sha256"],
             prepared_source.descriptor().skeleton_sha256
@@ -367,8 +330,7 @@ fn bvh_and_edited_glb_retarget_match_snapshot_export_adapter() {
             "--job",
             request_path.to_str().unwrap(),
         ]));
-        let mut selection =
-            prepared_target.document.default_export_selection().unwrap();
+        let mut selection = prepared_target.document.default_export_selection().unwrap();
         selection.preset = GlbExportPreset::CharacterPackage;
         let gui_request = rt::RetargetJob::for_snapshot_export(
             source.clone(),
@@ -397,10 +359,7 @@ fn bvh_and_edited_glb_retarget_match_snapshot_export_adapter() {
             },
         );
         assert_eq!(gui_request.options().unwrap(), request.options().unwrap());
-        assert_eq!(
-            json!(gui_request.source_edits),
-            json!(request.source_edits)
-        );
+        assert_eq!(json!(gui_request.source_edits), json!(request.source_edits));
         let gui_source = match &prepared_source {
             rt::Source::Bvh { document, .. } => {
                 rt::bvh_source(document.clone(), ["Y", "-Z", "cm"]).unwrap()
@@ -419,9 +378,7 @@ fn bvh_and_edited_glb_retarget_match_snapshot_export_adapter() {
             gui_source.descriptor().context_value(),
             prepared_source.descriptor().context_value()
         );
-        let gui_job =
-            rt::prepare(&gui_source, &prepared_target, &mapping, &gui_request)
-                .unwrap();
+        let gui_job = rt::prepare(&gui_source, &prepared_target, &mapping, &gui_request).unwrap();
         let report = operations::glb::execute_job(&gui_job, false).unwrap();
         assert_eq!(
             std::fs::read(&gui_job.path).unwrap(),
@@ -582,29 +539,23 @@ fn partial_batch_io_failure_keeps_completed_outputs() {
         recipe: GlbBatchRecipe::default(),
         selection: None,
     };
-    let (entries, valid) =
-        batch_runner::run_preflight(&request, 1, &mut |_| {});
+    let (entries, valid) = batch_runner::run_preflight(&request, 1, &mut |_| {});
     assert!(valid);
     assert!(entries.iter().all(|e| e.error.is_none()));
     let mut completed = Vec::new();
-    let result =
-        batch_runner::run_export(&request, &entries, 2, &mut |event| {
-            if let BatchProgress::ExportFinished {
-                index,
-                completed: paths,
-                ..
-            } = event
-            {
-                completed.extend(paths);
-                if index == 0 {
-                    std::fs::write(
-                        output_root.join("second"),
-                        b"blocks directory creation",
-                    )
-                    .unwrap();
-                }
+    let result = batch_runner::run_export(&request, &entries, 2, &mut |event| {
+        if let BatchProgress::ExportFinished {
+            index,
+            completed: paths,
+            ..
+        } = event
+        {
+            completed.extend(paths);
+            if index == 0 {
+                std::fs::write(output_root.join("second"), b"blocks directory creation").unwrap();
             }
-        });
+        }
+    });
     assert_eq!(result.unwrap_err().kind, operations::ErrorKind::Io);
     assert_eq!(completed.len(), 1);
     assert!(completed[0].is_file());
@@ -614,9 +565,9 @@ fn malformed_binary_ranges_and_non_finite_values_fail_before_writes() {
     use std::borrow::Cow;
     let dir = tempfile::tempdir().unwrap();
     for finite in [false, true] {
-        let source =
-            dir.path()
-                .join(if finite { "range.glb" } else { "nonfinite.glb" });
+        let source = dir
+            .path()
+            .join(if finite { "range.glb" } else { "nonfinite.glb" });
         let bytes = support::glb_bytes();
         let parsed = gltf::binary::Glb::from_slice(&bytes).unwrap();
         let mut data: Value = serde_json::from_slice(&parsed.json).unwrap();

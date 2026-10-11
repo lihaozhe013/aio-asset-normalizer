@@ -82,30 +82,20 @@ impl MappingFile {
                 "Mapping source axes, unit, and root are required".to_owned(),
             ));
         }
-        if self.target.skin.trim().is_empty()
-            || self.target.root.trim().is_empty()
-        {
+        if self.target.skin.trim().is_empty() || self.target.root.trim().is_empty() {
             return Err(BvhError::Mapping(
                 "Mapping target Skin and root are required".to_owned(),
             ));
         }
         if self.bones.is_empty() {
-            return Err(BvhError::Mapping(
-                "Mapping contains no bones".to_owned(),
-            ));
+            return Err(BvhError::Mapping("Mapping contains no bones".to_owned()));
         }
-        super::CoordinateBasis::from_mapping(
-            &self.source.up_axis,
-            &self.source.forward_axis,
-        )?;
+        super::CoordinateBasis::from_mapping(&self.source.up_axis, &self.source.forward_axis)?;
         unit_scale(&self.source.unit)?;
         for bone in &self.bones {
-            if bone.source_joint.trim().is_empty()
-                || bone.target_node.trim().is_empty()
-            {
+            if bone.source_joint.trim().is_empty() || bone.target_node.trim().is_empty() {
                 return Err(BvhError::Mapping(
-                    "Mapping bone source and target names are required"
-                        .to_owned(),
+                    "Mapping bone source and target names are required".to_owned(),
                 ));
             }
             if bone
@@ -124,11 +114,7 @@ impl MappingFile {
 }
 
 impl BvhDocument {
-    pub fn mapping_report(
-        &self,
-        mapping: &MappingFile,
-        target: &SkinData,
-    ) -> MappingValidation {
+    pub fn mapping_report(&self, mapping: &MappingFile, target: &SkinData) -> MappingValidation {
         let contract_error = mapping
             .validate_contract()
             .err()
@@ -153,10 +139,8 @@ impl BvhDocument {
         let mut duplicate_source_joints = Vec::new();
         let mut duplicate_target_nodes = Vec::new();
         for bone in &mapping.bones {
-            let source_exists =
-                source_lookup.contains_key(bone.source_joint.as_str());
-            let target_exists =
-                target_lookup.contains_key(bone.target_node.as_str());
+            let source_exists = source_lookup.contains_key(bone.source_joint.as_str());
+            let target_exists = target_lookup.contains_key(bone.target_node.as_str());
             if !source_exists {
                 push_unique(&mut unknown_source_joints, &bone.source_joint);
             } else if !source_assignments.insert(bone.source_joint.clone()) {
@@ -184,10 +168,8 @@ impl BvhDocument {
         MappingValidation {
             contract_error,
             target_skin_matches: target.name == mapping.target.skin,
-            source_root_found: source_lookup
-                .contains_key(mapping.source.root.as_str()),
-            target_root_found: target_lookup
-                .contains_key(mapping.target.root.as_str()),
+            source_root_found: source_lookup.contains_key(mapping.source.root.as_str()),
+            target_root_found: target_lookup.contains_key(mapping.target.root.as_str()),
             mapped_count: mapped_sources.len(),
             unmapped_source_joints,
             unknown_source_joints,
@@ -235,22 +217,18 @@ impl BvhDocument {
     }
 }
 
-pub fn save_mapping(
-    path: &Path,
-    mapping: &MappingFile,
-) -> Result<(), BvhError> {
+pub fn save_mapping(path: &Path, mapping: &MappingFile) -> Result<(), BvhError> {
     mapping.validate_contract()?;
-    let bytes = serde_json::to_vec_pretty(mapping).map_err(|error| {
-        BvhError::Mapping(format!("serialize mapping: {error}"))
-    })?;
+    let bytes = serde_json::to_vec_pretty(mapping)
+        .map_err(|error| BvhError::Mapping(format!("serialize mapping: {error}")))?;
     crate::modules::atomic_file::write(path, &bytes, true)?;
     Ok(())
 }
 
 pub fn load_mapping(path: &Path) -> Result<MappingFile, BvhError> {
     let value = fs::read_to_string(path)?;
-    let mapping: MappingFile = serde_json::from_str(&value)
-        .map_err(|error| BvhError::Mapping(error.to_string()))?;
+    let mapping: MappingFile =
+        serde_json::from_str(&value).map_err(|error| BvhError::Mapping(error.to_string()))?;
     mapping.validate_contract()?;
     Ok(mapping)
 }

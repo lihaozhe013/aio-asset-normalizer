@@ -5,9 +5,8 @@ pub fn render(app: &mut App, ctx: &three_d::egui::Context) {
     if !app.show_about {
         return;
     }
-    const ICON_PNG: &[u8] = include_bytes!(
-        "../../../assets/icon/aio-asset-normalizer-transparent.png"
-    );
+    const ICON_PNG: &[u8] =
+        include_bytes!("../../../assets/icon/aio-asset-normalizer-transparent.png");
     if app.about_icon.is_none() {
         let decoded = image::load_from_memory(ICON_PNG)
             .expect("failed to decode the About dialog icon")
@@ -37,17 +36,11 @@ pub fn render(app: &mut App, ctx: &three_d::egui::Context) {
                     ui.add_space(left_pad);
                     Frame::NONE
                         .fill(Color32::from_rgb(248, 240, 230))
-                        .stroke(Stroke::new(
-                            1.0_f32,
-                            Color32::from_rgb(224, 198, 176),
-                        ))
+                        .stroke(Stroke::new(1.0_f32, Color32::from_rgb(224, 198, 176)))
                         .corner_radius(CornerRadius::same(12))
                         .inner_margin(Margin::same(8))
                         .show(ui, |ui| {
-                            ui.add(
-                                Image::from_texture(&icon)
-                                    .fit_to_exact_size(vec2(72.0, 72.0)),
-                            );
+                            ui.add(Image::from_texture(&icon).fit_to_exact_size(vec2(72.0, 72.0)));
                         });
                 });
                 ui.heading(build_info::APP_NAME);

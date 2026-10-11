@@ -38,9 +38,7 @@ impl TargetFilter {
             Self::BvhStudio => target == LogTarget::BvhStudio,
             Self::Retarget => matches!(
                 target,
-                LogTarget::Retarget
-                    | LogTarget::GlbRetarget
-                    | LogTarget::RetargetAgent
+                LogTarget::Retarget | LogTarget::GlbRetarget | LogTarget::RetargetAgent
             ),
             Self::FbxConverter => target == LogTarget::FbxConverter,
         }
@@ -94,12 +92,7 @@ impl LogViewer {
         }
     }
 
-    pub fn render(
-        &mut self,
-        ui: &mut egui::Ui,
-        i18n: &I18n,
-        log_dir: &Path,
-    ) -> bool {
+    pub fn render(&mut self, ui: &mut egui::Ui, i18n: &I18n, log_dir: &Path) -> bool {
         let mut prefs_changed = false;
 
         ui.horizontal(|ui| {
@@ -129,10 +122,7 @@ impl LogViewer {
             }
         });
         if !self.storage_available {
-            ui.colored_label(
-                egui::Color32::YELLOW,
-                i18n.tr("log.storage_unavailable"),
-            );
+            ui.colored_label(egui::Color32::YELLOW, i18n.tr("log.storage_unavailable"));
         }
 
         ui.horizontal(|ui| {
@@ -200,8 +190,7 @@ impl LogViewer {
         self.entries
             .iter()
             .filter(|event| {
-                self.target_filter.matches(event.target)
-                    && event.level >= self.minimum_level
+                self.target_filter.matches(event.target) && event.level >= self.minimum_level
             })
             .map(LogEvent::format_line)
             .collect()

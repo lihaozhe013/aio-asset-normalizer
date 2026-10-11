@@ -5,9 +5,7 @@ use serde::{Deserialize, Serialize};
 const EN_US: &str = include_str!("../../assets/locales/en-US.yaml");
 const ZH_CN: &str = include_str!("../../assets/locales/zh-CN.yaml");
 
-#[derive(
-    Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq,
-)]
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
 pub enum LanguagePreference {
     #[serde(rename = "auto")]
     #[default]
@@ -93,8 +91,8 @@ fn load_messages(language: Language) -> HashMap<String, String> {
         Language::English => EN_US,
         Language::Chinese => ZH_CN,
     };
-    let value: serde_yaml::Value = serde_yaml::from_str(yaml)
-        .expect("Built-in locale resource is malformed.");
+    let value: serde_yaml::Value =
+        serde_yaml::from_str(yaml).expect("Built-in locale resource is malformed.");
     let mut messages = HashMap::new();
     flatten_messages(String::new(), &value, &mut messages);
     messages

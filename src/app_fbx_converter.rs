@@ -3,9 +3,7 @@ use std::sync::mpsc;
 
 use crate::app::App;
 use crate::modules::blender::bridge;
-use crate::modules::blender::task::{
-    normalized_output_path, ConversionTask, ConverterMessage,
-};
+use crate::modules::blender::task::{normalized_output_path, ConversionTask, ConverterMessage};
 use crate::modules::logging::{next_task_id, safe_path_label};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,15 +25,10 @@ pub(crate) struct ConverterFileState {
 
 /// Apply one worker message to the per-file status list. Kept free of `App`
 /// so the state transitions are unit-testable without a window context.
-fn apply_message(
-    results: &mut [ConverterFileState],
-    message: &ConverterMessage,
-) {
+fn apply_message(results: &mut [ConverterFileState], message: &ConverterMessage) {
     match message {
         ConverterMessage::FileStarted { task_id, input } => {
-            if let Some(state) =
-                results.iter_mut().find(|state| &state.input == input)
-            {
+            if let Some(state) = results.iter_mut().find(|state| &state.input == input) {
                 state.task_id = Some(*task_id);
                 state.status = ConverterStatus::Running;
                 state.error = None;
@@ -46,9 +39,7 @@ fn apply_message(
             input,
             result,
         } => {
-            if let Some(state) =
-                results.iter_mut().find(|state| &state.input == input)
-            {
+            if let Some(state) = results.iter_mut().find(|state| &state.input == input) {
                 state.task_id = Some(*task_id);
                 match result {
                     Ok(_) => state.status = ConverterStatus::Success,
@@ -90,26 +81,22 @@ impl App {
                 task_id: next_task_id(),
                 input: file.clone(),
                 output: normalized_output_path(file),
-                config_json: crate::modules::blender::task::default_config_json(
-                ),
+                config_json: crate::modules::blender::task::default_config_json(),
                 blender_path: self.blender_path.clone(),
             })
             .collect();
         let requests: Vec<_> = tasks
             .iter()
-            .map(|task| {
-                crate::modules::operations::converter::ConversionRequest {
+            .map(
+                |task| crate::modules::operations::converter::ConversionRequest {
                     input: task.input.clone(),
                     output: task.output.clone(),
                     blender: task.blender_path.as_ref().map(PathBuf::from),
                     overwrite: self.converter_overwrite,
-                }
-            })
-            .collect();
-        if let Err(error) =
-            crate::modules::operations::converter::validate_batch_outputs(
-                &requests,
+                },
             )
+            .collect();
+        if let Err(error) = crate::modules::operations::converter::validate_batch_outputs(&requests)
         {
             self.converter_results = tasks
                 .iter()
@@ -241,14 +228,11 @@ impl App {
     }
 
     pub(crate) fn browse_converter_blender(&mut self) {
-        let dialog =
-            rfd::FileDialog::new().set_title("Select the Blender executable");
+        let dialog = rfd::FileDialog::new().set_title("Select the Blender executable");
         #[cfg(target_os = "windows")]
         let dialog = dialog.add_filter("Blender", &["exe"]);
         if let Some(path) = dialog.pick_file() {
-            self.set_converter_blender_path(Some(
-                path.to_string_lossy().into_owned(),
-            ));
+            self.set_converter_blender_path(Some(path.to_string_lossy().into_owned()));
         }
     }
 
@@ -275,11 +259,7 @@ impl App {
 
 /// Run one Blender task and re-parse the produced GLB through the project
 /// reader before the caller reports success (repository data-safety rule).
-fn run_and_validate(
-    task: &ConversionTask,
-    output: &Path,
-    overwrite: bool,
-) -> Result<(), String> {
+fn run_and_validate(task: &ConversionTask, output: &Path, overwrite: bool) -> Result<(), String> {
     crate::modules::operations::converter::execute(
         &crate::modules::operations::converter::ConversionRequest {
             input: task.input.clone(),

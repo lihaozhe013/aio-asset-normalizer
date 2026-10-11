@@ -8,8 +8,8 @@ use std::path::PathBuf;
 
 use super::filename::clean_filename_component;
 use super::{
-    AnimationOutputMode, EditOperation, GlbDocument, GlbError, GlbExportReport,
-    GlbExportSelection, RootTransformPreview, SmartLoopOptions,
+    AnimationOutputMode, EditOperation, GlbDocument, GlbError, GlbExportReport, GlbExportSelection,
+    RootTransformPreview, SmartLoopOptions,
 };
 
 /// Pending current-file edits that are applied to a document clone before an
@@ -42,10 +42,7 @@ impl Default for ExportEdits {
 }
 
 /// Apply pending current-file edits to `document` in place.
-pub fn apply_export_edits(
-    document: &mut GlbDocument,
-    edits: &ExportEdits,
-) -> Result<(), GlbError> {
+pub fn apply_export_edits(document: &mut GlbDocument, edits: &ExportEdits) -> Result<(), GlbError> {
     {
         RootTransformPreview {
             euler_degrees: edits.orientation_euler_degrees,
@@ -73,9 +70,7 @@ pub fn apply_export_edits(
             euler_degrees: edits.orientation_euler_degrees,
         })?;
     }
-    if edits.bake_root_transform
-        && (edits.root_scale - 1.0).abs() > f32::EPSILON
-    {
+    if edits.bake_root_transform && (edits.root_scale - 1.0).abs() > f32::EPSILON {
         document.apply(EditOperation::ScaleRoots {
             factor: edits.root_scale,
         })?;
@@ -94,21 +89,16 @@ pub fn apply_export_edits(
     if let Some((animation, rate)) = edits.animation_rate {
         if !rate.is_finite() || rate <= 0.0 {
             return Err(GlbError::Invalid(
-                "Animation rate must be finite and greater than zero"
-                    .to_owned(),
+                "Animation rate must be finite and greater than zero".to_owned(),
             ));
         }
         if (rate - 1.0).abs() > f32::EPSILON {
-            document
-                .apply(EditOperation::ScaleAnimationRate { animation, rate })?;
+            document.apply(EditOperation::ScaleAnimationRate { animation, rate })?;
         }
     }
 
     if let Some((animation, transition_seconds)) = edits.smart_loop {
-        document.smart_loop_animation(
-            animation,
-            SmartLoopOptions { transition_seconds },
-        )?;
+        document.smart_loop_animation(animation, SmartLoopOptions { transition_seconds })?;
     }
 
     Ok(())
@@ -139,8 +129,7 @@ pub fn build_export_jobs(
 
     if selection.selected_animations.is_empty() {
         return Err(GlbError::Invalid(
-            "Split animation output requires at least one selected animation"
-                .to_owned(),
+            "Split animation output requires at least one selected animation".to_owned(),
         ));
     }
     let names = document.animation_names();
@@ -168,8 +157,7 @@ pub fn build_export_jobs(
         }
         let path = parent.join(format!("{stem}--{suffix}.glb"));
         let mut split_selection = selection.clone();
-        split_selection.selected_animations =
-            std::collections::BTreeSet::from([*animation_index]);
+        split_selection.selected_animations = std::collections::BTreeSet::from([*animation_index]);
         split_selection.animation_output = AnimationOutputMode::Combined;
         jobs.push(ExportJob {
             document: document.clone(),
@@ -220,10 +208,7 @@ pub fn preview_job(job: &ExportJob) -> Result<GlbExportReport, OperationError> {
     GlbDocument::from_bytes(&output.to_bytes()?, None)?;
     Ok(report)
 }
-pub fn execute_job(
-    job: &ExportJob,
-    overwrite: bool,
-) -> Result<GlbExportReport, OperationError> {
+pub fn execute_job(job: &ExportJob, overwrite: bool) -> Result<GlbExportReport, OperationError> {
     let mut output = job.document.clone();
     let report = output.prune_for_export(&job.selection)?;
     if let Some(source) = job.document.source_path.as_deref() {

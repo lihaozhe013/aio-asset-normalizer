@@ -2,9 +2,7 @@ use std::path::Path;
 use std::sync::mpsc;
 
 use crate::app::{App, ExportTaskResult, TaskKind};
-use crate::modules::glb::pipeline::{
-    apply_export_edits, ExportEdits, ExportJob as GlbExportJob,
-};
+use crate::modules::glb::pipeline::{apply_export_edits, ExportEdits, ExportJob as GlbExportJob};
 use crate::modules::glb::{GlbDocument, GlbExportSelection};
 use crate::modules::logging::{next_task_id, safe_path_label};
 
@@ -18,9 +16,7 @@ use crate::modules::glb::{AnimationOutputMode, GlbExportPreset};
 use std::collections::BTreeSet;
 
 #[cfg(test)]
-use crate::modules::glb::{
-    AnimationChannelData, AnimationClipData, RootMotionRemovalMode,
-};
+use crate::modules::glb::{AnimationChannelData, AnimationClipData, RootMotionRemovalMode};
 
 impl App {
     pub(crate) fn root_transform_active(&self) -> bool {
@@ -34,24 +30,15 @@ impl App {
                 .any(|value| value.abs() > f32::EPSILON)
     }
 
-    pub(crate) fn build_glb_export_snapshot(
-        &self,
-    ) -> Result<GlbDocument, String> {
-        self.build_glb_export_snapshot_with_root_transform(
-            self.bake_root_transform,
-        )
+    pub(crate) fn build_glb_export_snapshot(&self) -> Result<GlbDocument, String> {
+        self.build_glb_export_snapshot_with_root_transform(self.bake_root_transform)
     }
 
-    pub(crate) fn build_glb_retarget_source_snapshot(
-        &self,
-    ) -> Result<GlbDocument, String> {
+    pub(crate) fn build_glb_retarget_source_snapshot(&self) -> Result<GlbDocument, String> {
         self.build_glb_export_snapshot_with_root_transform(false)
     }
 
-    pub(crate) fn glb_export_edits(
-        &self,
-        include_root_transform: bool,
-    ) -> ExportEdits {
+    pub(crate) fn glb_export_edits(&self, include_root_transform: bool) -> ExportEdits {
         ExportEdits {
             orientation_euler_degrees: self.orientation_euler_degrees,
             root_scale: self.root_scale,
@@ -61,14 +48,12 @@ impl App {
                 self.trim_start,
                 self.trim_end,
             )),
-            animation_rate: ((self.glb_animation_rate - 1.0).abs()
-                > f32::EPSILON
+            animation_rate: ((self.glb_animation_rate - 1.0).abs() > f32::EPSILON
                 || !self.glb_animation_rate.is_finite())
             .then_some((self.glb_animation_index, self.glb_animation_rate)),
-            smart_loop: self.smart_loop_enabled.then_some((
-                self.glb_animation_index,
-                self.smart_loop_transition,
-            )),
+            smart_loop: self
+                .smart_loop_enabled
+                .then_some((self.glb_animation_index, self.smart_loop_transition)),
             bake_root_transform: include_root_transform,
         }
     }
@@ -83,8 +68,7 @@ impl App {
 
         let edits = self.glb_export_edits(include_root_transform);
         let mut snapshot = document.clone();
-        apply_export_edits(&mut snapshot, &edits)
-            .map_err(|error| error.to_string())?;
+        apply_export_edits(&mut snapshot, &edits).map_err(|error| error.to_string())?;
         Ok(snapshot)
     }
 }
@@ -192,8 +176,7 @@ mod tests {
         let input = json["animations"][0]["samplers"][0]["input"]
             .as_u64()
             .unwrap() as usize;
-        let view =
-            json["accessors"][input]["bufferView"].as_u64().unwrap() as usize;
+        let view = json["accessors"][input]["bufferView"].as_u64().unwrap() as usize;
         let offset = json["bufferViews"][view]
             .get("byteOffset")
             .and_then(Value::as_u64)
@@ -328,8 +311,7 @@ mod tests {
         };
         let base_path = std::env::temp_dir().join("character.glb");
 
-        let jobs =
-            build_export_jobs(&document, &selection, &base_path).unwrap();
+        let jobs = build_export_jobs(&document, &selection, &base_path).unwrap();
 
         assert_eq!(
             jobs[0].path,
@@ -380,9 +362,7 @@ impl App {
                 self.glb_path
                     .as_ref()
                     .and_then(|path| path.file_stem())
-                    .map(|stem| {
-                        format!("{}_standardized.glb", stem.to_string_lossy())
-                    })
+                    .map(|stem| format!("{}_standardized.glb", stem.to_string_lossy()))
                     .as_deref()
                     .unwrap_or("asset_standardized.glb"),
             )
@@ -432,10 +412,7 @@ impl App {
         self.start_glb_export_task(jobs);
     }
 
-    fn validate_glb_export_settings(
-        &self,
-        selection: &GlbExportSelection,
-    ) -> Result<(), String> {
+    fn validate_glb_export_settings(&self, selection: &GlbExportSelection) -> Result<(), String> {
         crate::modules::operations::glb::validate_edits(
             selection,
             &self.glb_export_edits(self.bake_root_transform),
@@ -449,12 +426,11 @@ impl App {
         self.task_busy = true;
         let task_id = next_task_id();
         self.active_task_id = Some(task_id);
-        let baked_note =
-            if !self.bake_root_transform && self.root_transform_active() {
-                " (root transform not baked)"
-            } else {
-                ""
-            };
+        let baked_note = if !self.bake_root_transform && self.root_transform_active() {
+            " (root transform not baked)"
+        } else {
+            ""
+        };
         tracing::info!(
             target: "glb_export",
             task_id,
@@ -468,10 +444,8 @@ impl App {
             let mut details = Vec::new();
             let result = (|| {
                 for job in jobs {
-                    let report = crate::modules::operations::glb::execute_job(
-                        &job, overwrite,
-                    )
-                    .map_err(|e| e.to_string())?;
+                    let report = crate::modules::operations::glb::execute_job(&job, overwrite)
+                        .map_err(|e| e.to_string())?;
                     details.push(format!(
                         "Export report {}: {}",
                         safe_path_label(&job.path),
@@ -524,20 +498,11 @@ impl App {
         .flatten()
         .collect();
         let result = (|| {
-            crate::modules::operations::check_output(
-                &path,
-                &sources,
-                self.output_overwrite,
-            )
-            .map_err(|e| e.to_string())?;
-            let bytes = serde_json::to_vec_pretty(mapping)
+            crate::modules::operations::check_output(&path, &sources, self.output_overwrite)
                 .map_err(|e| e.to_string())?;
-            crate::modules::atomic_file::write(
-                &path,
-                &bytes,
-                self.output_overwrite,
-            )
-            .map_err(|e| e.to_string())
+            let bytes = serde_json::to_vec_pretty(mapping).map_err(|e| e.to_string())?;
+            crate::modules::atomic_file::write(&path, &bytes, self.output_overwrite)
+                .map_err(|e| e.to_string())
         })();
         match result {
             Ok(()) => {

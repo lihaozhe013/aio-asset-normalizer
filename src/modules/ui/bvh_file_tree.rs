@@ -91,9 +91,7 @@ impl BvhFileTree {
             return;
         }
 
-        let Some(first_path) =
-            dropped.iter().find_map(|file| file.path.clone())
-        else {
+        let Some(first_path) = dropped.iter().find_map(|file| file.path.clone()) else {
             return;
         };
         if first_path.is_dir() {
@@ -115,11 +113,7 @@ impl BvhFileTree {
         self.pending_open = Some(path.to_path_buf());
     }
 
-    pub fn render(
-        &mut self,
-        ui: &mut egui::Ui,
-        i18n: &I18n,
-    ) -> Option<PathBuf> {
+    pub fn render(&mut self, ui: &mut egui::Ui, i18n: &I18n) -> Option<PathBuf> {
         let mut open_path = self.pending_open.take();
         let Some(root) = self.root.clone() else {
             self.render_open_prompt(ui, i18n);
@@ -136,15 +130,11 @@ impl BvhFileTree {
             .auto_shrink([false; 2])
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(
-                        egui::RichText::new(&root_name).strong().size(14.0),
-                    );
+                    ui.label(egui::RichText::new(&root_name).strong().size(14.0));
                 });
                 ui.horizontal(|ui| {
                     if ui.button(i18n.tr("button.switch_directory")).clicked() {
-                        if let Some(folder) =
-                            rfd::FileDialog::new().pick_folder()
-                        {
+                        if let Some(folder) = rfd::FileDialog::new().pick_folder() {
                             self.open_folder(folder);
                         }
                     }
@@ -156,19 +146,13 @@ impl BvhFileTree {
 
                 let visible = self.collect_visible();
                 if !visible.iter().any(|item| !item.is_dir) {
-                    ui.label(
-                        egui::RichText::new(i18n.tr("files.no_supported"))
-                            .weak(),
-                    );
+                    ui.label(egui::RichText::new(i18n.tr("files.no_supported")).weak());
                 }
 
                 for item in &visible {
                     if item.is_dir {
                         let header = egui::CollapsingHeader::new(&item.name)
-                            .id_salt(format!(
-                                "bvh_ft_dir:{}",
-                                item.path.display()
-                            ))
+                            .id_salt(format!("bvh_ft_dir:{}", item.path.display()))
                             .default_open(item.is_open);
                         ui.horizontal(|ui| {
                             ui.add_space(item.depth as f32 * INDENT);
@@ -184,17 +168,12 @@ impl BvhFileTree {
                         });
                     } else {
                         ui.horizontal(|ui| {
-                            ui.add_space(
-                                item.depth as f32 * INDENT + ARROW_OFFSET,
-                            );
+                            ui.add_space(item.depth as f32 * INDENT + ARROW_OFFSET);
                             let selected = self
                                 .selected
                                 .as_ref()
                                 .is_some_and(|path| path == &item.path);
-                            if ui
-                                .selectable_label(selected, &item.name)
-                                .clicked()
-                            {
+                            if ui.selectable_label(selected, &item.name).clicked() {
                                 self.selected = Some(item.path.clone());
                                 open_path = Some(item.path.clone());
                             }
@@ -215,9 +194,7 @@ impl BvhFileTree {
     fn render_open_prompt(&mut self, ui: &mut egui::Ui, i18n: &I18n) {
         ui.vertical_centered(|ui| {
             ui.add_space(20.0);
-            ui.label(
-                egui::RichText::new(i18n.tr("label.open_folder_hint")).weak(),
-            );
+            ui.label(egui::RichText::new(i18n.tr("label.open_folder_hint")).weak());
             ui.add_space(8.0);
             if ui.button(i18n.tr("button.open_folder")).clicked() {
                 if let Some(folder) = rfd::FileDialog::new().pick_folder() {
@@ -237,12 +214,7 @@ impl BvhFileTree {
         result
     }
 
-    fn collect_visible_recursive(
-        &self,
-        entry: &Entry,
-        depth: usize,
-        result: &mut Vec<FlatItem>,
-    ) {
+    fn collect_visible_recursive(&self, entry: &Entry, depth: usize, result: &mut Vec<FlatItem>) {
         let is_open = self.open_dirs.contains(&entry.path);
         result.push(FlatItem {
             depth,
@@ -276,9 +248,7 @@ impl BvhFileTree {
                 return Some(entry);
             }
             if let Some(children) = entry.children.as_mut() {
-                if let Some(found) =
-                    Self::find_entry_mut_recursive(children, target)
-                {
+                if let Some(found) = Self::find_entry_mut_recursive(children, target) {
                     return Some(found);
                 }
             }

@@ -3,8 +3,8 @@ use std::sync::mpsc;
 
 use crate::app::App;
 use crate::modules::glb::batch_runner::{
-    empty_entry, run_export, run_preflight, BatchEntry as GlbBatchEntry,
-    BatchProgress, BatchRequest as GlbBatchRequest,
+    empty_entry, run_export, run_preflight, BatchEntry as GlbBatchEntry, BatchProgress,
+    BatchRequest as GlbBatchRequest,
 };
 use crate::modules::glb::GlbBatchRecipe;
 use crate::modules::logging::next_task_id;
@@ -113,12 +113,13 @@ impl App {
         if count == 0 && self.glb_batch.scope == GlbInspectorScope::Batch {
             self.glb_batch.scope = GlbInspectorScope::Current;
         }
-        let selection_changed =
-            self.glb_batch.observed_selection_paths.as_slice() != selected;
+        let selection_changed = self.glb_batch.observed_selection_paths.as_slice() != selected;
         if selection_changed
-            || self.glb_batch.preflight.as_ref().is_some_and(|preflight| {
-                preflight.request.inputs.as_slice() != selected
-            })
+            || self
+                .glb_batch
+                .preflight
+                .as_ref()
+                .is_some_and(|preflight| preflight.request.inputs.as_slice() != selected)
         {
             self.invalidate_glb_batch_preflight();
         }
@@ -126,12 +127,12 @@ impl App {
         self.glb_batch.observed_selection_count = count;
     }
 
-    pub(crate) fn current_glb_batch_request(
-        &self,
-    ) -> Result<GlbBatchRequest, String> {
-        let input_root = self.file_tree.root().cloned().ok_or_else(|| {
-            "Open an input folder before batching GLBs".to_owned()
-        })?;
+    pub(crate) fn current_glb_batch_request(&self) -> Result<GlbBatchRequest, String> {
+        let input_root = self
+            .file_tree
+            .root()
+            .cloned()
+            .ok_or_else(|| "Open an input folder before batching GLBs".to_owned())?;
         let inputs = self.file_tree.selected_files();
         if inputs.is_empty() {
             return Err("Select at least one GLB for the batch".to_owned());
@@ -158,14 +159,14 @@ impl App {
         let Ok(request) = self.current_glb_batch_request() else {
             return false;
         };
-        self.glb_batch.preflight.as_ref().is_some_and(|preflight| {
-            preflight.request == request && preflight.all_valid
-        })
+        self.glb_batch
+            .preflight
+            .as_ref()
+            .is_some_and(|preflight| preflight.request == request && preflight.all_valid)
     }
 
     pub(crate) fn invalidate_glb_batch_preflight(&mut self) {
-        self.glb_batch.task_generation =
-            self.glb_batch.task_generation.wrapping_add(1);
+        self.glb_batch.task_generation = self.glb_batch.task_generation.wrapping_add(1);
         self.glb_batch.preflight = None;
         self.glb_batch.last_result = None;
     }
@@ -192,8 +193,7 @@ impl App {
                 return;
             }
         };
-        self.glb_batch.task_generation =
-            self.glb_batch.task_generation.wrapping_add(1);
+        self.glb_batch.task_generation = self.glb_batch.task_generation.wrapping_add(1);
         let generation = self.glb_batch.task_generation;
         let task_id = next_task_id();
         let (sender, receiver) = mpsc::channel();
@@ -219,8 +219,7 @@ impl App {
                     });
                 }
             };
-            let (entries, all_valid) =
-                run_preflight(&request, task_id, &mut progress);
+            let (entries, all_valid) = run_preflight(&request, task_id, &mut progress);
             let _ = sender.send(GlbBatchMessage::PreflightFinished {
                 generation,
                 entries,
@@ -234,13 +233,11 @@ impl App {
             return;
         }
         let Ok(request) = self.current_glb_batch_request() else {
-            self.glb_batch.last_result =
-                Some("Run a fresh batch preflight first".to_owned());
+            self.glb_batch.last_result = Some("Run a fresh batch preflight first".to_owned());
             return;
         };
         let Some(preflight) = self.glb_batch.preflight.clone() else {
-            self.glb_batch.last_result =
-                Some("Run a fresh batch preflight first".to_owned());
+            self.glb_batch.last_result = Some("Run a fresh batch preflight first".to_owned());
             return;
         };
         if preflight.request != request || !preflight.all_valid {
@@ -248,8 +245,7 @@ impl App {
                 Some("Run a fresh successful batch preflight first".to_owned());
             return;
         }
-        self.glb_batch.task_generation =
-            self.glb_batch.task_generation.wrapping_add(1);
+        self.glb_batch.task_generation = self.glb_batch.task_generation.wrapping_add(1);
         let generation = self.glb_batch.task_generation;
         let task_id = next_task_id();
         let (sender, receiver) = mpsc::channel();
@@ -267,10 +263,7 @@ impl App {
         std::thread::spawn(move || {
             let mut progress = |event: BatchProgress| match event {
                 BatchProgress::ExportStarted { index } => {
-                    let _ = sender.send(GlbBatchMessage::ExportStarted {
-                        generation,
-                        index,
-                    });
+                    let _ = sender.send(GlbBatchMessage::ExportStarted { generation, index });
                 }
                 BatchProgress::ExportFinished {
                     index,
@@ -284,15 +277,9 @@ impl App {
                         error,
                     });
                 }
-                BatchProgress::PreflightFile { .. }
-                | BatchProgress::PreflightFinished { .. } => {}
+                BatchProgress::PreflightFile { .. } | BatchProgress::PreflightFinished { .. } => {}
             };
-            let result = run_export(
-                &request,
-                &preflight.entries,
-                task_id,
-                &mut progress,
-            );
+            let result = run_export(&request, &preflight.entries, task_id, &mut progress);
             let _ = sender.send(GlbBatchMessage::Finished {
                 generation,
                 result: result.map_err(|e| e.to_string()),
@@ -313,41 +300,33 @@ impl App {
                         index,
                         entry,
                     } if generation == self.glb_batch.task_generation => {
-                        if let Some(preflight) =
-                            self.glb_batch.preflight.as_mut()
-                        {
+                        if let Some(preflight) = self.glb_batch.preflight.as_mut() {
                             if index >= preflight.entries.len() {
                                 preflight
                                     .entries
-                                    .resize_with(index + 1, || {
-                                        empty_entry(PathBuf::new())
-                                    });
+                                    .resize_with(index + 1, || empty_entry(PathBuf::new()));
                             }
                             preflight.entries[index] = entry;
                         } else {
-                            let request = self
-                                .glb_batch
-                                .task_request
-                                .clone()
-                                .unwrap_or_else(|| GlbBatchRequest {
-                                    input_root: PathBuf::new(),
-                                    inputs: Vec::new(),
-                                    output_root: PathBuf::new(),
-                                    selection: None,
-                                    recipe: GlbBatchRecipe::default(),
-                                    overwrite_existing: false,
+                            let request =
+                                self.glb_batch.task_request.clone().unwrap_or_else(|| {
+                                    GlbBatchRequest {
+                                        input_root: PathBuf::new(),
+                                        inputs: Vec::new(),
+                                        output_root: PathBuf::new(),
+                                        selection: None,
+                                        recipe: GlbBatchRecipe::default(),
+                                        overwrite_existing: false,
+                                    }
                                 });
                             let mut entries = Vec::new();
-                            entries.resize_with(index + 1, || {
-                                empty_entry(PathBuf::new())
-                            });
+                            entries.resize_with(index + 1, || empty_entry(PathBuf::new()));
                             entries[index] = entry;
-                            self.glb_batch.preflight =
-                                Some(GlbBatchPreflight {
-                                    request,
-                                    entries,
-                                    all_valid: false,
-                                });
+                            self.glb_batch.preflight = Some(GlbBatchPreflight {
+                                request,
+                                entries,
+                                all_valid: false,
+                            });
                         }
                     }
                     GlbBatchMessage::PreflightFinished {
@@ -355,15 +334,12 @@ impl App {
                         entries,
                         all_valid,
                     } if generation == self.glb_batch.task_generation => {
-                        if let Some(request) =
-                            self.glb_batch.task_request.take()
-                        {
-                            self.glb_batch.preflight =
-                                Some(GlbBatchPreflight {
-                                    request,
-                                    entries,
-                                    all_valid,
-                                });
+                        if let Some(request) = self.glb_batch.task_request.take() {
+                            self.glb_batch.preflight = Some(GlbBatchPreflight {
+                                request,
+                                entries,
+                                all_valid,
+                            });
                         }
                         self.glb_batch.last_result = Some(if all_valid {
                             "Batch preflight passed".to_owned()
@@ -375,12 +351,8 @@ impl App {
                     GlbBatchMessage::ExportStarted { generation, index }
                         if generation == self.glb_batch.task_generation =>
                     {
-                        if let Some(preflight) =
-                            self.glb_batch.preflight.as_mut()
-                        {
-                            if let Some(entry) =
-                                preflight.entries.get_mut(index)
-                            {
+                        if let Some(preflight) = self.glb_batch.preflight.as_mut() {
+                            if let Some(entry) = preflight.entries.get_mut(index) {
                                 entry.status = GlbBatchFileStatus::Exporting;
                             }
                         }
@@ -391,22 +363,16 @@ impl App {
                         completed,
                         error,
                     } if generation == self.glb_batch.task_generation => {
-                        if let Some(preflight) =
-                            self.glb_batch.preflight.as_mut()
-                        {
-                            if let Some(entry) =
-                                preflight.entries.get_mut(index)
-                            {
+                        if let Some(preflight) = self.glb_batch.preflight.as_mut() {
+                            if let Some(entry) = preflight.entries.get_mut(index) {
                                 entry.completed_outputs = completed;
                                 match error {
                                     None => {
-                                        entry.status =
-                                            GlbBatchFileStatus::Succeeded;
+                                        entry.status = GlbBatchFileStatus::Succeeded;
                                         entry.error = None;
                                     }
                                     Some(error) => {
-                                        entry.status =
-                                            GlbBatchFileStatus::Failed;
+                                        entry.status = GlbBatchFileStatus::Failed;
                                         entry.error = Some(error);
                                     }
                                 }
@@ -423,13 +389,10 @@ impl App {
                             }
                         });
                         if let Err(error) = &result {
-                            if let Some(preflight) =
-                                self.glb_batch.preflight.as_mut()
-                            {
+                            if let Some(preflight) = self.glb_batch.preflight.as_mut() {
                                 for entry in &mut preflight.entries {
                                     if entry.status == GlbBatchFileStatus::Ready
-                                        || entry.status
-                                            == GlbBatchFileStatus::ReadyWithWarnings
+                                        || entry.status == GlbBatchFileStatus::ReadyWithWarnings
                                     {
                                         entry.status = GlbBatchFileStatus::Skipped;
                                     }
@@ -441,9 +404,7 @@ impl App {
                             // Output existence may have changed even when the
                             // worker completed successfully; require a fresh
                             // preflight before another run.
-                            if let Some(preflight) =
-                                self.glb_batch.preflight.as_mut()
-                            {
+                            if let Some(preflight) = self.glb_batch.preflight.as_mut() {
                                 preflight.all_valid = false;
                             }
                         }
@@ -453,9 +414,8 @@ impl App {
                 },
                 Err(mpsc::TryRecvError::Empty) => break,
                 Err(mpsc::TryRecvError::Disconnected) => {
-                    self.glb_batch.last_result = Some(
-                        "GLB batch worker stopped unexpectedly".to_owned(),
-                    );
+                    self.glb_batch.last_result =
+                        Some("GLB batch worker stopped unexpectedly".to_owned());
                     self.glb_batch.task_request = None;
                     finished = true;
                     break;

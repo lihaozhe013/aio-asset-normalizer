@@ -8,8 +8,7 @@ use crate::modules::logging::safe_path_label;
 use super::task::ConversionTask;
 
 const SCRIPT_FILE_NAME: &str = "normalize_to_glb.py";
-const SCRIPT_SOURCE: &str =
-    include_str!("../../../blender_scripts/normalize_to_glb.py");
+const SCRIPT_SOURCE: &str = include_str!("../../../blender_scripts/normalize_to_glb.py");
 
 /// Failure modes for one headless Blender conversion. Every variant is
 /// reported to the user instead of falling back to a partial write.
@@ -150,8 +149,7 @@ fn find_in_path(name: &str) -> Option<PathBuf> {
 /// the application build.
 pub fn materialize_script() -> Result<PathBuf, BlenderError> {
     let dir = std::env::temp_dir().join("aio-asset-normalizer");
-    std::fs::create_dir_all(&dir)
-        .map_err(|error| BlenderError::ScriptWrite(error.to_string()))?;
+    std::fs::create_dir_all(&dir).map_err(|error| BlenderError::ScriptWrite(error.to_string()))?;
     let path = dir.join(SCRIPT_FILE_NAME);
     std::fs::write(&path, SCRIPT_SOURCE)
         .map_err(|error| BlenderError::ScriptWrite(error.to_string()))?;
@@ -166,13 +164,12 @@ pub fn run_task(task: &ConversionTask) -> Result<(), BlenderError> {
         return Err(BlenderError::InputMissing(task.input.clone()));
     }
 
-    let blender = find_blender(task.blender_path.as_deref())
-        .ok_or(BlenderError::BlenderNotFound)?;
-    let script_directory = tempfile::tempdir()
-        .map_err(|e| BlenderError::ScriptWrite(e.to_string()))?;
+    let blender =
+        find_blender(task.blender_path.as_deref()).ok_or(BlenderError::BlenderNotFound)?;
+    let script_directory =
+        tempfile::tempdir().map_err(|e| BlenderError::ScriptWrite(e.to_string()))?;
     let script = script_directory.path().join(SCRIPT_FILE_NAME);
-    std::fs::write(&script, SCRIPT_SOURCE)
-        .map_err(|e| BlenderError::ScriptWrite(e.to_string()))?;
+    std::fs::write(&script, SCRIPT_SOURCE).map_err(|e| BlenderError::ScriptWrite(e.to_string()))?;
 
     tracing::info!(
         target: "fbx_converter",

@@ -58,17 +58,15 @@ fn converter_dry_run_checks_dependencies_without_generating_artifacts() {
         .output()
         .unwrap();
     assert!(result.status.success());
-    let value: serde_json::Value =
-        serde_json::from_slice(&result.stdout).unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
     assert_eq!(value["results"]["validation_scope"], "preflight-only");
     assert!(!out.parent().unwrap().exists());
 }
 #[test]
 #[ignore = "Requires the fixed Blender version installed by the integration workflow"]
 fn real_blender_converter_matches_cli_and_snapshot_request() {
-    let blender =
-        aio_asset_normalizer::modules::blender::bridge::find_blender(None)
-            .expect("Blender must be installed for this opt-in test");
+    let blender = aio_asset_normalizer::modules::blender::bridge::find_blender(None)
+        .expect("Blender must be installed for this opt-in test");
     let dir = tempfile::tempdir().unwrap();
     let input = dir.path().join("cube.blend");
     let script = dir.path().join("fixture.py");
@@ -121,8 +119,7 @@ fn real_blender_converter_matches_cli_and_snapshot_request() {
     assert!(inspect.status.success());
     let output = dir.path().join("standardized");
     for dry_run in [true, false] {
-        let mut command =
-            Command::new(env!("CARGO_BIN_EXE_aio-asset-normalizer-cli"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_aio-asset-normalizer-cli"));
         command.args([
             "glb",
             "export",

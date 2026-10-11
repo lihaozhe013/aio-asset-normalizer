@@ -31,11 +31,7 @@ pub fn commit(
     Ok(())
 }
 
-pub fn write(
-    destination: &Path,
-    bytes: &[u8],
-    overwrite: bool,
-) -> io::Result<()> {
+pub fn write(destination: &Path, bytes: &[u8], overwrite: bool) -> io::Result<()> {
     let mut staged = stage(destination)?;
     staged.write_all(bytes)?;
     commit(staged, destination, overwrite)

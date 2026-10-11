@@ -67,9 +67,7 @@ impl LogTarget {
             Self::GlbEditor => Some("glb-editor.log"),
             Self::GlbExport => Some("glb-export.log"),
             Self::BvhStudio => Some("bvh-studio.log"),
-            Self::Retarget | Self::GlbRetarget | Self::RetargetAgent => {
-                Some("retarget.log")
-            }
+            Self::Retarget | Self::GlbRetarget | Self::RetargetAgent => Some("retarget.log"),
             Self::FbxConverter => Some("fbx-converter.log"),
         }
     }
@@ -258,11 +256,7 @@ impl EventVisitor {
 }
 
 impl tracing::field::Visit for EventVisitor {
-    fn record_debug(
-        &mut self,
-        field: &tracing::field::Field,
-        value: &dyn fmt::Debug,
-    ) {
+    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn fmt::Debug) {
         self.record_value(field, debug_value(value));
     }
 
@@ -310,9 +304,7 @@ impl LogRuntime {
         let writer_ui_sender = ui_sender.clone();
         let writer = thread::Builder::new()
             .name("aio-log-writer".to_owned())
-            .spawn(move || {
-                writer_loop(receiver, writer_ui_sender, writer_log_dir)
-            })
+            .spawn(move || writer_loop(receiver, writer_ui_sender, writer_log_dir))
             .ok();
         if writer.is_none() {
             let _ = ui_sender.try_send(LogEvent {
@@ -461,9 +453,7 @@ impl LogSinks {
                 task_id: None,
                 stream: None,
                 fields: Vec::new(),
-                message: format!(
-                    "Log file {file_name} is unavailable: {error}"
-                ),
+                message: format!("Log file {file_name} is unavailable: {error}"),
             });
         }
     }
@@ -491,11 +481,7 @@ impl RotatingFile {
         Self::open_with_limits(path, MAX_LOG_FILE_BYTES, MAX_LOG_BACKUPS)
     }
 
-    fn open_with_limits(
-        path: PathBuf,
-        max_bytes: u64,
-        max_backups: u32,
-    ) -> io::Result<Self> {
+    fn open_with_limits(path: PathBuf, max_bytes: u64, max_backups: u32) -> io::Result<Self> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -649,21 +635,17 @@ fn format_timestamp(timestamp: SystemTime) -> String {
     let second = seconds_in_day % 60;
     let millis = duration.subsec_millis();
     let (year, month, day) = civil_from_days(days);
-    format!(
-        "{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{millis:03}Z"
-    )
+    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{millis:03}Z")
 }
 
 fn civil_from_days(days_since_epoch: i64) -> (i64, i64, i64) {
     let z = days_since_epoch + 719_468;
     let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
     let day_of_era = z - era * 146_097;
-    let year_of_era = (day_of_era - day_of_era / 1_460 + day_of_era / 36_524
-        - day_of_era / 146_096)
-        / 365;
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
     let year = year_of_era + era * 400;
-    let day_of_year =
-        day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
     let month_part = (5 * day_of_year + 2) / 153;
     let day = day_of_year - (153 * month_part + 2) / 5 + 1;
     let month = month_part + if month_part < 10 { 3 } else { -9 };
@@ -718,10 +700,10 @@ mod tests {
         sinks.write_event(&event);
         sinks.flush();
 
-        let aggregate = fs::read_to_string(directory.join("debug.log"))
-            .expect("aggregate log is written");
-        let feature = fs::read_to_string(directory.join("glb-editor.log"))
-            .expect("feature log is written");
+        let aggregate =
+            fs::read_to_string(directory.join("debug.log")).expect("aggregate log is written");
+        let feature =
+            fs::read_to_string(directory.join("glb-editor.log")).expect("feature log is written");
         assert_eq!(aggregate, feature);
         assert!(aggregate.contains("[INFO] [glb_editor]"));
         assert!(aggregate.contains("task_id=42"));
@@ -751,8 +733,8 @@ mod tests {
         }
         sinks.flush();
 
-        let feature = fs::read_to_string(directory.join("retarget.log"))
-            .expect("retarget log is written");
+        let feature =
+            fs::read_to_string(directory.join("retarget.log")).expect("retarget log is written");
         assert_eq!(feature.lines().count(), 3);
         assert!(feature.contains("[retarget]"));
         assert!(feature.contains("[glb_retarget]"));
@@ -769,10 +751,7 @@ mod tests {
             level: LogLevel::Info,
             task_id: Some(7),
             stream: Some(LogStream::Stderr),
-            fields: vec![(
-                "input".to_owned(),
-                "character.glb#12345678".to_owned(),
-            )],
+            fields: vec![("input".to_owned(), "character.glb#12345678".to_owned())],
             message: "Blender output".to_owned(),
         };
         let line = event.format_line();
@@ -819,8 +798,8 @@ mod tests {
             .join()
             .expect("writer finishes after all producers disconnect");
 
-        let contents = fs::read_to_string(directory.join("debug.log"))
-            .expect("aggregate log is written");
+        let contents =
+            fs::read_to_string(directory.join("debug.log")).expect("aggregate log is written");
         let lines = contents.lines().collect::<Vec<_>>();
         assert_eq!(lines.len(), 200);
         assert!(lines.iter().all(|line| {
@@ -835,8 +814,7 @@ mod tests {
     fn rotation_keeps_only_configured_backup_count() {
         let directory = test_directory("rotation");
         let path = directory.join("debug.log");
-        let mut sink =
-            RotatingFile::open_with_limits(path.clone(), 16, 3).unwrap();
+        let mut sink = RotatingFile::open_with_limits(path.clone(), 16, 3).unwrap();
         for index in 0..12 {
             sink.write_line(&format!("line-{index:02}")).unwrap();
         }
@@ -869,8 +847,7 @@ mod tests {
 
         let status = ui_receiver.try_iter().collect::<Vec<_>>();
         assert!(status.iter().any(|event| {
-            event.message.contains("debug.log")
-                && event.level == LogLevel::Error
+            event.message.contains("debug.log") && event.level == LogLevel::Error
         }));
 
         fs::remove_file(directory).expect("test file is removed");

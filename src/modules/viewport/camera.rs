@@ -72,19 +72,15 @@ impl OrbitCamera {
                     position,
                     handled,
                     ..
-                } if !handled
-                    && pointer_inside_viewport(*position, viewport) =>
-                {
-                    match button {
-                        MouseButton::Left => {
-                            self.rotating = true;
-                        }
-                        MouseButton::Middle => {
-                            self.panning = true;
-                        }
-                        _ => {}
+                } if !handled && pointer_inside_viewport(*position, viewport) => match button {
+                    MouseButton::Left => {
+                        self.rotating = true;
                     }
-                }
+                    MouseButton::Middle => {
+                        self.panning = true;
+                    }
+                    _ => {}
+                },
                 Event::MouseRelease { button, .. } => match button {
                     MouseButton::Left => self.rotating = false,
                     MouseButton::Middle => self.panning = false,
@@ -95,21 +91,17 @@ impl OrbitCamera {
                     position,
                     handled,
                     ..
-                } if !handled
-                    && pointer_inside_viewport(*position, viewport) =>
-                {
+                } if !handled && pointer_inside_viewport(*position, viewport) => {
                     if self.rotating {
                         let sensitivity = 0.005;
                         self.theta += delta.0 * sensitivity;
                         self.phi -= delta.1 * sensitivity;
-                        self.phi =
-                            self.phi.clamp(0.05, std::f32::consts::PI - 0.05);
+                        self.phi = self.phi.clamp(0.05, std::f32::consts::PI - 0.05);
                         self.update_camera_view();
                     }
                     if self.panning {
                         let sensitivity = self.radius * 0.001;
-                        let forward =
-                            (self.target - self.camera_position()).normalize();
+                        let forward = (self.target - self.camera_position()).normalize();
                         let right = forward.cross(vec3(0.0, 1.0, 0.0));
                         let up = right.cross(forward);
                         self.target -= right * (delta.0 * sensitivity);
@@ -122,9 +114,7 @@ impl OrbitCamera {
                     position,
                     handled,
                     ..
-                } if !handled
-                    && pointer_inside_viewport(*position, viewport) =>
-                {
+                } if !handled && pointer_inside_viewport(*position, viewport) => {
                     // three-d scales mouse-wheel deltas by LINE_HEIGHT (24.0)
                     // before delivering them, so delta.1 is approximately
                     // +/-24 per physical wheel notch (and proportionally for
@@ -139,8 +129,7 @@ impl OrbitCamera {
                     let notches = delta.1 / 24.0;
                     let zoom_per_notch: f32 = 0.95;
                     self.radius *= zoom_per_notch.powf(notches);
-                    self.radius =
-                        self.radius.clamp(self.min_radius, self.max_radius);
+                    self.radius = self.radius.clamp(self.min_radius, self.max_radius);
                     self.update_camera_view();
                 }
                 _ => {}
@@ -171,8 +160,7 @@ impl OrbitCamera {
     /// useful without changing the authored coordinates or retargeting math.
     pub fn focus_on_points(&mut self, points: &[[f32; 3]]) {
         let mut minimum = vec3(f32::INFINITY, f32::INFINITY, f32::INFINITY);
-        let mut maximum =
-            vec3(f32::NEG_INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY);
+        let mut maximum = vec3(f32::NEG_INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY);
         let mut has_point = false;
         for point in points {
             if point.iter().any(|value| !value.is_finite()) {
@@ -217,8 +205,7 @@ impl OrbitCamera {
         let sphere_radius = (diagonal * 0.5).max(1.0e-7);
         self.target = (minimum + maximum) * 0.5;
         let viewport = self.camera.viewport();
-        let aspect =
-            (viewport.width.max(1) as f32) / (viewport.height.max(1) as f32);
+        let aspect = (viewport.width.max(1) as f32) / (viewport.height.max(1) as f32);
         let vertical_half_fov = 45.0_f32.to_radians() * 0.5;
         let horizontal_half_fov = (vertical_half_fov.tan() * aspect).atan();
         let half_fov = vertical_half_fov.min(horizontal_half_fov).max(0.05);
@@ -259,18 +246,12 @@ impl OrbitCamera {
     }
 }
 
-fn pointer_inside_viewport(
-    position: PhysicalPoint,
-    viewport: Viewport,
-) -> bool {
+fn pointer_inside_viewport(position: PhysicalPoint, viewport: Viewport) -> bool {
     let left = viewport.x as f32;
     let bottom = viewport.y as f32;
     let right = left + viewport.width as f32;
     let top = bottom + viewport.height as f32;
-    position.x >= left
-        && position.x < right
-        && position.y >= bottom
-        && position.y < top
+    position.x >= left && position.x < right && position.y >= bottom && position.y < top
 }
 
 #[cfg(test)]
@@ -307,16 +288,10 @@ mod tests {
     fn left_mouse_button_controls_rotation() {
         let mut camera = OrbitCamera::new(Viewport::new_at_origo(640, 480));
 
-        camera.handle_events(
-            &[mouse_press(MouseButton::Right)],
-            canvas_viewport(),
-        );
+        camera.handle_events(&[mouse_press(MouseButton::Right)], canvas_viewport());
         assert!(!camera.rotating);
 
-        camera.handle_events(
-            &[mouse_press(MouseButton::Left)],
-            canvas_viewport(),
-        );
+        camera.handle_events(&[mouse_press(MouseButton::Left)], canvas_viewport());
         assert!(camera.rotating);
 
         camera.handle_events(
@@ -354,15 +329,9 @@ mod tests {
         );
         assert_eq!(camera.theta, initial_theta);
 
-        camera.handle_events(
-            &[mouse_press(MouseButton::Left)],
-            canvas_viewport(),
-        );
+        camera.handle_events(&[mouse_press(MouseButton::Left)], canvas_viewport());
         assert!(camera.rotating);
-        camera.handle_events(
-            &[mouse_release(MouseButton::Left, true)],
-            canvas_viewport(),
-        );
+        camera.handle_events(&[mouse_release(MouseButton::Left, true)], canvas_viewport());
         assert!(!camera.rotating);
     }
 
@@ -378,10 +347,7 @@ mod tests {
         let initial_theta = camera.theta;
         let initial_radius = camera.radius;
 
-        camera.handle_events(
-            &[mouse_press_at(MouseButton::Left, (100.0, 200.0))],
-            canvas,
-        );
+        camera.handle_events(&[mouse_press_at(MouseButton::Left, (100.0, 200.0))], canvas);
         camera.handle_events(
             &[Event::MouseWheel {
                 delta: (0.0, 24.0),
@@ -395,10 +361,7 @@ mod tests {
         assert_eq!(camera.theta, initial_theta);
         assert_eq!(camera.radius, initial_radius);
 
-        camera.handle_events(
-            &[mouse_press_at(MouseButton::Left, (300.0, 200.0))],
-            canvas,
-        );
+        camera.handle_events(&[mouse_press_at(MouseButton::Left, (300.0, 200.0))], canvas);
         assert!(camera.rotating);
         camera.handle_events(
             &[Event::MouseMotion {
@@ -411,8 +374,7 @@ mod tests {
             canvas,
         );
         assert_eq!(camera.theta, initial_theta);
-        camera
-            .handle_events(&[mouse_release(MouseButton::Left, false)], canvas);
+        camera.handle_events(&[mouse_release(MouseButton::Left, false)], canvas);
         assert!(!camera.rotating);
     }
 

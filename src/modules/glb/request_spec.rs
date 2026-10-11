@@ -6,8 +6,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::modules::glb::{
-    AnimationOutputMode, BatchNameSelector, GlbBatchRecipe, GlbExportPreset,
-    RootMotionRemovalMode,
+    AnimationOutputMode, BatchNameSelector, GlbBatchRecipe, GlbExportPreset, RootMotionRemovalMode,
 };
 
 /// Sentinel that selects the automatic resolver instead of an exact name.
@@ -21,9 +20,7 @@ pub fn name_selector(value: &str) -> BatchNameSelector {
     }
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, JsonSchema,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum PresetArg {
     PreserveAll,
@@ -47,9 +44,7 @@ impl From<PresetArg> for GlbExportPreset {
     }
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, JsonSchema,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum AnimationOutputArg {
     Combined,
@@ -71,9 +66,7 @@ impl From<AnimationOutputArg> for AnimationOutputMode {
     }
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, JsonSchema,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum RootMotionModeArg {
     HorizontalXz,
@@ -89,12 +82,8 @@ impl Default for RootMotionModeArg {
 impl From<RootMotionModeArg> for RootMotionRemovalMode {
     fn from(value: RootMotionModeArg) -> Self {
         match value {
-            RootMotionModeArg::HorizontalXz => {
-                RootMotionRemovalMode::HorizontalXZ
-            }
-            RootMotionModeArg::AllTranslation => {
-                RootMotionRemovalMode::AllTranslation
-            }
+            RootMotionModeArg::HorizontalXz => RootMotionRemovalMode::HorizontalXZ,
+            RootMotionModeArg::AllTranslation => RootMotionRemovalMode::AllTranslation,
         }
     }
 }
@@ -269,9 +258,7 @@ impl Default for EditSpec {
     }
 }
 impl EditSpec {
-    pub fn from_export_edits(
-        value: &crate::modules::glb::pipeline::ExportEdits,
-    ) -> Self {
+    pub fn from_export_edits(value: &crate::modules::glb::pipeline::ExportEdits) -> Self {
         Self {
             rotate_roots_degrees: value.orientation_euler_degrees,
             scale_roots: value.root_scale,
@@ -285,12 +272,12 @@ impl EditSpec {
             animation_rate: value
                 .animation_rate
                 .map(|(animation, rate)| RateSpec { animation, rate }),
-            smart_loop: value.smart_loop.map(
-                |(animation, transition_seconds)| SmartLoopSpec {
+            smart_loop: value
+                .smart_loop
+                .map(|(animation, transition_seconds)| SmartLoopSpec {
                     animation,
                     transition_seconds,
-                },
-            ),
+                }),
             textures: Vec::new(),
         }
     }
@@ -302,10 +289,7 @@ impl EditSpec {
             root_translation: self.translate_roots,
             bake_root_transform: self.bake_root_transform,
             trim: self.trim.as_ref().map(|v| (v.animation, v.start, v.end)),
-            animation_rate: self
-                .animation_rate
-                .as_ref()
-                .map(|v| (v.animation, v.rate)),
+            animation_rate: self.animation_rate.as_ref().map(|v| (v.animation, v.rate)),
             smart_loop: self
                 .smart_loop
                 .as_ref()
@@ -343,9 +327,7 @@ pub struct TextureReplacement {
     #[serde(default = "enabled")]
     pub duplicate_shared_material: bool,
 }
-#[derive(
-    Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema,
-)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SelectionSpec {
     #[serde(default)]
@@ -357,9 +339,7 @@ pub struct SelectionSpec {
     #[serde(default)]
     pub nodes: Option<std::collections::BTreeSet<usize>>,
     #[serde(default)]
-    pub primitives: Option<
-        std::collections::BTreeMap<usize, std::collections::BTreeSet<usize>>,
-    >,
+    pub primitives: Option<std::collections::BTreeMap<usize, std::collections::BTreeSet<usize>>>,
     #[serde(default)]
     pub animations: Option<std::collections::BTreeSet<usize>>,
     #[serde(default)]
@@ -372,12 +352,8 @@ pub struct SelectionSpec {
     pub root_motion_node: Option<usize>,
 }
 impl SelectionSpec {
-    pub fn from_selection(
-        value: &crate::modules::glb::GlbExportSelection,
-    ) -> Self {
-        use crate::modules::glb::{
-            AnimationOutputMode, GlbExportPreset, RootMotionRemovalMode,
-        };
+    pub fn from_selection(value: &crate::modules::glb::GlbExportSelection) -> Self {
+        use crate::modules::glb::{AnimationOutputMode, GlbExportPreset, RootMotionRemovalMode};
         Self {
             preset: match value.preset {
                 GlbExportPreset::PreserveAll => PresetArg::PreserveAll,
@@ -395,12 +371,8 @@ impl SelectionSpec {
             },
             remove_root_motion: value.remove_root_motion,
             root_motion_mode: match value.root_motion_removal_mode {
-                RootMotionRemovalMode::HorizontalXZ => {
-                    RootMotionModeArg::HorizontalXz
-                }
-                RootMotionRemovalMode::AllTranslation => {
-                    RootMotionModeArg::AllTranslation
-                }
+                RootMotionRemovalMode::HorizontalXZ => RootMotionModeArg::HorizontalXz,
+                RootMotionRemovalMode::AllTranslation => RootMotionModeArg::AllTranslation,
             },
             root_motion_node: value.root_motion_node_override,
         }
@@ -409,19 +381,17 @@ impl SelectionSpec {
     pub fn resolve(
         &self,
         document: &crate::modules::glb::GlbDocument,
-    ) -> Result<
-        crate::modules::glb::GlbExportSelection,
-        crate::modules::glb::GlbError,
-    > {
+    ) -> Result<crate::modules::glb::GlbExportSelection, crate::modules::glb::GlbError> {
         let catalog = document.export_catalog()?;
         if self.skin.is_some_and(|v| v >= catalog.skins.len())
             || self
                 .nodes
                 .as_ref()
                 .is_some_and(|v| v.iter().any(|i| *i >= catalog.nodes.len()))
-            || self.animations.as_ref().is_some_and(|v| {
-                v.iter().any(|i| *i >= catalog.animations.len())
-            })
+            || self
+                .animations
+                .as_ref()
+                .is_some_and(|v| v.iter().any(|i| *i >= catalog.animations.len()))
             || self
                 .root_motion_node
                 .is_some_and(|v| v >= catalog.nodes.len())
@@ -439,8 +409,7 @@ impl SelectionSpec {
                 })?;
                 if indices.iter().any(|i| *i >= mesh.primitives.len()) {
                     return Err(crate::modules::glb::GlbError::Invalid(
-                        "Explicit selection contains an invalid primitive"
-                            .into(),
+                        "Explicit selection contains an invalid primitive".into(),
                     ));
                 }
             }
@@ -454,9 +423,7 @@ impl SelectionSpec {
                 .scenes
                 .get(scene)
                 .ok_or_else(|| {
-                    crate::modules::glb::GlbError::Invalid(format!(
-                        "Scene {scene} does not exist"
-                    ))
+                    crate::modules::glb::GlbError::Invalid(format!("Scene {scene} does not exist"))
                 })?
                 .roots
                 .iter()
@@ -489,12 +456,9 @@ mod tests {
     #[test]
     fn omitted_edits_and_empty_edits_have_identity_defaults() {
         let omitted: EditJobFile =
-            serde_json::from_str(r#"{"input":"a.glb","output":"b.glb"}"#)
-                .unwrap();
-        let empty: EditJobFile = serde_json::from_str(
-            r#"{"input":"a.glb","output":"b.glb","edits":{}}"#,
-        )
-        .unwrap();
+            serde_json::from_str(r#"{"input":"a.glb","output":"b.glb"}"#).unwrap();
+        let empty: EditJobFile =
+            serde_json::from_str(r#"{"input":"a.glb","output":"b.glb","edits":{}}"#).unwrap();
         assert_eq!(omitted.edits.scale_roots, 1.0);
         assert_eq!(
             serde_json::to_value(omitted.edits).unwrap(),

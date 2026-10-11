@@ -49,8 +49,7 @@ impl ContextArgs {
     fn resolve(&self, command: &str) -> Result<core::RetargetJob, CliError> {
         if let Some(path) = &self.job {
             let request: core::RetargetJob =
-                operations::load_json(path, "retarget job")
-                    .map_err(output::operation_error)?;
+                operations::load_json(path, "retarget job").map_err(output::operation_error)?;
             if request.command.as_deref().is_some_and(|v| v != command) {
                 return Err(CliError::validation(
                     "Retarget job declares a different command",
@@ -59,12 +58,12 @@ impl ContextArgs {
             return Ok(request);
         }
         let mut request = core::RetargetJob::new(
-            self.source.clone().ok_or_else(|| {
-                CliError::usage("--source is required without --job")
-            })?,
-            self.target.clone().ok_or_else(|| {
-                CliError::usage("--target is required without --job")
-            })?,
+            self.source
+                .clone()
+                .ok_or_else(|| CliError::usage("--source is required without --job"))?,
+            self.target
+                .clone()
+                .ok_or_else(|| CliError::usage("--target is required without --job"))?,
         );
         if let Some(value) = self.source_animation {
             request.source_animation = value;
@@ -161,9 +160,7 @@ pub fn run(args: RetargetArgs) -> i32 {
         RetargetCommand::Run(v) => retarget(&v),
     }
 }
-fn load(
-    request: &core::RetargetJob,
-) -> Result<(core::Source, core::Target), CliError> {
+fn load(request: &core::RetargetJob) -> Result<(core::Source, core::Target), CliError> {
     Ok((
         core::load_source(request).map_err(output::operation_error)?,
         core::load_target(request).map_err(output::operation_error)?,
@@ -173,21 +170,18 @@ fn mapping(
     request: &core::RetargetJob,
     source: &core::Source,
     target: &core::Target,
-) -> Result<aio_asset_normalizer::modules::retarget::SkeletonMapping, CliError>
-{
+) -> Result<aio_asset_normalizer::modules::retarget::SkeletonMapping, CliError> {
     core::load_mapping(
-        request.mapping.as_deref().ok_or_else(|| {
-            CliError::usage("--mapping or job mapping is required")
-        })?,
+        request
+            .mapping
+            .as_deref()
+            .ok_or_else(|| CliError::usage("--mapping or job mapping is required"))?,
         source,
         target,
     )
     .map_err(output::operation_error)
 }
-fn protected_write(
-    request: &core::RetargetJob,
-    bytes: &[u8],
-) -> Result<(), CliError> {
+fn protected_write(request: &core::RetargetJob, bytes: &[u8]) -> Result<(), CliError> {
     let path = request
         .out
         .as_deref()
@@ -196,14 +190,9 @@ fn protected_write(
     if let Some(mapping) = request.mapping.as_deref() {
         sources.push(mapping);
     }
-    operations::check_output(path, &sources, request.overwrite)
-        .map_err(output::operation_error)?;
-    aio_asset_normalizer::modules::atomic_file::write(
-        path,
-        bytes,
-        request.overwrite,
-    )
-    .map_err(|e| CliError::io(e.to_string()))
+    operations::check_output(path, &sources, request.overwrite).map_err(output::operation_error)?;
+    aio_asset_normalizer::modules::atomic_file::write(path, bytes, request.overwrite)
+        .map_err(|e| CliError::io(e.to_string()))
 }
 fn prompt(args: &PromptArgs) -> i32 {
     const COMMAND: &str = "retarget.prompt";
@@ -220,8 +209,8 @@ fn prompt(args: &PromptArgs) -> i32 {
         } else {
             None
         };
-        let prompt = core::prompt(&source, &target, candidate.as_ref())
-            .map_err(output::operation_error)?;
+        let prompt =
+            core::prompt(&source, &target, candidate.as_ref()).map_err(output::operation_error)?;
         let out = request
             .out
             .as_deref()
@@ -258,7 +247,9 @@ fn suggest(args: &SuggestArgs) -> i32 {
         }
         let (source, target) = load(&request)?;
         let core::Source::Bvh { document, .. } = &source else {
-            return Err(CliError::validation("Name suggestions require a BVH source; use retarget prompt for GLB"));
+            return Err(CliError::validation(
+                "Name suggestions require a BVH source; use retarget prompt for GLB",
+            ));
         };
         let value = json!({"source":request.source,"target":request.target,"skin_index":request.skin,
             "suggestions":document.suggest_mapping(&target.skin).iter().map(|v| json!({"source_joint":v.source_joint,"target_node":v.target_node,
@@ -283,11 +274,7 @@ fn validate(args: &ValidateArgs) -> i32 {
             request.mapping = args.mapping.clone();
         }
         let (source, target) = load(&request)?;
-        let report = core::validate(
-            &source,
-            &target,
-            &mapping(&request, &source, &target)?,
-        );
+        let report = core::validate(&source, &target, &mapping(&request, &source, &target)?);
         Ok::<_, CliError>((
             json!({"mapping":request.mapping,"valid":report.is_valid(),"mapped_count":report.mapped_count,"unmapped_source_nodes":report.unmapped_source_nodes,"errors":report.errors,"warnings":report.warnings}),
             report,
@@ -332,8 +319,8 @@ fn retarget(args: &RunArgs) -> i32 {
         let (source, target) = load(&request)?;
         let mapping = mapping(&request, &source, &target)?;
         let validation = core::validate(&source, &target, &mapping);
-        let job = core::prepare(&source, &target, &mapping, &request)
-            .map_err(output::operation_error)?;
+        let job =
+            core::prepare(&source, &target, &mapping, &request).map_err(output::operation_error)?;
         let report = if args.dry_run {
             operations::glb::preview_job(&job)
         } else {
@@ -350,19 +337,11 @@ fn retarget(args: &RunArgs) -> i32 {
         Err(e) => output::emit_failure(COMMAND, json!({}), &e),
     }
 }
-fn report_json(
-    report: &aio_asset_normalizer::modules::glb::GlbExportReport,
-) -> Value {
+fn report_json(report: &aio_asset_normalizer::modules::glb::GlbExportReport) -> Value {
     let mut value = json!(report);
     if let Some(fields) = value.as_object_mut() {
-        fields.insert(
-            "source_animations".into(),
-            json!(report.source.animations),
-        );
-        fields.insert(
-            "output_animations".into(),
-            json!(report.output.animations),
-        );
+        fields.insert("source_animations".into(), json!(report.source.animations));
+        fields.insert("output_animations".into(), json!(report.output.animations));
         fields.insert("output_nodes".into(), json!(report.output.nodes));
         fields.insert("output_meshes".into(), json!(report.output.meshes));
     }

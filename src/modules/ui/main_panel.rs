@@ -1,7 +1,6 @@
 use crate::app::App;
 use crate::modules::ui::{
-    about_dialog, bottom_panel, bvh_inspector, fbx_converter_panel, fonts,
-    glb_inspector,
+    about_dialog, bottom_panel, bvh_inspector, fbx_converter_panel, fonts, glb_inspector,
     menu_bar::{self, Page},
 };
 
@@ -20,9 +19,7 @@ pub fn render_ui(
     match app.page {
         Page::GlbEditor => app.file_tree.handle_dropped_files(ui.ctx()),
         Page::BvhStudio => app.bvh_file_tree.handle_dropped_files(ui.ctx()),
-        Page::FbxConverter => {
-            app.converter_file_tree.handle_dropped_files(ui.ctx())
-        }
+        Page::FbxConverter => app.converter_file_tree.handle_dropped_files(ui.ctx()),
     }
     app.poll_tasks();
     let actions = menu_bar::render(
@@ -46,11 +43,8 @@ pub fn render_ui(
                 .min_size(170.0)
                 .show_inside(ui, |ui| {
                     let (changed, preview_path) =
-                        app.file_tree.render_with_active(
-                            ui,
-                            &app.i18n,
-                            app.glb_path.as_deref(),
-                        );
+                        app.file_tree
+                            .render_with_active(ui, &app.i18n, app.glb_path.as_deref());
                     if changed || app.file_tree.take_root_changed() {
                         app.needs_save = true;
                     }
@@ -65,8 +59,7 @@ pub fn render_ui(
                 .default_size(250.0)
                 .min_size(170.0)
                 .show_inside(ui, |ui| {
-                    if let Some(path) = app.bvh_file_tree.render(ui, &app.i18n)
-                    {
+                    if let Some(path) = app.bvh_file_tree.render(ui, &app.i18n) {
                         app.load_bvh_path(&path);
                     }
                 });
@@ -77,8 +70,7 @@ pub fn render_ui(
                 .default_size(250.0)
                 .min_size(170.0)
                 .show_inside(ui, |ui| {
-                    let (changed, _) =
-                        app.converter_file_tree.render(ui, &app.i18n);
+                    let (changed, _) = app.converter_file_tree.render(ui, &app.i18n);
                     if changed || app.converter_file_tree.take_root_changed() {
                         app.needs_save = true;
                     }
@@ -126,10 +118,7 @@ fn render_page_tabs(app: &mut App, ui: &mut three_d::egui::Ui) {
                 ui.label(RichText::new("AIO Asset Normalizer").strong());
                 ui.separator();
                 if ui
-                    .selectable_label(
-                        app.page == Page::GlbEditor,
-                        app.i18n.tr("page.glb_editor"),
-                    )
+                    .selectable_label(app.page == Page::GlbEditor, app.i18n.tr("page.glb_editor"))
                     .clicked()
                 {
                     app.page = Page::GlbEditor;
@@ -137,16 +126,11 @@ fn render_page_tabs(app: &mut App, ui: &mut three_d::egui::Ui) {
                     if app.glb_retarget_preview_active {
                         app.exit_glb_retarget_preview();
                     } else {
-                        app.request_glb_reload(
-                            crate::reload::GlbReloadKind::OpenModel,
-                        );
+                        app.request_glb_reload(crate::reload::GlbReloadKind::OpenModel);
                     }
                 }
                 if ui
-                    .selectable_label(
-                        app.page == Page::BvhStudio,
-                        app.i18n.tr("page.bvh_studio"),
-                    )
+                    .selectable_label(app.page == Page::BvhStudio, app.i18n.tr("page.bvh_studio"))
                     .clicked()
                 {
                     app.page = Page::BvhStudio;

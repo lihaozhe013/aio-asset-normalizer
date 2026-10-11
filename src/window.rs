@@ -5,8 +5,7 @@ use winit::{
     window::{Icon, WindowBuilder},
 };
 
-const ICON_PNG: &[u8] =
-    include_bytes!("../assets/icon/aio-asset-normalizer-transparent.png");
+const ICON_PNG: &[u8] = include_bytes!("../assets/icon/aio-asset-normalizer-transparent.png");
 
 pub fn create() -> Result<Window, WindowError> {
     let icon = image::load_from_memory(ICON_PNG)

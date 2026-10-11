@@ -46,9 +46,7 @@ impl App {
         else {
             return;
         };
-        if same_path(&path, source_path.as_deref())
-            || same_path(&path, target_path.as_deref())
-        {
+        if same_path(&path, source_path.as_deref()) || same_path(&path, target_path.as_deref()) {
             tracing::error!(
                 target: "retarget_agent",
                 output = %safe_path_label(&path),
@@ -84,10 +82,8 @@ impl App {
                 )
                 .map_err(|e| e.to_string())?;
                 let fingerprint =
-                    crate::modules::operations::retarget::document_fingerprint(
-                        &target_document,
-                    )
-                    .map_err(|e| e.to_string())?;
+                    crate::modules::operations::retarget::document_fingerprint(&target_document)
+                        .map_err(|e| e.to_string())?;
                 let target = crate::modules::operations::retarget::target(
                     target_document,
                     target_skin_index,
@@ -112,12 +108,8 @@ impl App {
                     overwrite,
                 )
                 .map_err(|e| e.to_string())?;
-                crate::modules::atomic_file::write(
-                    &result_path,
-                    prompt.as_bytes(),
-                    overwrite,
-                )
-                .map_err(|e| e.to_string())
+                crate::modules::atomic_file::write(&result_path, prompt.as_bytes(), overwrite)
+                    .map_err(|e| e.to_string())
             })();
             let _ = sender.send(ExportTaskResult {
                 task_id,
@@ -198,9 +190,7 @@ impl App {
         else {
             return;
         };
-        if same_path(&path, Some(&source_path))
-            || same_path(&path, Some(&target_path))
-        {
+        if same_path(&path, Some(&source_path)) || same_path(&path, Some(&target_path)) {
             tracing::error!(
                 target: "retarget_agent",
                 output = %safe_path_label(&path),
@@ -237,10 +227,8 @@ impl App {
                 )
                 .map_err(|e| e.to_string())?;
                 let fingerprint =
-                    crate::modules::operations::retarget::document_fingerprint(
-                        &target_document,
-                    )
-                    .map_err(|e| e.to_string())?;
+                    crate::modules::operations::retarget::document_fingerprint(&target_document)
+                        .map_err(|e| e.to_string())?;
                 let target = crate::modules::operations::retarget::target(
                     target_document,
                     target_skin_index,
@@ -264,12 +252,8 @@ impl App {
                     overwrite,
                 )
                 .map_err(|e| e.to_string())?;
-                crate::modules::atomic_file::write(
-                    &result_path,
-                    prompt.as_bytes(),
-                    overwrite,
-                )
-                .map_err(|e| e.to_string())
+                crate::modules::atomic_file::write(&result_path, prompt.as_bytes(), overwrite)
+                    .map_err(|e| e.to_string())
             })();
             let _ = sender.send(ExportTaskResult {
                 task_id,
@@ -283,7 +267,5 @@ impl App {
 }
 
 fn same_path(path: &Path, source: Option<&Path>) -> bool {
-    source.is_some_and(|source| {
-        crate::modules::operations::same_path(path, source)
-    })
+    source.is_some_and(|source| crate::modules::operations::same_path(path, source))
 }

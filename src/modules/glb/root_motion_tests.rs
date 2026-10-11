@@ -3,8 +3,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::json;
 
 use super::super::{
-    AnimationOutputMode, AnimationRuntime, GlbDocument, GlbExportPreset,
-    GlbExportSelection, RootMotionRemovalMode,
+    AnimationOutputMode, AnimationRuntime, GlbDocument, GlbExportPreset, GlbExportSelection,
+    RootMotionRemovalMode,
 };
 
 fn root_motion_document() -> GlbDocument {
@@ -33,8 +33,7 @@ fn root_motion_document() -> GlbDocument {
     }
     for _ in 0..2 {
         for component in [
-            1.0_f32, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0,
-            0.0, 0.0, 0.0, 1.0,
+            1.0_f32, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
         ] {
             bin.extend_from_slice(&component.to_le_bytes());
         }
@@ -148,9 +147,7 @@ fn output_values(
             (0..3)
                 .map(|component| {
                     let offset = index * 12 + component * 4;
-                    f32::from_le_bytes(
-                        bytes[offset..offset + 4].try_into().unwrap(),
-                    )
+                    f32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap())
                 })
                 .collect()
         })
@@ -164,11 +161,9 @@ fn freezes_horizontal_translation_and_preserves_y_for_linear_and_step() {
         let original_root = output_values(&source, 0, 0);
         let original_scale = output_values(&source, 0, 1);
         let mut output = source.clone();
-        output.json["animations"][0]["samplers"][0]["interpolation"] =
-            json!(interpolation);
+        output.json["animations"][0]["samplers"][0]["interpolation"] = json!(interpolation);
 
-        let report =
-            output.prune_for_export(&skeleton_selection(&[0])).unwrap();
+        let report = output.prune_for_export(&skeleton_selection(&[0])).unwrap();
 
         assert_eq!(report.root_motion_channels_modified, 1);
         assert_eq!(
@@ -189,11 +184,7 @@ fn freezes_horizontal_translation_and_preserves_y_for_linear_and_step() {
             vec![vec![0.0], vec![1.0], vec![2.0]]
         );
         gltf::Gltf::from_slice(&output.to_bytes().unwrap()).unwrap();
-        AnimationRuntime::from_bytes_skeleton_only(
-            &output.to_bytes().unwrap(),
-            None,
-        )
-        .unwrap();
+        AnimationRuntime::from_bytes_skeleton_only(&output.to_bytes().unwrap(), None).unwrap();
     }
 }
 
@@ -219,8 +210,7 @@ fn y_only_motion_is_a_successful_horizontal_no_op() {
         let offset = 48 + index * 12;
         for (component, component_value) in value.into_iter().enumerate() {
             let start = offset + component * 4;
-            bin[start..start + 4]
-                .copy_from_slice(&component_value.to_le_bytes());
+            bin[start..start + 4].copy_from_slice(&component_value.to_le_bytes());
         }
     }
 
@@ -272,8 +262,7 @@ fn resolves_skin_skeleton_common_ancestor_and_manual_override() {
         .as_object_mut()
         .unwrap()
         .remove("skin");
-    common_ancestor_document.json["animations"][0]["channels"][0]["target"]
-        ["node"] = json!(0);
+    common_ancestor_document.json["animations"][0]["channels"][0]["target"]["node"] = json!(0);
     let common_selection = character_selection(&[1, 2], &[0], None);
     let info = common_ancestor_document
         .root_motion_info(&common_selection)
@@ -397,8 +386,7 @@ fn unsupported_root_translation_accessors_are_rejected_without_mutation() {
     assert_rejected(damaged);
 
     let mut cubic = root_motion_document();
-    cubic.json["animations"][0]["samplers"][0]["interpolation"] =
-        json!("CUBICSPLINE");
+    cubic.json["animations"][0]["samplers"][0]["interpolation"] = json!("CUBICSPLINE");
     assert_rejected(cubic);
 }
 

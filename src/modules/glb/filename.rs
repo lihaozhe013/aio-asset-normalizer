@@ -15,8 +15,7 @@ pub fn clean_filename_component(value: &str) -> String {
             }
         })
         .collect::<String>();
-    let trimmed =
-        cleaned.trim_matches(|character| character == ' ' || character == '.');
+    let trimmed = cleaned.trim_matches(|character| character == ' ' || character == '.');
     if trimmed.is_empty() {
         "animation".to_owned()
     } else {

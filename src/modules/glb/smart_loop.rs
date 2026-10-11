@@ -3,9 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::{json, Value};
 
 use super::{GlbDocument, GlbError};
-use crate::modules::glb::transform::{
-    identity, multiply, node_matrix, normalize_quaternion,
-};
+use crate::modules::glb::transform::{identity, multiply, node_matrix, normalize_quaternion};
 
 const MAX_DRIFT_RATIO: f32 = 0.02;
 const MAX_ROOT_ROTATION_RADIANS: f32 = 15.0_f32.to_radians();
@@ -66,8 +64,7 @@ impl GlbDocument {
             || !(0.01..=2.0).contains(&options.transition_seconds)
         {
             return Err(GlbError::Invalid(
-                "Smart LOOP transition must be between 0.01 and 2.00 seconds"
-                    .to_owned(),
+                "Smart LOOP transition must be between 0.01 and 2.00 seconds".to_owned(),
             ));
         }
         let animation = self
@@ -77,18 +74,14 @@ impl GlbDocument {
             .and_then(|items| items.get(animation_index))
             .cloned()
             .ok_or_else(|| {
-                GlbError::Invalid(format!(
-                    "Animation {animation_index} does not exist"
-                ))
+                GlbError::Invalid(format!("Animation {animation_index} does not exist"))
             })?;
         let skins = self
             .json
             .get("skins")
             .and_then(Value::as_array)
             .ok_or_else(|| {
-                GlbError::Unsupported(
-                    "Smart LOOP requires one valid Skinned GLB".to_owned(),
-                )
+                GlbError::Unsupported("Smart LOOP requires one valid Skinned GLB".to_owned())
             })?;
         if skins.len() != 1 {
             return Err(GlbError::Unsupported(
@@ -98,60 +91,51 @@ impl GlbDocument {
         let skin = self.skin_data()?;
         if skin.joints.len() < 2 {
             return Err(GlbError::Invalid(
-                "Smart LOOP requires a Skin with at least two joints"
-                    .to_owned(),
+                "Smart LOOP requires a Skin with at least two joints".to_owned(),
             ));
         }
         let channels = animation
             .get("channels")
             .and_then(Value::as_array)
-            .ok_or_else(|| {
-                GlbError::Invalid("Animation has no channels".to_owned())
-            })?;
+            .ok_or_else(|| GlbError::Invalid("Animation has no channels".to_owned()))?;
         let samplers = animation
             .get("samplers")
             .and_then(Value::as_array)
-            .ok_or_else(|| {
-                GlbError::Invalid("Animation has no samplers".to_owned())
-            })?;
+            .ok_or_else(|| GlbError::Invalid("Animation has no samplers".to_owned()))?;
         let mut targets = BTreeMap::<usize, (usize, String)>::new();
         for channel in channels {
             let sampler = channel
                 .get("sampler")
                 .and_then(Value::as_u64)
-                .ok_or_else(|| {
-                    GlbError::Invalid(
-                        "Animation channel has no sampler".to_owned(),
-                    )
-                })? as usize;
-            let target = channel.get("target").ok_or_else(|| {
-                GlbError::Invalid("Animation channel has no target".to_owned())
-            })?;
-            let node =
-                target.get("node").and_then(Value::as_u64).ok_or_else(|| {
-                    GlbError::Invalid("Animation target has no node".to_owned())
-                })? as usize;
+                .ok_or_else(|| GlbError::Invalid("Animation channel has no sampler".to_owned()))?
+                as usize;
+            let target = channel
+                .get("target")
+                .ok_or_else(|| GlbError::Invalid("Animation channel has no target".to_owned()))?;
+            let node = target
+                .get("node")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| GlbError::Invalid("Animation target has no node".to_owned()))?
+                as usize;
             let path = target
                 .get("path")
                 .and_then(Value::as_str)
-                .ok_or_else(|| {
-                    GlbError::Invalid("Animation target has no path".to_owned())
-                })?
+                .ok_or_else(|| GlbError::Invalid("Animation target has no path".to_owned()))?
                 .to_owned();
             if path == "weights" {
                 return Err(GlbError::Unsupported(
-                    "Smart LOOP does not support Morph Target animation"
-                        .to_owned(),
+                    "Smart LOOP does not support Morph Target animation".to_owned(),
                 ));
             }
             if targets.insert(sampler, (node, path)).is_some() {
-                return Err(GlbError::Unsupported(format!("Animation sampler {sampler} is shared by different targets")));
+                return Err(GlbError::Unsupported(format!(
+                    "Animation sampler {sampler} is shared by different targets"
+                )));
             }
         }
         if targets.len() != samplers.len() {
             return Err(GlbError::Invalid(
-                "Every animation sampler must be referenced by one channel"
-                    .to_owned(),
+                "Every animation sampler must be referenced by one channel".to_owned(),
             ));
         }
 
@@ -159,12 +143,10 @@ impl GlbDocument {
         let mut duration: f32 = 0.0;
         let mut steps = Vec::new();
         for (index, sampler) in samplers.iter().enumerate() {
-            let (node, path) =
-                targets.get(&index).cloned().ok_or_else(|| {
-                    GlbError::Invalid(
-                        "Animation sampler has no channel".to_owned(),
-                    )
-                })?;
+            let (node, path) = targets
+                .get(&index)
+                .cloned()
+                .ok_or_else(|| GlbError::Invalid("Animation sampler has no channel".to_owned()))?;
             let interpolation = sampler
                 .get("interpolation")
                 .and_then(Value::as_str)
@@ -176,17 +158,13 @@ impl GlbDocument {
                 .get("input")
                 .and_then(Value::as_u64)
                 .ok_or_else(|| {
-                    GlbError::Invalid(
-                        "Animation sampler has no input accessor".to_owned(),
-                    )
+                    GlbError::Invalid("Animation sampler has no input accessor".to_owned())
                 })? as usize;
             let output = sampler
                 .get("output")
                 .and_then(Value::as_u64)
                 .ok_or_else(|| {
-                    GlbError::Invalid(
-                        "Animation sampler has no output accessor".to_owned(),
-                    )
+                    GlbError::Invalid("Animation sampler has no output accessor".to_owned())
                 })? as usize;
             let times = self
                 .read_accessor_f32(input)?
@@ -194,8 +172,7 @@ impl GlbDocument {
                 .map(|v| v[0])
                 .collect::<Vec<_>>();
             validate_times(&times)?;
-            duration =
-                duration.max(*times.last().ok_or_else(|| invalid_output())?);
+            duration = duration.max(*times.last().ok_or_else(|| invalid_output())?);
             steps.extend(times.windows(2).map(|pair| pair[1] - pair[0]));
             let accessor = self.accessor(output)?.clone();
             let accessor_type = accessor
@@ -213,12 +190,12 @@ impl GlbDocument {
                 }
             };
             if accessor_type != expected.0 {
-                return Err(GlbError::Unsupported(format!("Animation sampler {index} has an invalid {path} output type")));
+                return Err(GlbError::Unsupported(format!(
+                    "Animation sampler {index} has an invalid {path} output type"
+                )));
             }
             let values = read_output(self, &accessor)?;
-            if values.len() != times.len()
-                || values.iter().any(|v| v.len() != expected.1)
-            {
+            if values.len() != times.len() || values.iter().any(|v| v.len() != expected.1) {
                 return Err(invalid_output());
             }
             sources.push(SamplerSource {
@@ -237,15 +214,12 @@ impl GlbDocument {
 
         let parents = parent_indices(self)?;
         let root = common_ancestor(&skin.joints, &parents)?;
-        let motion_root =
-            find_motion_root(&sources, &skin.joints, root, &parents)?;
+        let motion_root = find_motion_root(&sources, &skin.joints, root, &parents)?;
         let nodes = self
             .json
             .get("nodes")
             .and_then(Value::as_array)
-            .ok_or_else(|| {
-                GlbError::Invalid("GLB has no nodes array".to_owned())
-            })?;
+            .ok_or_else(|| GlbError::Invalid("GLB has no nodes array".to_owned()))?;
         let locals = nodes
             .iter()
             .map(node_matrix)
@@ -256,18 +230,11 @@ impl GlbDocument {
             .joints
             .iter()
             .map(|joint| {
-                let m = world_matrix(
-                    *joint,
-                    &locals,
-                    &parents,
-                    &mut cache,
-                    &mut visiting,
-                )?;
+                let m = world_matrix(*joint, &locals, &parents, &mut cache, &mut visiting)?;
                 Ok([m[0][3], m[1][3], m[2][3]])
             })
             .collect::<Result<Vec<_>, GlbError>>()?;
-        let min_y =
-            positions.iter().map(|p| p[1]).fold(f32::INFINITY, f32::min);
+        let min_y = positions.iter().map(|p| p[1]).fold(f32::INFINITY, f32::min);
         let max_y = positions
             .iter()
             .map(|p| p[1])
@@ -275,8 +242,7 @@ impl GlbDocument {
         let height = max_y - min_y;
         if !height.is_finite() || height <= f32::EPSILON {
             return Err(GlbError::Invalid(
-                "Smart LOOP could not determine a valid character height"
-                    .to_owned(),
+                "Smart LOOP could not determine a valid character height".to_owned(),
             ));
         }
         let translation_index = sources
@@ -300,29 +266,31 @@ impl GlbDocument {
             .map(|index| sources[index].node)
             .unwrap_or(motion_root);
         let parent_world = parents[translation_root]
-            .map(|p| {
-                world_matrix(p, &locals, &parents, &mut cache, &mut visiting)
-            })
+            .map(|p| world_matrix(p, &locals, &parents, &mut cache, &mut visiting))
             .transpose()?
             .unwrap_or_else(identity);
-        let (local_drift, drift_ratio) = if let Some(index) = translation_index
-        {
+        let (local_drift, drift_ratio) = if let Some(index) = translation_index {
             let first = sample(&sources[index], 0.0)?;
             let last = sample(&sources[index], duration)?;
-            let delta =
-                [last[0] - first[0], last[1] - first[1], last[2] - first[2]];
+            let delta = [last[0] - first[0], last[1] - first[1], last[2] - first[2]];
             let world_delta = transform_vector(parent_world, delta);
             let horizontal = [world_delta[0], 0.0, world_delta[2]];
             let ratio = vector_length(horizontal) / height;
             if !ratio.is_finite() {
-                return Err(GlbError::Invalid(
-                    "Root drift is not finite".to_owned(),
-                ));
+                return Err(GlbError::Invalid("Root drift is not finite".to_owned()));
             }
             if ratio > MAX_DRIFT_RATIO {
                 return Err(GlbError::Unsupported(format!("Root Motion detected: horizontal drift is {:.2}% of character height (limit is 2.00%)", ratio * 100.0)));
             }
-            (inverse_transform_vector(parent_world, horizontal).ok_or_else(|| GlbError::Unsupported("Smart LOOP cannot transform root drift through a degenerate parent".to_owned()))?, ratio)
+            (
+                inverse_transform_vector(parent_world, horizontal).ok_or_else(|| {
+                    GlbError::Unsupported(
+                        "Smart LOOP cannot transform root drift through a degenerate parent"
+                            .to_owned(),
+                    )
+                })?,
+                ratio,
+            )
         } else {
             ([0.0; 3], 0.0)
         };
@@ -337,7 +305,10 @@ impl GlbDocument {
                 .try_into()
                 .map_err(|_| invalid_output())?;
             if quaternion_angle(first, last) > MAX_ROOT_ROTATION_RADIANS {
-                return Err(GlbError::Unsupported("Root Motion detected: root rotation changes by more than 15 degrees".to_owned()));
+                return Err(GlbError::Unsupported(
+                    "Root Motion detected: root rotation changes by more than 15 degrees"
+                        .to_owned(),
+                ));
             }
         }
         let already_looped = local_drift.iter().all(|v| v.abs() <= 1e-5)
@@ -369,8 +340,7 @@ impl GlbDocument {
         let step = median(&mut steps)
             .unwrap_or(1.0 / 30.0)
             .clamp(1.0 / 120.0, 1.0 / 15.0);
-        let frames =
-            (options.transition_seconds / step).ceil().max(2.0) as usize;
+        let frames = (options.transition_seconds / step).ceil().max(2.0) as usize;
         let mut updates = Vec::with_capacity(sources.len());
         for source in &sources {
             let mut times = vec![0.0];
@@ -421,16 +391,12 @@ impl GlbDocument {
             .and_then(Value::as_array_mut)
             .and_then(|items| items.get_mut(animation_index))
             .ok_or_else(|| {
-                GlbError::Invalid(
-                    "Animation disappeared during Smart LOOP".to_owned(),
-                )
+                GlbError::Invalid("Animation disappeared during Smart LOOP".to_owned())
             })?;
         let samplers = animation
             .get_mut("samplers")
             .and_then(Value::as_array_mut)
-            .ok_or_else(|| {
-                GlbError::Invalid("Animation has no samplers".to_owned())
-            })?;
+            .ok_or_else(|| GlbError::Invalid("Animation has no samplers".to_owned()))?;
         for (sampler, (input, output)) in samplers.iter_mut().zip(accessors) {
             sampler["input"] = json!(input);
             sampler["output"] = json!(output);
@@ -451,7 +417,9 @@ fn invalid_output() -> GlbError {
 }
 fn validate_times(times: &[f32]) -> Result<(), GlbError> {
     if times.len() < 2 || times.iter().any(|t| !t.is_finite() || *t < 0.0) {
-        return Err(GlbError::Invalid("Animation sampler needs at least two finite non-negative keyframe times".to_owned()));
+        return Err(GlbError::Invalid(
+            "Animation sampler needs at least two finite non-negative keyframe times".to_owned(),
+        ));
     }
     if times.windows(2).any(|p| p[1] <= p[0]) {
         return Err(GlbError::Invalid(
@@ -460,10 +428,7 @@ fn validate_times(times: &[f32]) -> Result<(), GlbError> {
     }
     Ok(())
 }
-fn read_output(
-    document: &GlbDocument,
-    accessor: &Value,
-) -> Result<Vec<Vec<f32>>, GlbError> {
+fn read_output(document: &GlbDocument, accessor: &Value) -> Result<Vec<Vec<f32>>, GlbError> {
     if accessor.get("componentType").and_then(Value::as_u64) != Some(5126) {
         return Err(GlbError::Unsupported(
             "Smart LOOP requires float animation outputs".to_owned(),
@@ -488,9 +453,7 @@ fn read_output(
             let value = (0..components)
                 .map(|component| {
                     let offset = (index * components + component) * 4;
-                    let raw = bytes
-                        .get(offset..offset + 4)
-                        .ok_or_else(invalid_output)?;
+                    let raw = bytes.get(offset..offset + 4).ok_or_else(invalid_output)?;
                     Ok(f32::from_le_bytes(
                         raw.try_into().map_err(|_| invalid_output())?,
                     ))
@@ -512,8 +475,7 @@ fn sample(source: &SamplerSource, time: f32) -> Result<Vec<f32>, GlbError> {
         return source.values.last().cloned().ok_or_else(invalid_output);
     }
     let left = right - 1;
-    let amount = (time - source.times[left])
-        / (source.times[right] - source.times[left]);
+    let amount = (time - source.times[left]) / (source.times[right] - source.times[left]);
     blend(
         &source.values[left],
         &source.values[right],
@@ -521,15 +483,8 @@ fn sample(source: &SamplerSource, time: f32) -> Result<Vec<f32>, GlbError> {
         &source.path,
     )
 }
-fn blend(
-    left: &[f32],
-    right: &[f32],
-    amount: f32,
-    path: &str,
-) -> Result<Vec<f32>, GlbError> {
-    if left.len() != right.len()
-        || left.iter().chain(right).any(|v| !v.is_finite())
-    {
+fn blend(left: &[f32], right: &[f32], amount: f32, path: &str) -> Result<Vec<f32>, GlbError> {
+    if left.len() != right.len() || left.iter().chain(right).any(|v| !v.is_finite()) {
         return Err(invalid_output());
     }
     if path == "rotation" {
@@ -565,26 +520,18 @@ fn slerp(left: [f32; 4], right: [f32; 4], amount: f32) -> [f32; 4] {
     let theta = dot.clamp(-1.0, 1.0).acos();
     let d = theta.sin();
     normalize_quaternion([
-        left[0] * ((1.0 - amount) * theta).sin() / d
-            + right[0] * (amount * theta).sin() / d,
-        left[1] * ((1.0 - amount) * theta).sin() / d
-            + right[1] * (amount * theta).sin() / d,
-        left[2] * ((1.0 - amount) * theta).sin() / d
-            + right[2] * (amount * theta).sin() / d,
-        left[3] * ((1.0 - amount) * theta).sin() / d
-            + right[3] * (amount * theta).sin() / d,
+        left[0] * ((1.0 - amount) * theta).sin() / d + right[0] * (amount * theta).sin() / d,
+        left[1] * ((1.0 - amount) * theta).sin() / d + right[1] * (amount * theta).sin() / d,
+        left[2] * ((1.0 - amount) * theta).sin() / d + right[2] * (amount * theta).sin() / d,
+        left[3] * ((1.0 - amount) * theta).sin() / d + right[3] * (amount * theta).sin() / d,
     ])
 }
-fn parent_indices(
-    document: &GlbDocument,
-) -> Result<Vec<Option<usize>>, GlbError> {
+fn parent_indices(document: &GlbDocument) -> Result<Vec<Option<usize>>, GlbError> {
     let nodes = document
         .json
         .get("nodes")
         .and_then(Value::as_array)
-        .ok_or_else(|| {
-            GlbError::Invalid("GLB has no nodes array".to_owned())
-        })?;
+        .ok_or_else(|| GlbError::Invalid("GLB has no nodes array".to_owned()))?;
     let mut parents = vec![None; nodes.len()];
     for (index, node) in nodes.iter().enumerate() {
         if let Some(children) = node.get("children").and_then(Value::as_array) {
@@ -599,19 +546,14 @@ fn parent_indices(
                     ));
                 }
                 if parents[child].replace(index).is_some() {
-                    return Err(GlbError::Invalid(
-                        "Node has multiple parents".to_owned(),
-                    ));
+                    return Err(GlbError::Invalid("Node has multiple parents".to_owned()));
                 }
             }
         }
     }
     Ok(parents)
 }
-fn ancestors(
-    mut node: usize,
-    parents: &[Option<usize>],
-) -> Result<Vec<usize>, GlbError> {
+fn ancestors(mut node: usize, parents: &[Option<usize>]) -> Result<Vec<usize>, GlbError> {
     let mut result = Vec::new();
     let mut seen = BTreeSet::new();
     loop {
@@ -628,14 +570,11 @@ fn ancestors(
     }
     Ok(result)
 }
-fn common_ancestor(
-    joints: &[usize],
-    parents: &[Option<usize>],
-) -> Result<usize, GlbError> {
+fn common_ancestor(joints: &[usize], parents: &[Option<usize>]) -> Result<usize, GlbError> {
     let mut common = ancestors(
-        *joints.first().ok_or_else(|| {
-            GlbError::Invalid("Skin has no joints".to_owned())
-        })?,
+        *joints
+            .first()
+            .ok_or_else(|| GlbError::Invalid("Skin has no joints".to_owned()))?,
         parents,
     )?
     .into_iter()
@@ -653,9 +592,7 @@ fn common_ancestor(
                 .map(|chain| chain.len())
                 .unwrap_or(usize::MAX)
         })
-        .ok_or_else(|| {
-            GlbError::Invalid("Skin joints have no common root".to_owned())
-        })
+        .ok_or_else(|| GlbError::Invalid("Skin joints have no common root".to_owned()))
 }
 fn find_motion_root(
     sources: &[SamplerSource],
@@ -674,10 +611,7 @@ fn find_motion_root(
     }
     let mut candidates = sources
         .iter()
-        .filter(|s| {
-            (s.path == "translation" || s.path == "rotation")
-                && common.contains(&s.node)
-        })
+        .filter(|s| (s.path == "translation" || s.path == "rotation") && common.contains(&s.node))
         .map(|s| s.node)
         .collect::<BTreeSet<_>>()
         .into_iter()
@@ -690,13 +624,9 @@ fn find_motion_root(
     match candidates.as_slice() {
         [] => Ok(fallback),
         [node] => Ok(*node),
-        [a, b, ..]
-            if ancestors(*a, parents)?.len()
-                == ancestors(*b, parents)?.len() =>
-        {
+        [a, b, ..] if ancestors(*a, parents)?.len() == ancestors(*b, parents)?.len() => {
             Err(GlbError::Unsupported(
-                "Smart LOOP could not identify a unique animated skeleton root"
-                    .to_owned(),
+                "Smart LOOP could not identify a unique animated skeleton root".to_owned(),
             ))
         }
         [node, ..] => Ok(*node),
@@ -720,8 +650,7 @@ fn world_matrix(
     visiting[index] = true;
     let result = parents[index]
         .map(|parent| {
-            world_matrix(parent, local, parents, cache, visiting)
-                .map(|m| multiply(m, local[index]))
+            world_matrix(parent, local, parents, cache, visiting).map(|m| multiply(m, local[index]))
         })
         .transpose()?
         .unwrap_or(local[index]);
@@ -745,18 +674,9 @@ fn inverse_transform_vector(m: [[f32; 4]; 4], v: [f32; 3]) -> Option<[f32; 3]> {
         return None;
     }
     Some([
-        ((e * i - f * h) * v[0]
-            + (c * h - b * i) * v[1]
-            + (b * f - c * e) * v[2])
-            / det,
-        ((f * g - d * i) * v[0]
-            + (a * i - c * g) * v[1]
-            + (c * d - a * f) * v[2])
-            / det,
-        ((d * h - e * g) * v[0]
-            + (b * g - a * h) * v[1]
-            + (a * e - b * d) * v[2])
-            / det,
+        ((e * i - f * h) * v[0] + (c * h - b * i) * v[1] + (b * f - c * e) * v[2]) / det,
+        ((f * g - d * i) * v[0] + (a * i - c * g) * v[1] + (c * d - a * f) * v[2]) / det,
+        ((d * h - e * g) * v[0] + (b * g - a * h) * v[1] + (a * e - b * d) * v[2]) / det,
     ])
 }
 fn vector_length(v: [f32; 3]) -> f32 {

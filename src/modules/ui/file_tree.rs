@@ -111,9 +111,7 @@ impl FileTree {
     pub fn to_prefs(&self) -> FileTreePreferences {
         FileTreePreferences {
             show_all_files: self.show_all_files,
-            last_opened_directory: self
-                .root()
-                .map(|p| p.to_string_lossy().to_string()),
+            last_opened_directory: self.root().map(|p| p.to_string_lossy().to_string()),
         }
     }
 
@@ -121,8 +119,7 @@ impl FileTree {
         if let Some(ref root) = self.root.clone() {
             let show_all = self.show_all_files;
             let accepted = self.accepted_extensions.clone();
-            self.root_entries =
-                Some(Self::scan_dir(root, 2, show_all, &accepted));
+            self.root_entries = Some(Self::scan_dir(root, 2, show_all, &accepted));
         }
     }
 
@@ -130,8 +127,7 @@ impl FileTree {
         if let Some(ref root) = self.root.clone() {
             let show_all = self.show_all_files;
             let accepted = self.accepted_extensions.clone();
-            self.root_entries =
-                Some(Self::scan_dir(root, 2, show_all, &accepted));
+            self.root_entries = Some(Self::scan_dir(root, 2, show_all, &accepted));
             let open: Vec<PathBuf> = self.open_dirs.iter().cloned().collect();
             for path in &open {
                 let children = Self::scan_dir(path, 1, show_all, &accepted);
@@ -157,9 +153,10 @@ impl FileTree {
             if let Some(parent) = path.parent().map(|p| p.to_path_buf()) {
                 self.open_folder(parent);
                 for file in &dropped {
-                    let selected = file.path.as_ref().is_some_and(|fp| {
-                        Self::extension_in(fp, &self.accepted_extensions)
-                    });
+                    let selected = file
+                        .path
+                        .as_ref()
+                        .is_some_and(|fp| Self::extension_in(fp, &self.accepted_extensions));
                     if selected {
                         if let Some(fp) = &file.path {
                             self.selected.insert(fp.clone());
@@ -187,10 +184,7 @@ impl FileTree {
             let entry_path = entry.path();
             let is_dir = entry_path.is_dir();
 
-            if !is_dir
-                && !show_all_files
-                && !Self::extension_in(&entry_path, accepted)
-            {
+            if !is_dir && !show_all_files && !Self::extension_in(&entry_path, accepted) {
                 continue;
             }
 
@@ -201,12 +195,7 @@ impl FileTree {
                 .into_owned();
 
             let children = if is_dir && max_depth > 1 {
-                let sub = Self::scan_dir(
-                    &entry_path,
-                    max_depth - 1,
-                    show_all_files,
-                    accepted,
-                );
+                let sub = Self::scan_dir(&entry_path, max_depth - 1, show_all_files, accepted);
                 if sub.is_empty() {
                     None
                 } else {
@@ -262,8 +251,7 @@ impl FileTree {
     }
 
     pub fn invert_selection(&mut self) {
-        let all: HashSet<PathBuf> = if let Some(ref entries) = self.root_entries
-        {
+        let all: HashSet<PathBuf> = if let Some(ref entries) = self.root_entries {
             let mut set = HashSet::new();
             Self::collect_files(entries, &mut set, &self.accepted_extensions);
             set
@@ -271,16 +259,11 @@ impl FileTree {
             HashSet::new()
         };
 
-        let inverted: HashSet<PathBuf> =
-            all.difference(&self.selected).cloned().collect();
+        let inverted: HashSet<PathBuf> = all.difference(&self.selected).cloned().collect();
         self.selected = inverted;
     }
 
-    fn collect_files(
-        entries: &[FileTreeEntry],
-        set: &mut HashSet<PathBuf>,
-        accepted: &[String],
-    ) {
+    fn collect_files(entries: &[FileTreeEntry], set: &mut HashSet<PathBuf>, accepted: &[String]) {
         for entry in entries {
             if !entry.is_dir && Self::extension_in(&entry.path, accepted) {
                 set.insert(entry.path.clone());
@@ -344,9 +327,7 @@ impl FileTree {
             }
             if entry.is_dir {
                 if let Some(ref mut children) = entry.children {
-                    if let found @ Some(_) =
-                        Self::find_entry_mut_recursive(children, target)
-                    {
+                    if let found @ Some(_) = Self::find_entry_mut_recursive(children, target) {
                         return found;
                     }
                 }
@@ -365,11 +346,7 @@ impl FileTree {
         }
     }
 
-    pub fn render(
-        &mut self,
-        ui: &mut egui::Ui,
-        i18n: &I18n,
-    ) -> (bool, Option<PathBuf>) {
+    pub fn render(&mut self, ui: &mut egui::Ui, i18n: &I18n) -> (bool, Option<PathBuf>) {
         self.render_with_active(ui, i18n, None)
     }
 
@@ -408,16 +385,12 @@ impl FileTree {
             .auto_shrink([false; 2])
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(
-                        egui::RichText::new(&root_name).strong().size(14.0),
-                    );
+                    ui.label(egui::RichText::new(&root_name).strong().size(14.0));
                 });
 
                 ui.horizontal(|ui| {
                     if ui.button(i18n.tr("button.switch_directory")).clicked() {
-                        if let Some(folder) =
-                            rfd::FileDialog::new().pick_folder()
-                        {
+                        if let Some(folder) = rfd::FileDialog::new().pick_folder() {
                             self.open_folder(folder);
                         }
                     }
@@ -437,10 +410,7 @@ impl FileTree {
                         if ui.button(i18n.tr("button.deselect_all")).clicked() {
                             self.deselect_all();
                         }
-                        if ui
-                            .button(i18n.tr("button.invert_selection"))
-                            .clicked()
-                        {
+                        if ui.button(i18n.tr("button.invert_selection")).clicked() {
                             self.invert_selection();
                         }
                     });
@@ -452,10 +422,7 @@ impl FileTree {
                         ],
                     ));
                 } else {
-                    ui.label(
-                        egui::RichText::new(i18n.tr("files.no_supported"))
-                            .weak(),
-                    );
+                    ui.label(egui::RichText::new(i18n.tr("files.no_supported")).weak());
                 }
 
                 ui.separator();
@@ -471,11 +438,9 @@ impl FileTree {
                 }
                 if self.show_all_files {
                     ui.label(
-                        egui::RichText::new(
-                            i18n.tr("label.unsupported_files_hint"),
-                        )
-                        .small()
-                        .weak(),
+                        egui::RichText::new(i18n.tr("label.unsupported_files_hint"))
+                            .small()
+                            .weak(),
                     );
                 }
 
@@ -501,12 +466,9 @@ impl FileTree {
                         });
                     } else {
                         ui.horizontal(|ui| {
-                            ui.add_space(
-                                item.depth as f32 * INDENT + ARROW_OFFSET,
-                            );
+                            ui.add_space(item.depth as f32 * INDENT + ARROW_OFFSET);
                             if Self::extension_in(&item.path, &accepted) {
-                                let mut checked =
-                                    self.selected.contains(&item.path);
+                                let mut checked = self.selected.contains(&item.path);
                                 if ui.checkbox(&mut checked, "").changed() {
                                     if checked {
                                         self.selected.insert(item.path.clone());
@@ -517,9 +479,7 @@ impl FileTree {
                                 if Self::is_glb(&item.path) {
                                     if ui
                                         .selectable_label(
-                                            active_path.is_some_and(|path| {
-                                                path == item.path
-                                            }),
+                                            active_path.is_some_and(|path| path == item.path),
                                             &item.name,
                                         )
                                         .clicked()
@@ -530,9 +490,7 @@ impl FileTree {
                                     ui.label(&item.name);
                                 }
                             } else {
-                                ui.label(
-                                    egui::RichText::new(&item.name).weak(),
-                                );
+                                ui.label(egui::RichText::new(&item.name).weak());
                             }
                         });
                     }
@@ -553,9 +511,7 @@ impl FileTree {
     fn render_open_prompt(&mut self, ui: &mut egui::Ui, i18n: &I18n) {
         ui.vertical_centered(|ui| {
             ui.add_space(20.0);
-            ui.label(
-                egui::RichText::new(i18n.tr("label.open_folder_hint")).weak(),
-            );
+            ui.label(egui::RichText::new(i18n.tr("label.open_folder_hint")).weak());
             ui.add_space(8.0);
             if ui.button(i18n.tr("button.open_folder")).clicked() {
                 if let Some(folder) = rfd::FileDialog::new().pick_folder() {

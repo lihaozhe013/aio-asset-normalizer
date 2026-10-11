@@ -120,21 +120,9 @@ fn render_current(app: &mut App, ui: &mut three_d::egui::Ui) {
     if !summary.extensions.is_empty() {
         ui.label(format!("Extensions: {}", summary.extensions.join(", ")));
     }
-    render_named_items(
-        ui,
-        app.i18n.tr("glb.scene_names"),
-        document.scene_names(),
-    );
-    render_named_items(
-        ui,
-        app.i18n.tr("glb.node_names"),
-        document.node_names(),
-    );
-    render_named_items(
-        ui,
-        app.i18n.tr("glb.mesh_names"),
-        document.mesh_names(),
-    );
+    render_named_items(ui, app.i18n.tr("glb.scene_names"), document.scene_names());
+    render_named_items(ui, app.i18n.tr("glb.node_names"), document.node_names());
+    render_named_items(ui, app.i18n.tr("glb.mesh_names"), document.mesh_names());
     render_named_items(
         ui,
         app.i18n.tr("glb.material_names"),
@@ -152,25 +140,22 @@ fn render_current(app: &mut App, ui: &mut three_d::egui::Ui) {
         ui.label(app.i18n.tr("glb.orientation_hint"));
         ui.label(app.i18n.tr("glb.preview_hint"));
         let up_axis_label = app.i18n.tr("glb.up_axis").to_owned();
-        let selected_text = match UpAxisPreset::from_correction_euler_degrees(
-            app.orientation_euler_degrees,
-        ) {
-            Some(preset) => app.i18n.tr(preset.label_key()),
-            None => app.i18n.tr("glb.up_axis.custom"),
-        }
-        .to_owned();
+        let selected_text =
+            match UpAxisPreset::from_correction_euler_degrees(app.orientation_euler_degrees) {
+                Some(preset) => app.i18n.tr(preset.label_key()),
+                None => app.i18n.tr("glb.up_axis.custom"),
+            }
+            .to_owned();
         ComboBox::from_label(up_axis_label)
             .selected_text(selected_text)
             .show_ui(ui, |ui| {
                 for preset in UpAxisPreset::ALL {
                     let label = app.i18n.tr(preset.label_key());
                     let is_selected =
-                        UpAxisPreset::from_correction_euler_degrees(
-                            app.orientation_euler_degrees,
-                        ) == Some(preset);
+                        UpAxisPreset::from_correction_euler_degrees(app.orientation_euler_degrees)
+                            == Some(preset);
                     if ui.selectable_label(is_selected, label).clicked() {
-                        app.orientation_euler_degrees =
-                            preset.correction_euler_degrees();
+                        app.orientation_euler_degrees = preset.correction_euler_degrees();
                         app.mark_root_preview_dirty();
                         tracing::info!(
                             target: "glb_editor",
@@ -185,11 +170,9 @@ fn render_current(app: &mut App, ui: &mut three_d::egui::Ui) {
                 ui.label(label);
                 if ui
                     .add(
-                        DragValue::new(
-                            &mut app.orientation_euler_degrees[index],
-                        )
-                        .speed(1.0)
-                        .suffix("°"),
+                        DragValue::new(&mut app.orientation_euler_degrees[index])
+                            .speed(1.0)
+                            .suffix("°"),
                     )
                     .changed()
                 {
@@ -234,10 +217,7 @@ fn render_current(app: &mut App, ui: &mut three_d::egui::Ui) {
             ui.horizontal(|ui| {
                 ui.label(format!("Δ{label}"));
                 if ui
-                    .add(
-                        DragValue::new(&mut app.root_translation[index])
-                            .speed(0.01),
-                    )
+                    .add(DragValue::new(&mut app.root_translation[index]).speed(0.01))
                     .changed()
                 {
                     app.mark_root_preview_dirty();
@@ -255,18 +235,12 @@ fn render_current(app: &mut App, ui: &mut three_d::egui::Ui) {
     let animation_label = app.i18n.tr("glb.animation").to_owned();
     ui.collapsing(animation_label, |ui| {
         if summary.animations == 0 {
-            ui.colored_label(
-                Color32::LIGHT_BLUE,
-                app.i18n.tr("glb.no_animations"),
-            );
+            ui.colored_label(Color32::LIGHT_BLUE, app.i18n.tr("glb.no_animations"));
         } else {
             ui.label(app.i18n.tr("glb.timeline_hint"));
             let entries = app.glb_animation_entries();
-            let selected_index =
-                app.glb_animation_index.min(entries.len().saturating_sub(1));
-            if let Some((name, duration, playable, unsupported)) =
-                entries.get(selected_index)
-            {
+            let selected_index = app.glb_animation_index.min(entries.len().saturating_sub(1));
+            if let Some((name, duration, playable, unsupported)) = entries.get(selected_index) {
                 ui.horizontal(|ui| {
                     ui.label(app.i18n.tr("glb.active_animation"));
                     ui.label(name);
@@ -274,11 +248,7 @@ fn render_current(app: &mut App, ui: &mut three_d::egui::Ui) {
                 if !playable {
                     ui.colored_label(
                         Color32::YELLOW,
-                        format!(
-                            "{}: {}",
-                            app.i18n.tr("glb.unsupported"),
-                            unsupported
-                        ),
+                        format!("{}: {}", app.i18n.tr("glb.unsupported"), unsupported),
                     );
                 }
                 ui.horizontal(|ui| {
@@ -294,30 +264,19 @@ fn render_current(app: &mut App, ui: &mut three_d::egui::Ui) {
                     {
                         app.glb_export_estimate = None;
                     }
-                    let can_reset =
-                        (app.glb_animation_rate - 1.0).abs() > f32::EPSILON;
+                    let can_reset = (app.glb_animation_rate - 1.0).abs() > f32::EPSILON;
                     if ui
-                        .add_enabled(
-                            can_reset,
-                            Button::new(app.i18n.tr("glb.reset_rate")),
-                        )
+                        .add_enabled(can_reset, Button::new(app.i18n.tr("glb.reset_rate")))
                         .clicked()
                     {
                         app.reset_glb_animation_rate();
                     }
                 });
                 ui.label(app.i18n.tr("glb.animation_rate_hint"));
-                ui.label(format!(
-                    "{}: {:.3}s",
-                    app.i18n.tr("glb.duration"),
-                    duration
-                ));
+                ui.label(format!("{}: {:.3}s", app.i18n.tr("glb.duration"), duration));
             }
             let mut trim_changed = ui
-                .checkbox(
-                    &mut app.trim_enabled,
-                    app.i18n.tr("glb.trim_enabled"),
-                )
+                .checkbox(&mut app.trim_enabled, app.i18n.tr("glb.trim_enabled"))
                 .changed();
             ui.horizontal(|ui| {
                 ui.label(app.i18n.tr("glb.animation_index"));
@@ -332,36 +291,27 @@ fn render_current(app: &mut App, ui: &mut three_d::egui::Ui) {
             let trim_last = app
                 .glb
                 .as_ref()
-                .and_then(|document| {
-                    document.animation_time_range(app.trim_animation).ok()
-                })
+                .and_then(|document| document.animation_time_range(app.trim_animation).ok())
                 .map(|(_, last)| last)
                 .filter(|last| last.is_finite() && last > &0.0);
             ui.horizontal(|ui| {
                 ui.label(app.i18n.tr("glb.start"));
-                let mut start_drag =
-                    DragValue::new(&mut app.trim_start).speed(0.001);
-                let mut end_drag =
-                    DragValue::new(&mut app.trim_end).speed(0.001);
+                let mut start_drag = DragValue::new(&mut app.trim_start).speed(0.001);
+                let mut end_drag = DragValue::new(&mut app.trim_end).speed(0.001);
                 if let Some(last) = trim_last {
                     start_drag = start_drag.range(0.0..=last);
                     end_drag = end_drag.range(0.0..=last);
                 }
-                trim_changed |=
-                    ui.add_enabled(app.trim_enabled, start_drag).changed();
+                trim_changed |= ui.add_enabled(app.trim_enabled, start_drag).changed();
                 ui.label(app.i18n.tr("glb.end"));
-                trim_changed |=
-                    ui.add_enabled(app.trim_enabled, end_drag).changed();
+                trim_changed |= ui.add_enabled(app.trim_enabled, end_drag).changed();
             });
             if trim_changed {
                 app.trim_setting_changed();
             }
             ui.separator();
             let mut smart_loop_changed = ui
-                .checkbox(
-                    &mut app.smart_loop_enabled,
-                    app.i18n.tr("glb.smart_loop"),
-                )
+                .checkbox(&mut app.smart_loop_enabled, app.i18n.tr("glb.smart_loop"))
                 .changed();
             ui.horizontal(|ui| {
                 ui.label(app.i18n.tr("glb.smart_loop_transition"));
@@ -389,8 +339,7 @@ fn render_current(app: &mut App, ui: &mut three_d::egui::Ui) {
         ui.horizontal(|ui| {
             ui.label(app.i18n.tr("glb.texture_mesh"));
             ui.add(
-                DragValue::new(&mut app.texture_mesh)
-                    .range(0..=summary.meshes.saturating_sub(1)),
+                DragValue::new(&mut app.texture_mesh).range(0..=summary.meshes.saturating_sub(1)),
             );
             ui.label(app.i18n.tr("glb.texture_primitive"));
             ui.add(DragValue::new(&mut app.texture_primitive).range(0..=64));
@@ -399,11 +348,7 @@ fn render_current(app: &mut App, ui: &mut three_d::egui::Ui) {
             .selected_text(app.texture_slot.label())
             .show_ui(ui, |ui| {
                 for slot in TextureSlot::ALL {
-                    ui.selectable_value(
-                        &mut app.texture_slot,
-                        slot,
-                        slot.label(),
-                    );
+                    ui.selectable_value(&mut app.texture_slot, slot, slot.label());
                 }
             });
         ui.checkbox(
@@ -541,11 +486,7 @@ fn render_retarget_tab(app: &mut App, ui: &mut three_d::egui::Ui) {
     }
 }
 
-fn render_named_items(
-    ui: &mut three_d::egui::Ui,
-    label: &str,
-    names: Vec<String>,
-) {
+fn render_named_items(ui: &mut three_d::egui::Ui, label: &str, names: Vec<String>) {
     if names.is_empty() {
         return;
     }

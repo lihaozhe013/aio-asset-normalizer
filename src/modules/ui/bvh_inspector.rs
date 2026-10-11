@@ -8,14 +8,8 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
     use three_d::egui::*;
     ui.heading(app.i18n.tr("page.bvh_studio"));
     ui.horizontal(|ui| {
-        ui.checkbox(
-            &mut app.canvas.show_source_skeleton,
-            "Source BVH skeleton",
-        );
-        ui.checkbox(
-            &mut app.canvas.show_target_skeleton,
-            "Target Skin skeleton",
-        );
+        ui.checkbox(&mut app.canvas.show_source_skeleton, "Source BVH skeleton");
+        ui.checkbox(&mut app.canvas.show_target_skeleton, "Target Skin skeleton");
     });
     skeleton_panel::render(
         app,
@@ -49,10 +43,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
             ui.label(app.i18n.tr("bvh.frame"));
             let mut frame = app.bvh_frame;
             if ui
-                .add(
-                    DragValue::new(&mut frame)
-                        .range(0..=document.frames.len().saturating_sub(1)),
-                )
+                .add(DragValue::new(&mut frame).range(0..=document.frames.len().saturating_sub(1)))
                 .changed()
             {
                 requested_frame = Some(frame);
@@ -154,11 +145,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
         .show_ui(ui, |ui| {
             for axis in ["+X", "-X", "+Y", "-Y", "+Z", "-Z"] {
                 axes_changed |= ui
-                    .selectable_value(
-                        &mut app.bvh_up_axis,
-                        axis.to_owned(),
-                        axis,
-                    )
+                    .selectable_value(&mut app.bvh_up_axis, axis.to_owned(), axis)
                     .changed();
             }
         });
@@ -167,11 +154,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
         .show_ui(ui, |ui| {
             for axis in ["+X", "-X", "+Y", "-Y", "+Z", "-Z"] {
                 axes_changed |= ui
-                    .selectable_value(
-                        &mut app.bvh_forward_axis,
-                        axis.to_owned(),
-                        axis,
-                    )
+                    .selectable_value(&mut app.bvh_forward_axis, axis.to_owned(), axis)
                     .changed();
             }
         });
@@ -210,9 +193,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
         }
         ui.horizontal(|ui| {
             for unit in ["m", "cm", "mm"] {
-                if ui.button(format!("Use {unit}")).clicked()
-                    && unit_shortcut != unit
-                {
+                if ui.button(format!("Use {unit}")).clicked() && unit_shortcut != unit {
                     app.set_bvh_unit_from_ui(unit);
                 }
             }
@@ -223,8 +204,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
         let forward_axis = app.bvh_forward_axis.clone();
         let unit = app.bvh_unit.clone();
         if let Some(mapping) = app.retarget_mapping.as_mut() {
-            if mapping.source.kind == crate::modules::retarget::SourceKind::Bvh
-            {
+            if mapping.source.kind == crate::modules::retarget::SourceKind::Bvh {
                 mapping.source.up_axis = up_axis;
                 mapping.source.forward_axis = forward_axis;
                 mapping.source.unit = unit;
@@ -267,8 +247,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
     if let Some(target) = app.bvh_target_glb.as_ref() {
         if let Ok(catalog) = target.export_catalog() {
             let i18n = app.i18n.clone();
-            app.bvh_export_selection.skin_index =
-                Some(app.retarget_target_skin_index);
+            app.bvh_export_selection.skin_index = Some(app.retarget_target_skin_index);
             glb_export_panel::render_selection_controls(
                 ui,
                 &i18n,
@@ -356,9 +335,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
             ));
         }
     }
-    if let (Some(document), Some(report)) =
-        (app.bvh.as_ref(), app.mapping_report.as_ref())
-    {
+    if let (Some(document), Some(report)) = (app.bvh.as_ref(), app.mapping_report.as_ref()) {
         ui.separator();
         ui.label(app.i18n.tr("bvh.mapping_report"));
         ui.label(format!(
@@ -367,15 +344,9 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
             report.coverage_percent(document.joints.len())
         ));
         if report.is_valid() {
-            ui.colored_label(
-                Color32::LIGHT_GREEN,
-                app.i18n.tr("bvh.mapping_valid"),
-            );
+            ui.colored_label(Color32::LIGHT_GREEN, app.i18n.tr("bvh.mapping_valid"));
         } else {
-            ui.colored_label(
-                Color32::YELLOW,
-                app.i18n.tr("bvh.mapping_invalid"),
-            );
+            ui.colored_label(Color32::YELLOW, app.i18n.tr("bvh.mapping_invalid"));
         }
         for (label, values) in [
             (
@@ -403,12 +374,8 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
         ui.collapsing(app.i18n.tr("bvh.suggestions"), |ui| {
             for suggestion in app.mapping_suggestions.iter().take(12) {
                 let confidence = match suggestion.confidence {
-                    SuggestionConfidence::Exact => {
-                        app.i18n.tr("bvh.suggestion_exact")
-                    }
-                    SuggestionConfidence::Normalized => {
-                        app.i18n.tr("bvh.suggestion_normalized")
-                    }
+                    SuggestionConfidence::Exact => app.i18n.tr("bvh.suggestion_exact"),
+                    SuggestionConfidence::Normalized => app.i18n.tr("bvh.suggestion_normalized"),
                 };
                 ui.label(format!(
                     "{} → {} ({confidence})",

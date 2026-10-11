@@ -4,8 +4,7 @@ impl RetargetClip {
     pub fn reduce_keys(&mut self, tolerance: f32) -> Result<usize, BvhError> {
         if !tolerance.is_finite() || tolerance < 0.0 {
             return Err(BvhError::Mapping(
-                "Key reduction tolerance must be finite and non-negative"
-                    .to_owned(),
+                "Key reduction tolerance must be finite and non-negative".to_owned(),
             ));
         }
         if self.times.len() < 3 {
@@ -15,9 +14,10 @@ impl RetargetClip {
             || self.times.windows(2).any(|pair| pair[1] <= pair[0])
             || self.channels.iter().any(|channel| {
                 channel.rotations.len() != self.times.len()
-                    || channel.translations.as_ref().is_some_and(
-                        |translations| translations.len() != self.times.len(),
-                    )
+                    || channel
+                        .translations
+                        .as_ref()
+                        .is_some_and(|translations| translations.len() != self.times.len())
             })
         {
             return Err(BvhError::Mapping(
@@ -34,19 +34,12 @@ impl RetargetClip {
                     channel.rotations[index + 1],
                     amount,
                 );
-                quaternion_distance(rotation, channel.rotations[index])
-                    <= tolerance
-                    && channel.translations.as_ref().is_none_or(
-                        |translations| {
-                            let expected = lerp(
-                                translations[index - 1],
-                                translations[index + 1],
-                                amount,
-                            );
-                            vector_distance(expected, translations[index])
-                                <= tolerance
-                        },
-                    )
+                quaternion_distance(rotation, channel.rotations[index]) <= tolerance
+                    && channel.translations.as_ref().is_none_or(|translations| {
+                        let expected =
+                            lerp(translations[index - 1], translations[index + 1], amount);
+                        vector_distance(expected, translations[index]) <= tolerance
+                    })
             });
             keep[index] = !removable;
         }
@@ -96,20 +89,14 @@ fn slerp(left: [f32; 4], right: [f32; 4], amount: f32) -> [f32; 4] {
     }
     if dot > 0.9995 {
         return normalize(
-            [0, 1, 2, 3].map(|index| {
-                left[index] + (right[index] - left[index]) * amount
-            }),
+            [0, 1, 2, 3].map(|index| left[index] + (right[index] - left[index]) * amount),
         );
     }
     let theta = dot.acos();
     let denominator = theta.sin();
     let left_weight = ((1.0 - amount) * theta).sin() / denominator;
     let right_weight = (amount * theta).sin() / denominator;
-    normalize(
-        [0, 1, 2, 3].map(|index| {
-            left[index] * left_weight + right[index] * right_weight
-        }),
-    )
+    normalize([0, 1, 2, 3].map(|index| left[index] * left_weight + right[index] * right_weight))
 }
 
 fn normalize(value: [f32; 4]) -> [f32; 4] {

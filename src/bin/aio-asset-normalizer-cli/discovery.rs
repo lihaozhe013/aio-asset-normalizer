@@ -30,8 +30,7 @@ pub fn schema(args: &SchemaArgs) -> i32 {
         "bvh.process" => {
             schemars::schema_for!(operations::bvh::BvhProcessRequest)
         }
-        "retarget.prompt" | "retarget.suggest" | "retarget.validate"
-        | "retarget.run" => {
+        "retarget.prompt" | "retarget.suggest" | "retarget.validate" | "retarget.run" => {
             schemars::schema_for!(operations::retarget::RetargetJob)
         }
         "fbx.convert" => {

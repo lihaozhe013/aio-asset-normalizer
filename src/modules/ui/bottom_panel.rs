@@ -4,8 +4,7 @@ use crate::modules::ui::menu_bar::Page;
 pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
     use three_d::egui::*;
 
-    let has_animation =
-        app.page == Page::GlbEditor && !app.glb_animation_entries().is_empty();
+    let has_animation = app.page == Page::GlbEditor && !app.glb_animation_entries().is_empty();
     if !has_animation && app.bottom_panel_tab == BottomPanelTab::Animation {
         app.bottom_panel_tab = BottomPanelTab::DebugLog;
     }
@@ -44,8 +43,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
                     render_animation_timeline(app, ui);
                 }
                 _ => {
-                    if app.log.render(ui, &app.i18n, app.log_runtime.log_dir())
-                    {
+                    if app.log.render(ui, &app.i18n, app.log_runtime.log_dir()) {
                         app.needs_save = true;
                     }
                 }
@@ -63,8 +61,7 @@ fn render_animation_timeline(app: &mut App, ui: &mut three_d::egui::Ui) {
         return;
     }
 
-    let selected_index =
-        app.glb_animation_index.min(entries.len().saturating_sub(1));
+    let selected_index = app.glb_animation_index.min(entries.len().saturating_sub(1));
     let selected_name = entries
         .get(selected_index)
         .map(|entry| entry.0.as_str())
@@ -77,9 +74,7 @@ fn render_animation_timeline(app: &mut App, ui: &mut three_d::egui::Ui) {
         ComboBox::from_id_salt("glb_animation_dock_clip")
             .selected_text(selected_name)
             .show_ui(ui, |ui| {
-                for (index, (name, _, playable, _)) in
-                    entries.iter().enumerate()
-                {
+                for (index, (name, _, playable, _)) in entries.iter().enumerate() {
                     ui.add_enabled_ui(*playable, |ui| {
                         ui.selectable_value(&mut requested_index, index, name);
                     });
@@ -89,26 +84,17 @@ fn render_animation_timeline(app: &mut App, ui: &mut three_d::egui::Ui) {
             app.select_glb_animation(requested_index);
         }
 
-        if let Some((_, duration, playable, unsupported)) =
-            entries.get(selected_index)
-        {
+        if let Some((_, duration, playable, unsupported)) = entries.get(selected_index) {
             if !playable {
                 ui.colored_label(
                     Color32::YELLOW,
-                    format!(
-                        "{}: {}",
-                        app.i18n.tr("glb.unsupported"),
-                        unsupported
-                    ),
+                    format!("{}: {}", app.i18n.tr("glb.unsupported"), unsupported),
                 );
                 return;
             }
 
             ui.checkbox(&mut app.glb_animation_loop, app.i18n.tr("glb.loop"));
-            ui.label(format!(
-                "{:.3}s / {:.3}s",
-                app.glb_animation_time, duration
-            ));
+            ui.label(format!("{:.3}s / {:.3}s", app.glb_animation_time, duration));
         }
     });
 

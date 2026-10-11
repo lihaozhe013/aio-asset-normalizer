@@ -56,9 +56,7 @@ impl AnimationCurve {
             0.0
         };
         match self.path {
-            AnimationPath::Rotation => {
-                slerp(self.values[previous], self.values[next], amount)
-            }
+            AnimationPath::Rotation => slerp(self.values[previous], self.values[next], amount),
             AnimationPath::Translation | AnimationPath::Scale => {
                 lerp(self.values[previous], self.values[next], amount)
             }
@@ -100,9 +98,7 @@ pub struct AnimationClip {
 
 impl AnimationClip {
     pub fn is_playable(&self) -> bool {
-        self.unsupported.is_empty()
-            && !self.channels.is_empty()
-            && self.duration.is_finite()
+        self.unsupported.is_empty() && !self.channels.is_empty() && self.duration.is_finite()
     }
 }
 
@@ -208,10 +204,7 @@ impl AnimationRuntime {
 
     /// Build a runtime from an in-memory GLB.  Retarget previews use this to
     /// inspect a generated animation without writing a temporary user asset.
-    pub fn from_bytes(
-        bytes: &[u8],
-        base_path: Option<&Path>,
-    ) -> Result<Self, RuntimeError> {
+    pub fn from_bytes(bytes: &[u8], base_path: Option<&Path>) -> Result<Self, RuntimeError> {
         Self::from_bytes_internal(bytes, base_path, true)
     }
 
@@ -252,12 +245,8 @@ impl AnimationRuntime {
         let nodes = document
             .nodes()
             .map(|node| {
-                let (translation, rotation, scale) =
-                    node.transform().decomposed();
-                if !finite_vec3(translation)
-                    || !finite_vec4(rotation)
-                    || !finite_vec3(scale)
-                {
+                let (translation, rotation, scale) = node.transform().decomposed();
+                if !finite_vec3(translation) || !finite_vec4(rotation) || !finite_vec3(scale) {
                     return Err(RuntimeError::Invalid(format!(
                         "Node {} has non-finite TRS values",
                         node.index()
@@ -277,9 +266,10 @@ impl AnimationRuntime {
             .map(|skin| {
                 let joints = skin.joints().map(|joint| joint.index()).collect::<Vec<_>>();
                 let mut unique_joints = HashSet::new();
-                if joints.iter().any(|joint| {
-                    *joint >= nodes.len() || !unique_joints.insert(*joint)
-                }) {
+                if joints
+                    .iter()
+                    .any(|joint| *joint >= nodes.len() || !unique_joints.insert(*joint))
+                {
                     return Err(RuntimeError::Invalid(format!(
                         "Skin {} contains an invalid or duplicate joint",
                         skin.index()
@@ -322,9 +312,10 @@ impl AnimationRuntime {
             .collect::<Result<Vec<_>, _>>()?;
 
         let mut primitives = Vec::new();
-        let scene = document.scenes().next().ok_or_else(|| {
-            RuntimeError::Invalid("GLB has no scenes".to_owned())
-        })?;
+        let scene = document
+            .scenes()
+            .next()
+            .ok_or_else(|| RuntimeError::Invalid("GLB has no scenes".to_owned()))?;
         let mut scene_nodes = Vec::new();
         for node in scene.nodes() {
             collect_scene_nodes(&node, &mut scene_nodes);
@@ -383,9 +374,7 @@ impl AnimationRuntime {
     /// Resolve the authored node hierarchy without requiring an animation
     /// clip. This is used for static meshless GLBs and as skeleton display
     /// calibration for animated GLBs.
-    pub fn rest_node_poses(
-        &self,
-    ) -> Result<Vec<RuntimeNodePose>, RuntimeError> {
+    pub fn rest_node_poses(&self) -> Result<Vec<RuntimeNodePose>, RuntimeError> {
         Ok(self.sample_node_state(None, 0.0)?.node_poses)
     }
 
@@ -400,14 +389,9 @@ impl AnimationRuntime {
         Ok(self.sample_node_state(Some(clip_index), time)?.node_poses)
     }
 
-    pub fn keyframe_times(
-        &self,
-        clip_index: usize,
-    ) -> Result<Vec<f32>, RuntimeError> {
+    pub fn keyframe_times(&self, clip_index: usize) -> Result<Vec<f32>, RuntimeError> {
         let clip = self.clips.get(clip_index).ok_or_else(|| {
-            RuntimeError::Invalid(format!(
-                "Animation {clip_index} does not exist"
-            ))
+            RuntimeError::Invalid(format!("Animation {clip_index} does not exist"))
         })?;
         for channel in &clip.channels {
             if channel.node >= self.nodes.len() {
@@ -428,11 +412,7 @@ impl AnimationRuntime {
         Ok(times)
     }
 
-    pub fn sample(
-        &self,
-        clip_index: usize,
-        time: f32,
-    ) -> Result<RuntimePose, RuntimeError> {
+    pub fn sample(&self, clip_index: usize, time: f32) -> Result<RuntimePose, RuntimeError> {
         self.sample_pose(Some(clip_index), time)
     }
 
@@ -461,30 +441,26 @@ impl AnimationRuntime {
                 skinned_tangents.push(None);
                 continue;
             };
-            let mesh_world =
-                node_world.get(primitive.node).ok_or_else(|| {
-                    RuntimeError::Invalid(format!(
-                        "Primitive references missing node {}",
-                        primitive.node
-                    ))
-                })?;
+            let mesh_world = node_world.get(primitive.node).ok_or_else(|| {
+                RuntimeError::Invalid(format!(
+                    "Primitive references missing node {}",
+                    primitive.node
+                ))
+            })?;
             let mesh_world_inverse = invert_affine(*mesh_world)?;
             let skin = self.skins.get(skin_index).ok_or_else(|| {
-                RuntimeError::Invalid(format!(
-                    "Primitive references missing Skin {skin_index}"
-                ))
+                RuntimeError::Invalid(format!("Primitive references missing Skin {skin_index}"))
             })?;
             let matrices = skin
                 .joints
                 .iter()
                 .zip(skin.inverse_bind_matrices.iter())
                 .map(|(joint, inverse_bind)| {
-                    let joint_world =
-                        node_world.get(*joint).ok_or_else(|| {
-                            RuntimeError::Invalid(format!(
+                    let joint_world = node_world.get(*joint).ok_or_else(|| {
+                        RuntimeError::Invalid(format!(
                             "Skin {skin_index} references missing joint {joint}"
                         ))
-                        })?;
+                    })?;
                     Ok(multiply(
                         mesh_world_inverse,
                         multiply(*joint_world, *inverse_bind),
@@ -492,21 +468,16 @@ impl AnimationRuntime {
                 })
                 .collect::<Result<Vec<_>, RuntimeError>>()?;
             let joints = primitive.joints.as_ref().ok_or_else(|| {
-                RuntimeError::Invalid(
-                    "Skinned primitive is missing JOINTS_0".to_owned(),
-                )
+                RuntimeError::Invalid("Skinned primitive is missing JOINTS_0".to_owned())
             })?;
             let weights = primitive.weights.as_ref().ok_or_else(|| {
-                RuntimeError::Invalid(
-                    "Skinned primitive is missing WEIGHTS_0".to_owned(),
-                )
+                RuntimeError::Invalid("Skinned primitive is missing WEIGHTS_0".to_owned())
             })?;
             if joints.len() != primitive.positions.len()
                 || weights.len() != primitive.positions.len()
             {
                 return Err(RuntimeError::Invalid(
-                    "Skinned vertex attribute counts do not match POSITION"
-                        .to_owned(),
+                    "Skinned vertex attribute counts do not match POSITION".to_owned(),
                 ));
             }
             let mut positions = Vec::with_capacity(primitive.positions.len());
@@ -519,12 +490,8 @@ impl AnimationRuntime {
                 .as_ref()
                 .map(|values| Vec::with_capacity(values.len()));
             for (index, position) in primitive.positions.iter().enumerate() {
-                let (skinned_position, total_weight) = blend_point(
-                    *position,
-                    joints[index],
-                    weights[index],
-                    &matrices,
-                )?;
+                let (skinned_position, total_weight) =
+                    blend_point(*position, joints[index], weights[index], &matrices)?;
                 positions.push(if total_weight > f32::EPSILON {
                     skinned_position
                 } else {
@@ -560,8 +527,7 @@ impl AnimationRuntime {
                     } else {
                         normalize_vec3([tangent[0], tangent[1], tangent[2]])
                     };
-                    output_tangents
-                        .push([value[0], value[1], value[2], tangent[3]]);
+                    output_tangents.push([value[0], value[1], value[2], tangent[3]]);
                 }
             }
             skinned_positions.push(Some(positions));
@@ -586,17 +552,13 @@ impl AnimationRuntime {
         let clip = clip_index
             .map(|index| {
                 self.clips.get(index).ok_or_else(|| {
-                    RuntimeError::Invalid(format!(
-                        "Animation {index} does not exist"
-                    ))
+                    RuntimeError::Invalid(format!("Animation {index} does not exist"))
                 })
             })
             .transpose()?;
         if let Some(clip) = clip {
             if !clip.is_playable() {
-                return Err(RuntimeError::Unsupported(
-                    clip.unsupported.join(", "),
-                ));
+                return Err(RuntimeError::Unsupported(clip.unsupported.join(", ")));
             }
         }
         if !time.is_finite() {
@@ -618,8 +580,7 @@ impl AnimationRuntime {
             .iter()
             .map(|node| node.rotation)
             .collect::<Vec<_>>();
-        let mut scales =
-            self.nodes.iter().map(|node| node.scale).collect::<Vec<_>>();
+        let mut scales = self.nodes.iter().map(|node| node.scale).collect::<Vec<_>>();
         if let Some(clip) = clip {
             for channel in &clip.channels {
                 if channel.node >= self.nodes.len() {
@@ -632,21 +593,17 @@ impl AnimationRuntime {
                 let value = channel.curve.sample(sample_time);
                 if !finite_vec4(value) {
                     return Err(RuntimeError::Invalid(
-                        "Animation sample contains non-finite values"
-                            .to_owned(),
+                        "Animation sample contains non-finite values".to_owned(),
                     ));
                 }
                 match channel.curve.path {
                     AnimationPath::Translation => {
-                        translations[channel.node] =
-                            [value[0], value[1], value[2]]
+                        translations[channel.node] = [value[0], value[1], value[2]]
                     }
                     AnimationPath::Rotation => {
                         rotations[channel.node] = normalize_quaternion(value)
                     }
-                    AnimationPath::Scale => {
-                        scales[channel.node] = [value[0], value[1], value[2]]
-                    }
+                    AnimationPath::Scale => scales[channel.node] = [value[0], value[1], value[2]],
                 }
             }
         }
@@ -667,29 +624,19 @@ impl AnimationRuntime {
                 || !finite_vec3(pose.local_scale)
         }) {
             return Err(RuntimeError::Invalid(
-                "Animation sample contains non-finite node transforms"
-                    .to_owned(),
+                "Animation sample contains non-finite node transforms".to_owned(),
             ));
         }
         let mut sampled = vec![None; self.nodes.len()];
         let mut visiting = vec![false; self.nodes.len()];
         for index in 0..self.nodes.len() {
-            resolve_node_pose(
-                index,
-                &self.nodes,
-                &locals,
-                &mut sampled,
-                &mut visiting,
-            )?;
+            resolve_node_pose(index, &self.nodes, &locals, &mut sampled, &mut visiting)?;
         }
         let node_poses = sampled
             .into_iter()
             .map(|pose| {
                 pose.ok_or_else(|| {
-                    RuntimeError::Invalid(
-                        "node pose resolution did not produce a value"
-                            .to_owned(),
-                    )
+                    RuntimeError::Invalid("node pose resolution did not produce a value".to_owned())
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -697,20 +644,12 @@ impl AnimationRuntime {
             .iter()
             .zip(rotations.iter())
             .zip(scales.iter())
-            .map(|((translation, rotation), scale)| {
-                compose(*translation, *rotation, *scale)
-            })
+            .map(|((translation, rotation), scale)| compose(*translation, *rotation, *scale))
             .collect::<Vec<_>>();
         let mut node_world = vec![identity(); self.nodes.len()];
         let mut visiting = vec![false; self.nodes.len()];
         for index in 0..self.nodes.len() {
-            compute_world(
-                index,
-                &self.nodes,
-                &local,
-                &mut node_world,
-                &mut visiting,
-            )?;
+            compute_world(index, &self.nodes, &local, &mut node_world, &mut visiting)?;
         }
         Ok(SampledNodeState {
             node_world,
@@ -782,9 +721,10 @@ where
                     "TANGENT count does not match POSITION".to_owned(),
                 ));
             }
-            if tangents.as_ref().is_some_and(|values| {
-                values.iter().any(|value| !finite_vec4(*value))
-            }) {
+            if tangents
+                .as_ref()
+                .is_some_and(|values| values.iter().any(|value| !finite_vec4(*value)))
+            {
                 return Err(RuntimeError::Invalid(
                     "TANGENT contains non-finite values".to_owned(),
                 ));
@@ -797,8 +737,7 @@ where
                 .map(|values| values.into_f32().collect::<Vec<_>>());
             if joints.is_some() != weights.is_some() {
                 return Err(RuntimeError::Invalid(
-                    "JOINTS_0 and WEIGHTS_0 must be provided together"
-                        .to_owned(),
+                    "JOINTS_0 and WEIGHTS_0 must be provided together".to_owned(),
                 ));
             }
             if joints
@@ -809,15 +748,13 @@ where
                     .is_some_and(|values| values.len() != positions.len())
             {
                 return Err(RuntimeError::Invalid(
-                    "JOINTS_0/WEIGHTS_0 count does not match POSITION"
-                        .to_owned(),
+                    "JOINTS_0/WEIGHTS_0 count does not match POSITION".to_owned(),
                 ));
             }
             if weights.as_ref().is_some_and(|values| {
-                values.iter().any(|value| {
-                    !finite_vec4(*value)
-                        || value.iter().any(|weight| *weight < 0.0)
-                })
+                values
+                    .iter()
+                    .any(|value| !finite_vec4(*value) || value.iter().any(|weight| *weight < 0.0))
             }) {
                 return Err(RuntimeError::Invalid(
                     "WEIGHTS_0 contains invalid values".to_owned(),
@@ -867,9 +804,7 @@ where
         let times = reader
             .read_inputs()
             .ok_or_else(|| {
-                RuntimeError::Invalid(
-                    "Animation sampler has no input accessor".to_owned(),
-                )
+                RuntimeError::Invalid("Animation sampler has no input accessor".to_owned())
             })?
             .collect::<Vec<_>>();
         if times.is_empty() || times.iter().any(|time| !time.is_finite()) {
@@ -879,15 +814,12 @@ where
         }
         if times.windows(2).any(|pair| pair[0] >= pair[1]) {
             return Err(RuntimeError::Invalid(
-                "Animation sampler times are not strictly increasing"
-                    .to_owned(),
+                "Animation sampler times are not strictly increasing".to_owned(),
             ));
         }
         duration = duration.max(*times.last().unwrap_or(&0.0));
         let path = match channel.target().property() {
-            gltf::animation::Property::Translation => {
-                AnimationPath::Translation
-            }
+            gltf::animation::Property::Translation => AnimationPath::Translation,
             gltf::animation::Property::Rotation => AnimationPath::Rotation,
             gltf::animation::Property::Scale => AnimationPath::Scale,
             gltf::animation::Property::MorphTargetWeights => {
@@ -899,15 +831,11 @@ where
             }
         };
         let values = match reader.read_outputs().ok_or_else(|| {
-            RuntimeError::Invalid(
-                "Animation sampler has no output accessor".to_owned(),
-            )
+            RuntimeError::Invalid("Animation sampler has no output accessor".to_owned())
         })? {
-            ReadOutputs::Translations(values) | ReadOutputs::Scales(values) => {
-                values
-                    .map(|value| [value[0], value[1], value[2], 0.0])
-                    .collect::<Vec<_>>()
-            }
+            ReadOutputs::Translations(values) | ReadOutputs::Scales(values) => values
+                .map(|value| [value[0], value[1], value[2], 0.0])
+                .collect::<Vec<_>>(),
             ReadOutputs::Rotations(values) => values
                 .into_f32()
                 .map(|value| [value[0], value[1], value[2], value[3]])
@@ -931,8 +859,7 @@ where
                 .any(|value| quaternion_length(*value) <= f32::EPSILON)
         {
             return Err(RuntimeError::Invalid(
-                "Animation rotation output contains a zero quaternion"
-                    .to_owned(),
+                "Animation rotation output contains a zero quaternion".to_owned(),
             ));
         }
         channels.push(AnimationChannel {
@@ -999,9 +926,10 @@ fn resolve_node_pose(
             "Node hierarchy contains a cycle".to_owned(),
         ));
     }
-    let local = locals.get(index).copied().ok_or_else(|| {
-        RuntimeError::Invalid("Node pose index is invalid".to_owned())
-    })?;
+    let local = locals
+        .get(index)
+        .copied()
+        .ok_or_else(|| RuntimeError::Invalid("Node pose index is invalid".to_owned()))?;
     visiting[index] = true;
     let pose = if let Some(parent) = nodes[index].parent {
         if parent >= nodes.len() {
@@ -1009,27 +937,20 @@ fn resolve_node_pose(
                 "Node parent index is invalid".to_owned(),
             ));
         }
-        let parent_pose =
-            resolve_node_pose(parent, nodes, locals, sampled, visiting)?;
+        let parent_pose = resolve_node_pose(parent, nodes, locals, sampled, visiting)?;
         RuntimeNodePose {
             world_translation: add_vec3(
                 parent_pose.world_translation,
                 rotate_vector(
                     parent_pose.world_rotation,
-                    multiply_vec3(
-                        parent_pose.world_scale,
-                        local.local_translation,
-                    ),
+                    multiply_vec3(parent_pose.world_scale, local.local_translation),
                 ),
             ),
             world_rotation: normalize_quaternion(multiply_quaternion(
                 parent_pose.world_rotation,
                 local.local_rotation,
             )),
-            world_scale: multiply_vec3(
-                parent_pose.world_scale,
-                local.local_scale,
-            ),
+            world_scale: multiply_vec3(parent_pose.world_scale, local.local_scale),
             ..local
         }
     } else {
@@ -1096,9 +1017,7 @@ fn blend_point(
             continue;
         }
         let matrix = matrices.get(joint as usize).ok_or_else(|| {
-            RuntimeError::Invalid(format!(
-                "Vertex references missing joint {joint}"
-            ))
+            RuntimeError::Invalid(format!("Vertex references missing joint {joint}"))
         })?;
         let value = transform_point(*matrix, point);
         result[0] += value[0] * weight;
@@ -1122,9 +1041,7 @@ fn blend_vector(
             continue;
         }
         let matrix = matrices.get(joint as usize).ok_or_else(|| {
-            RuntimeError::Invalid(format!(
-                "Vertex references missing joint {joint}"
-            ))
+            RuntimeError::Invalid(format!("Vertex references missing joint {joint}"))
         })?;
         let value = transform_vector(*matrix, vector);
         result[0] += value[0] * weight;
@@ -1135,11 +1052,7 @@ fn blend_vector(
     Ok((result, total))
 }
 
-fn compose(
-    translation: [f32; 3],
-    rotation: [f32; 4],
-    scale: [f32; 3],
-) -> Matrix4 {
+fn compose(translation: [f32; 3], rotation: [f32; 4], scale: [f32; 3]) -> Matrix4 {
     let [x, y, z, w] = normalize_quaternion(rotation);
     [
         (1.0 - 2.0 * (y * y + z * z)) * scale[0],
@@ -1163,8 +1076,7 @@ fn compose(
 
 pub fn identity() -> Matrix4 {
     [
-        1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0,
-        0.0, 1.0,
+        1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
     ]
 }
 
@@ -1262,18 +1174,9 @@ fn invert_affine(matrix: Matrix4) -> Result<Matrix4, RuntimeError> {
 
 fn transform_point(matrix: Matrix4, point: [f32; 3]) -> [f32; 3] {
     [
-        matrix[0] * point[0]
-            + matrix[4] * point[1]
-            + matrix[8] * point[2]
-            + matrix[12],
-        matrix[1] * point[0]
-            + matrix[5] * point[1]
-            + matrix[9] * point[2]
-            + matrix[13],
-        matrix[2] * point[0]
-            + matrix[6] * point[1]
-            + matrix[10] * point[2]
-            + matrix[14],
+        matrix[0] * point[0] + matrix[4] * point[1] + matrix[8] * point[2] + matrix[12],
+        matrix[1] * point[0] + matrix[5] * point[1] + matrix[9] * point[2] + matrix[13],
+        matrix[2] * point[0] + matrix[6] * point[1] + matrix[10] * point[2] + matrix[14],
     ]
 }
 

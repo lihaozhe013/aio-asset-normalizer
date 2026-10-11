@@ -10,8 +10,7 @@ use super::glb::{AnimationChannelData, SkinData};
 
 mod mapping;
 pub use self::mapping::{
-    load_mapping, save_mapping, MappingSuggestion, MappingValidation,
-    SuggestionConfidence,
+    load_mapping, save_mapping, MappingSuggestion, MappingValidation, SuggestionConfidence,
 };
 
 mod pose;
@@ -142,8 +141,7 @@ impl BvhDocument {
                 "frame time must be finite and greater than zero".to_owned(),
             ));
         }
-        let channel_count =
-            joints.iter().map(|joint| joint.channels.len()).sum();
+        let channel_count = joints.iter().map(|joint| joint.channels.len()).sum();
         let mut frames = Vec::with_capacity(frame_count);
         for _ in 0..frame_count {
             let mut frame = Vec::with_capacity(channel_count);
@@ -182,9 +180,7 @@ impl BvhDocument {
         Ok(self
             .frame_transforms(frame)?
             .into_iter()
-            .map(|transform| {
-                (transform.position, transform.rotation, transform.scale)
-            })
+            .map(|transform| (transform.position, transform.rotation, transform.scale))
             .collect())
     }
 
@@ -200,18 +196,14 @@ impl BvhDocument {
     }
 
     pub fn trim(&mut self, start: f32, end: f32) -> Result<(), BvhError> {
-        if !start.is_finite() || !end.is_finite() || start < 0.0 || end <= start
-        {
+        if !start.is_finite() || !end.is_finite() || start < 0.0 || end <= start {
             return Err(BvhError::Parse(
                 "trim range must satisfy 0 <= start < end".to_owned(),
             ));
         }
         let first = (start / self.frame_time).ceil() as usize;
         let last = (end / self.frame_time).floor() as usize;
-        if first >= self.frames.len()
-            || last >= self.frames.len()
-            || first > last
-        {
+        if first >= self.frames.len() || last >= self.frames.len() || first > last {
             return Err(BvhError::Parse(
                 "trim range is outside the motion".to_owned(),
             ));
@@ -220,10 +212,7 @@ impl BvhDocument {
         Ok(())
     }
 
-    pub fn plan_retarget(
-        &self,
-        mapping: &MappingFile,
-    ) -> Result<RetargetPlan, BvhError> {
+    pub fn plan_retarget(&self, mapping: &MappingFile) -> Result<RetargetPlan, BvhError> {
         if mapping.schema_version != 1 {
             return Err(BvhError::Mapping(format!(
                 "unsupported mapping schema version {}",
@@ -238,8 +227,7 @@ impl BvhDocument {
             .collect();
         let mut source_to_target = HashMap::new();
         for bone in &mapping.bones {
-            if let Some(&source) = source_lookup.get(bone.source_joint.as_str())
-            {
+            if let Some(&source) = source_lookup.get(bone.source_joint.as_str()) {
                 source_to_target.insert(source, bone.target_node.clone());
             }
         }
@@ -268,27 +256,25 @@ impl BvhDocument {
             .and_then(|path| fs::read(path).ok())
             .map(|bytes| crate::modules::retarget::sha256_hex(&bytes))
             .unwrap_or_default();
-        let source_descriptor =
-            crate::modules::retarget::SkeletonDescriptor::from_bvh(
-                self,
-                source_file_sha256,
-                mapping.source.up_axis.clone(),
-                mapping.source.forward_axis.clone(),
-                mapping.source.unit.clone(),
-            )
-            .map_err(|error| BvhError::Mapping(error.to_string()))?;
-        let target_descriptor =
-            crate::modules::retarget::SkeletonDescriptor::from_skin(
-                target,
-                crate::modules::retarget::SourceKind::Glb,
-                String::new(),
-                String::new(),
-                "Y",
-                "-Z",
-                "m",
-                &HashSet::new(),
-            )
-            .map_err(|error| BvhError::Mapping(error.to_string()))?;
+        let source_descriptor = crate::modules::retarget::SkeletonDescriptor::from_bvh(
+            self,
+            source_file_sha256,
+            mapping.source.up_axis.clone(),
+            mapping.source.forward_axis.clone(),
+            mapping.source.unit.clone(),
+        )
+        .map_err(|error| BvhError::Mapping(error.to_string()))?;
+        let target_descriptor = crate::modules::retarget::SkeletonDescriptor::from_skin(
+            target,
+            crate::modules::retarget::SourceKind::Glb,
+            String::new(),
+            String::new(),
+            "Y",
+            "-Z",
+            "m",
+            &HashSet::new(),
+        )
+        .map_err(|error| BvhError::Mapping(error.to_string()))?;
         let mapping_v2 = crate::modules::retarget::from_legacy_bvh_mapping(
             mapping,
             &source_descriptor,
@@ -305,19 +291,14 @@ impl BvhDocument {
         .map_err(|error| BvhError::Mapping(error.to_string()))
     }
 
-    fn frame_transforms(
-        &self,
-        frame: &[f32],
-    ) -> Result<Vec<MotionTransform>, BvhError> {
+    fn frame_transforms(&self, frame: &[f32]) -> Result<Vec<MotionTransform>, BvhError> {
         if frame.len() != self.channel_count() {
             return Err(BvhError::Parse(
-                "motion frame channel count does not match the hierarchy"
-                    .to_owned(),
+                "motion frame channel count does not match the hierarchy".to_owned(),
             ));
         }
         let mut cursor = 0;
-        let mut transforms: Vec<MotionTransform> =
-            Vec::with_capacity(self.joints.len());
+        let mut transforms: Vec<MotionTransform> = Vec::with_capacity(self.joints.len());
         for joint in &self.joints {
             let mut position = joint.offset;
             let mut rotation = identity_quaternion();
@@ -331,39 +312,27 @@ impl BvhDocument {
                     BvhChannel::Xrotation => {
                         rotation = quat_mul(
                             rotation,
-                            axis_quaternion(
-                                [1.0, 0.0, 0.0],
-                                value.to_radians(),
-                            ),
+                            axis_quaternion([1.0, 0.0, 0.0], value.to_radians()),
                         )
                     }
                     BvhChannel::Yrotation => {
                         rotation = quat_mul(
                             rotation,
-                            axis_quaternion(
-                                [0.0, 1.0, 0.0],
-                                value.to_radians(),
-                            ),
+                            axis_quaternion([0.0, 1.0, 0.0], value.to_radians()),
                         )
                     }
                     BvhChannel::Zrotation => {
                         rotation = quat_mul(
                             rotation,
-                            axis_quaternion(
-                                [0.0, 0.0, 1.0],
-                                value.to_radians(),
-                            ),
+                            axis_quaternion([0.0, 0.0, 1.0], value.to_radians()),
                         )
                     }
                 }
             }
             let world = if let Some(parent) = joint.parent {
-                let parent_transform =
-                    transforms.get(parent).ok_or_else(|| {
-                        BvhError::Parse(
-                            "BVH joint order is not parent-first".to_owned(),
-                        )
-                    })?;
+                let parent_transform = transforms.get(parent).ok_or_else(|| {
+                    BvhError::Parse("BVH joint order is not parent-first".to_owned())
+                })?;
                 MotionTransform {
                     position: add(
                         parent_transform.position,
@@ -372,10 +341,7 @@ impl BvhDocument {
                             multiply_vec3(parent_transform.scale, position),
                         ),
                     ),
-                    rotation: quat_normalize(quat_mul(
-                        parent_transform.rotation,
-                        rotation,
-                    )),
+                    rotation: quat_normalize(quat_mul(parent_transform.rotation, rotation)),
                     scale: parent_transform.scale,
                 }
             } else {
@@ -401,9 +367,7 @@ impl BvhDocument {
             .joints
             .iter()
             .position(|joint| joint.parent.is_none())
-            .ok_or_else(|| {
-                BvhError::Parse("BVH has no root joint".to_owned())
-            })?;
+            .ok_or_else(|| BvhError::Parse("BVH has no root joint".to_owned()))?;
         write_joint(&mut output, self, root, 0);
         output.push_str("MOTION\n");
         output.push_str(&format!("Frames: {}\n", self.frames.len()));
@@ -419,11 +383,7 @@ impl BvhDocument {
         Ok(output)
     }
     pub fn write(&self, path: &Path) -> Result<(), BvhError> {
-        crate::modules::atomic_file::write(
-            path,
-            self.to_text()?.as_bytes(),
-            true,
-        )?;
+        crate::modules::atomic_file::write(path, self.to_text()?.as_bytes(), true)?;
         Ok(())
     }
 }
@@ -438,17 +398,11 @@ struct MotionTransform {
 struct CoordinateBasis;
 
 impl CoordinateBasis {
-    fn from_mapping(
-        up_axis: &str,
-        forward_axis: &str,
-    ) -> Result<Self, BvhError> {
-        let up = parse_axis(up_axis).ok_or_else(|| {
-            BvhError::Mapping(format!("unsupported source up axis '{up_axis}'"))
-        })?;
+    fn from_mapping(up_axis: &str, forward_axis: &str) -> Result<Self, BvhError> {
+        let up = parse_axis(up_axis)
+            .ok_or_else(|| BvhError::Mapping(format!("unsupported source up axis '{up_axis}'")))?;
         let forward = parse_axis(forward_axis).ok_or_else(|| {
-            BvhError::Mapping(format!(
-                "unsupported source forward axis '{forward_axis}'"
-            ))
+            BvhError::Mapping(format!("unsupported source forward axis '{forward_axis}'"))
         })?;
         if dot(up, forward).abs() > f32::EPSILON {
             return Err(BvhError::Mapping(
@@ -581,13 +535,11 @@ impl<'a> Tokenizer<'a> {
 
     fn next_f32(&mut self, label: &str) -> Result<f32, BvhError> {
         let token = self.next_required(label)?;
-        let value = token.parse::<f32>().map_err(|_| {
-            BvhError::Parse(format!("invalid {label}: {token}"))
-        })?;
+        let value = token
+            .parse::<f32>()
+            .map_err(|_| BvhError::Parse(format!("invalid {label}: {token}")))?;
         if !value.is_finite() {
-            return Err(BvhError::Parse(format!(
-                "{label} must be finite: {token}"
-            )));
+            return Err(BvhError::Parse(format!("{label} must be finite: {token}")));
         }
         Ok(value)
     }
@@ -671,12 +623,7 @@ fn parse_channel(channel: &str) -> Result<BvhChannel, BvhError> {
     }
 }
 
-fn write_joint(
-    output: &mut String,
-    document: &BvhDocument,
-    index: usize,
-    depth: usize,
-) {
+fn write_joint(output: &mut String, document: &BvhDocument, index: usize, depth: usize) {
     let joint = &document.joints[index];
     let indent = "  ".repeat(depth);
     let kind = if joint.parent.is_none() {

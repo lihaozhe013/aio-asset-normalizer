@@ -76,16 +76,9 @@ impl GlbDocument {
             .copied()
             .collect::<Vec<_>>();
         let plan = self
-            .plan_root_motion(
-                selection,
-                &animation_indices,
-                selection.skin_index,
-            )?
+            .plan_root_motion(selection, &animation_indices, selection.skin_index)?
             .ok_or_else(|| {
-                GlbError::Invalid(
-                    "Root motion plan is unavailable for this selection"
-                        .to_owned(),
-                )
+                GlbError::Invalid("Root motion plan is unavailable for this selection".to_owned())
             })?;
         Ok(RootMotionInfo {
             resolved_node: Some(plan.node),
@@ -113,14 +106,9 @@ impl GlbDocument {
 
         let nodes = json_array(&self.json, "nodes")?;
         let parents = build_parents(nodes)?;
-        let channels = collect_translation_channels(
-            &self.json,
-            animation_indices,
-            nodes.len(),
-        )?;
+        let channels = collect_translation_channels(&self.json, animation_indices, nodes.len())?;
         let channel_nodes = unique_channel_nodes(&channels);
-        let hierarchy =
-            root_hierarchy(&self.json, &parents, selection, skin_index)?;
+        let hierarchy = root_hierarchy(&self.json, &parents, selection, skin_index)?;
         let node = resolve_root_node(
             selection.root_motion_node_override,
             &channel_nodes,
@@ -135,11 +123,7 @@ impl GlbDocument {
             inspect_root_motion_channel(self, *channel)?;
         }
 
-        let missing = missing_animation_indices(
-            animation_indices,
-            &selected_channels,
-            node,
-        );
+        let missing = missing_animation_indices(animation_indices, &selected_channels, node);
         let warnings = if missing.is_empty() {
             Vec::new()
         } else {
@@ -163,10 +147,7 @@ impl GlbDocument {
         }))
     }
 
-    pub(super) fn apply_root_motion(
-        &mut self,
-        plan: &RootMotionPlan,
-    ) -> Result<usize, GlbError> {
+    pub(super) fn apply_root_motion(&mut self, plan: &RootMotionPlan) -> Result<usize, GlbError> {
         let mut modified = 0;
         for channel in &plan.channels {
             let data = inspect_root_motion_channel(self, *channel)?;
@@ -180,9 +161,7 @@ impl GlbDocument {
                 .values
                 .iter()
                 .map(|value| match plan.removal_mode {
-                    RootMotionRemovalMode::HorizontalXZ => {
-                        [first[0], value[1], first[2]]
-                    }
+                    RootMotionRemovalMode::HorizontalXZ => [first[0], value[1], first[2]],
                     RootMotionRemovalMode::AllTranslation => first,
                 })
                 .collect::<Vec<_>>();
@@ -198,15 +177,10 @@ impl GlbDocument {
                 .into_iter()
                 .map(|value| value.to_vec())
                 .collect::<Vec<_>>();
-            let output_accessor =
-                self.append_float_accessor(&values, "VEC3")
-                    .map_err(|error| context_error(*channel, error))?;
-            replace_sampler_output(
-                self,
-                channel.animation,
-                channel.channel,
-                output_accessor,
-            )?;
+            let output_accessor = self
+                .append_float_accessor(&values, "VEC3")
+                .map_err(|error| context_error(*channel, error))?;
+            replace_sampler_output(self, channel.animation, channel.channel, output_accessor)?;
             modified += 1;
         }
         if modified > 0 {
@@ -230,19 +204,19 @@ impl GlbDocument {
 fn json_array<'a>(json: &'a Value, key: &str) -> Result<&'a [Value], GlbError> {
     match json.get(key) {
         None => Ok(&[]),
-        Some(value) => value.as_array().map(Vec::as_slice).ok_or_else(|| {
-            GlbError::Invalid(format!("GLB {key} field is not an array"))
-        }),
+        Some(value) => value
+            .as_array()
+            .map(Vec::as_slice)
+            .ok_or_else(|| GlbError::Invalid(format!("GLB {key} field is not an array"))),
     }
 }
 
 fn read_index(value: &Value, context: &str) -> Result<usize, GlbError> {
-    let value = value.as_u64().ok_or_else(|| {
-        GlbError::Invalid(format!("{context} index is not an unsigned integer"))
-    })?;
-    usize::try_from(value).map_err(|_| {
-        GlbError::Invalid(format!("{context} index is out of range"))
-    })
+    let value = value
+        .as_u64()
+        .ok_or_else(|| GlbError::Invalid(format!("{context} index is not an unsigned integer")))?;
+    usize::try_from(value)
+        .map_err(|_| GlbError::Invalid(format!("{context} index is out of range")))
 }
 
 fn build_parents(nodes: &[Value]) -> Result<Vec<Option<usize>>, GlbError> {
@@ -251,9 +225,9 @@ fn build_parents(nodes: &[Value]) -> Result<Vec<Option<usize>>, GlbError> {
         let Some(children) = node.get("children") else {
             continue;
         };
-        let children = children.as_array().ok_or_else(|| {
-            GlbError::Invalid(format!("Node {index} children is not an array"))
-        })?;
+        let children = children
+            .as_array()
+            .ok_or_else(|| GlbError::Invalid(format!("Node {index} children is not an array")))?;
         for child in children {
             let child = read_index(child, &format!("Node {index} child"))?;
             if child >= nodes.len() {
@@ -283,10 +257,7 @@ fn build_parents(nodes: &[Value]) -> Result<Vec<Option<usize>>, GlbError> {
     Ok(parents)
 }
 
-fn ancestors(
-    node: usize,
-    parents: &[Option<usize>],
-) -> Result<Vec<usize>, GlbError> {
+fn ancestors(node: usize, parents: &[Option<usize>]) -> Result<Vec<usize>, GlbError> {
     if node >= parents.len() {
         return Err(GlbError::Invalid(format!(
             "Root motion node {node} does not exist"
@@ -336,18 +307,12 @@ fn root_hierarchy(
     let (seeds, preferred_node) = if let Some(skin_index) = skin_index {
         let skins = json_array(json, "skins")?;
         let skin = skins.get(skin_index).ok_or_else(|| {
-            GlbError::Invalid(format!(
-                "Selected Skin {skin_index} does not exist"
-            ))
+            GlbError::Invalid(format!("Selected Skin {skin_index} does not exist"))
         })?;
-        let joints =
-            skin.get("joints")
-                .and_then(Value::as_array)
-                .ok_or_else(|| {
-                    GlbError::Invalid(format!(
-                        "Skin {skin_index} has no joints array"
-                    ))
-                })?;
+        let joints = skin
+            .get("joints")
+            .and_then(Value::as_array)
+            .ok_or_else(|| GlbError::Invalid(format!("Skin {skin_index} has no joints array")))?;
         if joints.is_empty() {
             return Err(GlbError::Invalid(format!(
                 "Skin {skin_index} has no joints"
@@ -357,10 +322,7 @@ fn root_hierarchy(
             .iter()
             .enumerate()
             .map(|(joint_index, joint)| {
-                let node = read_index(
-                    joint,
-                    &format!("Skin {skin_index} joint {joint_index}"),
-                )?;
+                let node = read_index(joint, &format!("Skin {skin_index} joint {joint_index}"))?;
                 if node >= nodes.len() {
                     return Err(GlbError::Invalid(format!(
                         "Skin {skin_index} joint {joint_index} targets missing node {node}"
@@ -371,9 +333,7 @@ fn root_hierarchy(
             .collect::<Result<Vec<_>, GlbError>>()?;
         let preferred = skin
             .get("skeleton")
-            .map(|value| {
-                read_index(value, &format!("Skin {skin_index} skeleton"))
-            })
+            .map(|value| read_index(value, &format!("Skin {skin_index} skeleton")))
             .transpose()?;
         if let Some(preferred) = preferred {
             if preferred >= nodes.len() {
@@ -384,12 +344,10 @@ fn root_hierarchy(
         }
         (joints, preferred)
     } else {
-        let seeds =
-            selection.selected_nodes.iter().copied().collect::<Vec<_>>();
+        let seeds = selection.selected_nodes.iter().copied().collect::<Vec<_>>();
         if seeds.is_empty() {
             return Err(GlbError::Invalid(
-                "Automatic root motion detection requires selected nodes or a Skin"
-                    .to_owned(),
+                "Automatic root motion detection requires selected nodes or a Skin".to_owned(),
             ));
         }
         for seed in &seeds {
@@ -496,41 +454,28 @@ fn collect_translation_channels(
             .get("channels")
             .and_then(Value::as_array)
             .ok_or_else(|| {
-                GlbError::Invalid(format!(
-                    "Animation {animation_index} has no channels array"
-                ))
+                GlbError::Invalid(format!("Animation {animation_index} has no channels array"))
             })?;
         let samplers = animation
             .get("samplers")
             .and_then(Value::as_array)
             .ok_or_else(|| {
-                GlbError::Invalid(format!(
-                    "Animation {animation_index} has no samplers array"
-                ))
+                GlbError::Invalid(format!("Animation {animation_index} has no samplers array"))
             })?;
         for (channel_index, channel) in animation_channels.iter().enumerate() {
-            let target = channel.get("target").ok_or_else(|| {
-                channel_error(*animation_index, channel_index, "has no target")
-            })?;
-            if target.get("path").and_then(Value::as_str) != Some("translation")
-            {
+            let target = channel
+                .get("target")
+                .ok_or_else(|| channel_error(*animation_index, channel_index, "has no target"))?;
+            if target.get("path").and_then(Value::as_str) != Some("translation") {
                 continue;
             }
             let node = target
                 .get("node")
-                .ok_or_else(|| {
-                    channel_error(
-                        *animation_index,
-                        channel_index,
-                        "has no target node",
-                    )
-                })
+                .ok_or_else(|| channel_error(*animation_index, channel_index, "has no target node"))
                 .and_then(|value| {
                     read_index(
                         value,
-                        &format!(
-                            "Animation {animation_index} channel {channel_index} target node"
-                        ),
+                        &format!("Animation {animation_index} channel {channel_index} target node"),
                     )
                 })?;
             if node >= node_count {
@@ -542,19 +487,11 @@ fn collect_translation_channels(
             }
             let sampler = channel
                 .get("sampler")
-                .ok_or_else(|| {
-                    channel_error(
-                        *animation_index,
-                        channel_index,
-                        "has no sampler",
-                    )
-                })
+                .ok_or_else(|| channel_error(*animation_index, channel_index, "has no sampler"))
                 .and_then(|value| {
                     read_index(
                         value,
-                        &format!(
-                            "Animation {animation_index} channel {channel_index} sampler"
-                        ),
+                        &format!("Animation {animation_index} channel {channel_index} sampler"),
                     )
                 })?;
             if sampler >= samplers.len() {
@@ -592,9 +529,9 @@ fn missing_animation_indices(
         .iter()
         .copied()
         .filter(|animation| {
-            !channels.iter().any(|channel| {
-                channel.animation == *animation && channel.node == node
-            })
+            !channels
+                .iter()
+                .any(|channel| channel.animation == *animation && channel.node == node)
         })
         .collect()
 }
@@ -608,9 +545,7 @@ fn format_indices(indices: &[usize]) -> String {
 }
 
 fn channel_error(animation: usize, channel: usize, message: &str) -> GlbError {
-    GlbError::Invalid(format!(
-        "Animation {animation} channel {channel} {message}"
-    ))
+    GlbError::Invalid(format!("Animation {animation} channel {channel} {message}"))
 }
 
 fn inspect_root_motion_channel(
@@ -622,28 +557,19 @@ fn inspect_root_motion_channel(
         .get("animations")
         .and_then(Value::as_array)
         .and_then(|animations| animations.get(channel.animation))
-        .ok_or_else(|| {
-            channel_error(channel.animation, channel.channel, "has disappeared")
-        })?;
+        .ok_or_else(|| channel_error(channel.animation, channel.channel, "has disappeared"))?;
     let animation_channels = animation
         .get("channels")
         .and_then(Value::as_array)
         .ok_or_else(|| {
-            channel_error(
-                channel.animation,
-                channel.channel,
-                "has no channels array",
-            )
+            channel_error(channel.animation, channel.channel, "has no channels array")
         })?;
-    let json_channel =
-        animation_channels.get(channel.channel).ok_or_else(|| {
-            channel_error(channel.animation, channel.channel, "does not exist")
-        })?;
+    let json_channel = animation_channels
+        .get(channel.channel)
+        .ok_or_else(|| channel_error(channel.animation, channel.channel, "does not exist"))?;
     let sampler_index = json_channel
         .get("sampler")
-        .ok_or_else(|| {
-            channel_error(channel.animation, channel.channel, "has no sampler")
-        })
+        .ok_or_else(|| channel_error(channel.animation, channel.channel, "has no sampler"))
         .and_then(|value| {
             read_index(
                 value,
@@ -682,12 +608,10 @@ fn inspect_root_motion_channel(
                 channel.animation, channel.channel
             )))
         }
-        other => {
-            return Err(GlbError::Unsupported(format!(
-                "Root motion removal does not support {other} interpolation in animation {} channel {}",
-                channel.animation, channel.channel
-            )))
-        }
+        other => return Err(GlbError::Unsupported(format!(
+            "Root motion removal does not support {other} interpolation in animation {} channel {}",
+            channel.animation, channel.channel
+        ))),
     }
 
     let input_index = sampler
@@ -717,17 +641,13 @@ fn inspect_root_motion_channel(
     if times.is_empty() || times.iter().any(|time| !time.is_finite()) {
         return Err(context_error(
             channel,
-            GlbError::Invalid(
-                "input accessor has no finite keyframe times".to_owned(),
-            ),
+            GlbError::Invalid("input accessor has no finite keyframe times".to_owned()),
         ));
     }
     if times.windows(2).any(|pair| pair[0] >= pair[1]) {
         return Err(context_error(
             channel,
-            GlbError::Invalid(
-                "input accessor times are not strictly increasing".to_owned(),
-            ),
+            GlbError::Invalid("input accessor times are not strictly increasing".to_owned()),
         ));
     }
 
@@ -756,17 +676,13 @@ fn inspect_root_motion_channel(
     if accessor.get("componentType").and_then(Value::as_u64) != Some(5126) {
         return Err(context_error(
             channel,
-            GlbError::Unsupported(
-                "root translation output must use FLOAT components".to_owned(),
-            ),
+            GlbError::Unsupported("root translation output must use FLOAT components".to_owned()),
         ));
     }
     if accessor.get("type").and_then(Value::as_str) != Some("VEC3") {
         return Err(context_error(
             channel,
-            GlbError::Unsupported(
-                "root translation output must use a VEC3 accessor".to_owned(),
-            ),
+            GlbError::Unsupported("root translation output must use a VEC3 accessor".to_owned()),
         ));
     }
     let count = accessor
@@ -789,9 +705,7 @@ fn inspect_root_motion_channel(
     if count != times.len() {
         return Err(context_error(
             channel,
-            GlbError::Invalid(
-                "input and root translation output counts differ".to_owned(),
-            ),
+            GlbError::Invalid("input and root translation output counts differ".to_owned()),
         ));
     }
     let bytes = document
@@ -806,17 +720,14 @@ fn inspect_root_motion_channel(
                 let raw = bytes.get(start..start + 4).ok_or_else(|| {
                     context_error(
                         channel,
-                        GlbError::Invalid(
-                            "root translation output is truncated".to_owned(),
-                        ),
+                        GlbError::Invalid("root translation output is truncated".to_owned()),
                     )
                 })?;
                 let raw: [u8; 4] = raw.try_into().map_err(|_| {
                     context_error(
                         channel,
                         GlbError::Invalid(
-                            "root translation output component is truncated"
-                                .to_owned(),
+                            "root translation output component is truncated".to_owned(),
                         ),
                     )
                 })?;
@@ -827,10 +738,7 @@ fn inspect_root_motion_channel(
         if value.iter().any(|component| !component.is_finite()) {
             return Err(context_error(
                 channel,
-                GlbError::Invalid(
-                    "root translation output contains non-finite values"
-                        .to_owned(),
-                ),
+                GlbError::Invalid("root translation output contains non-finite values".to_owned()),
             ));
         }
         values.push(value);
@@ -845,12 +753,8 @@ fn context_error(channel: RootMotionChannel, error: GlbError) -> GlbError {
     );
     match error {
         GlbError::Io(error) => GlbError::Io(error),
-        GlbError::Invalid(message) => {
-            GlbError::Invalid(format!("{context}: {message}"))
-        }
-        GlbError::Unsupported(message) => {
-            GlbError::Unsupported(format!("{context}: {message}"))
-        }
+        GlbError::Invalid(message) => GlbError::Invalid(format!("{context}: {message}")),
+        GlbError::Unsupported(message) => GlbError::Unsupported(format!("{context}: {message}")),
     }
 }
 
@@ -865,43 +769,27 @@ fn replace_sampler_output(
         .get("animations")
         .and_then(Value::as_array)
         .and_then(|animations| animations.get(animation_index))
-        .ok_or_else(|| {
-            channel_error(animation_index, channel_index, "does not exist")
-        })?;
+        .ok_or_else(|| channel_error(animation_index, channel_index, "does not exist"))?;
     let channels = animation
         .get("channels")
         .and_then(Value::as_array)
-        .ok_or_else(|| {
-            channel_error(
-                animation_index,
-                channel_index,
-                "has no channels array",
-            )
-        })?;
-    let channel = channels.get(channel_index).ok_or_else(|| {
-        channel_error(animation_index, channel_index, "does not exist")
-    })?;
+        .ok_or_else(|| channel_error(animation_index, channel_index, "has no channels array"))?;
+    let channel = channels
+        .get(channel_index)
+        .ok_or_else(|| channel_error(animation_index, channel_index, "does not exist"))?;
     let sampler_index = channel
         .get("sampler")
         .ok_or_else(|| channel_error(animation_index, channel_index, "has no sampler"))
         .and_then(|value| {
             read_index(
                 value,
-                &format!(
-                    "Animation {animation_index} channel {channel_index} sampler"
-                ),
+                &format!("Animation {animation_index} channel {channel_index} sampler"),
             )
         })?;
     let samplers = animation
         .get("samplers")
         .and_then(Value::as_array)
-        .ok_or_else(|| {
-            channel_error(
-                animation_index,
-                channel_index,
-                "has no samplers array",
-            )
-        })?;
+        .ok_or_else(|| channel_error(animation_index, channel_index, "has no samplers array"))?;
     if sampler_index >= samplers.len() {
         return Err(channel_error(
             animation_index,
@@ -912,30 +800,23 @@ fn replace_sampler_output(
     let references = channels
         .iter()
         .filter(|channel| {
-            channel.get("sampler").and_then(Value::as_u64)
-                == Some(sampler_index as u64)
+            channel.get("sampler").and_then(Value::as_u64) == Some(sampler_index as u64)
         })
         .count();
     let animations = document
         .json
         .get_mut("animations")
         .and_then(Value::as_array_mut)
-        .ok_or_else(|| {
-            GlbError::Invalid("GLB has no animations array".to_owned())
-        })?;
-    let animation = animations.get_mut(animation_index).ok_or_else(|| {
-        channel_error(animation_index, channel_index, "does not exist")
-    })?;
+        .ok_or_else(|| GlbError::Invalid("GLB has no animations array".to_owned()))?;
+    let animation = animations
+        .get_mut(animation_index)
+        .ok_or_else(|| channel_error(animation_index, channel_index, "does not exist"))?;
     if references > 1 {
         let samplers = animation
             .get_mut("samplers")
             .and_then(Value::as_array_mut)
             .ok_or_else(|| {
-                channel_error(
-                    animation_index,
-                    channel_index,
-                    "has no samplers array",
-                )
+                channel_error(animation_index, channel_index, "has no samplers array")
             })?;
         let mut sampler = samplers[sampler_index].clone();
         sampler["output"] = json!(output_accessor);
@@ -945,11 +826,7 @@ fn replace_sampler_output(
             .get_mut("channels")
             .and_then(Value::as_array_mut)
             .ok_or_else(|| {
-                channel_error(
-                    animation_index,
-                    channel_index,
-                    "has no channels array",
-                )
+                channel_error(animation_index, channel_index, "has no channels array")
             })?;
         channels[channel_index]["sampler"] = json!(new_sampler_index);
     } else {
@@ -957,11 +834,7 @@ fn replace_sampler_output(
             .get_mut("samplers")
             .and_then(Value::as_array_mut)
             .ok_or_else(|| {
-                channel_error(
-                    animation_index,
-                    channel_index,
-                    "has no samplers array",
-                )
+                channel_error(animation_index, channel_index, "has no samplers array")
             })?;
         samplers[sampler_index]["output"] = json!(output_accessor);
     }

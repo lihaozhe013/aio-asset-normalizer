@@ -20,8 +20,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
                     .id_salt("converter_blender_path")
                     .desired_width(280.0),
             );
-            let commit_requested = response.lost_focus()
-                && ui.input(|i| i.key_pressed(Key::Enter));
+            let commit_requested = response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter));
             if commit_requested {
                 let trimmed = path.trim().to_owned();
                 app.set_converter_blender_path(if trimmed.is_empty() {
@@ -33,9 +32,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
             if ui.button(app.i18n.tr("converter.browse")).clicked() {
                 app.browse_converter_blender();
             }
-            if app.blender_path.is_some()
-                && ui.button(app.i18n.tr("converter.clear")).clicked()
-            {
+            if app.blender_path.is_some() && ui.button(app.i18n.tr("converter.clear")).clicked() {
                 app.set_converter_blender_path(None);
             }
         });
@@ -63,8 +60,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
 
     let selected_count = app.converter_file_tree.selected_files().len();
     let blender_available = app.converter_blender_status().is_some();
-    let can_start =
-        !app.converter_busy && selected_count > 0 && blender_available;
+    let can_start = !app.converter_busy && selected_count > 0 && blender_available;
     if !app.converter_busy && selected_count == 0 {
         ui.label(app.i18n.tr("converter.select_hint"));
     }
@@ -116,18 +112,10 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
                         .to_string_lossy()
                         .into_owned();
                     let status = match state.status {
-                        ConverterStatus::Pending => {
-                            app.i18n.tr("converter.status_pending")
-                        }
-                        ConverterStatus::Running => {
-                            app.i18n.tr("converter.status_running")
-                        }
-                        ConverterStatus::Success => {
-                            app.i18n.tr("converter.status_success")
-                        }
-                        ConverterStatus::Failed => {
-                            app.i18n.tr("converter.status_failed")
-                        }
+                        ConverterStatus::Pending => app.i18n.tr("converter.status_pending"),
+                        ConverterStatus::Running => app.i18n.tr("converter.status_running"),
+                        ConverterStatus::Success => app.i18n.tr("converter.status_success"),
+                        ConverterStatus::Failed => app.i18n.tr("converter.status_failed"),
                     };
                     ui.horizontal(|ui| {
                         ui.label(format!("{name}  {status}"));
@@ -141,10 +129,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
                             ui.label(RichText::new(output_name).weak());
                         }
                         if let Some(error) = &state.error {
-                            ui.colored_label(
-                                Color32::from_rgb(225, 118, 117),
-                                error,
-                            );
+                            ui.colored_label(Color32::from_rgb(225, 118, 117), error);
                         }
                     });
                 }

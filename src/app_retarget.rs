@@ -5,34 +5,25 @@ use std::sync::mpsc;
 use crate::app::{App, ExportTaskResult, TaskKind};
 use crate::app_export::format_export_report;
 use crate::modules::glb::{
-    AnimationClipData, AnimationOutputMode, AnimationRuntime, GlbDocument,
-    GlbExportPreset,
+    AnimationClipData, AnimationOutputMode, AnimationRuntime, GlbDocument, GlbExportPreset,
 };
 use crate::modules::logging::{next_task_id, safe_path_label};
-use crate::modules::retarget::{
-    self, RetargetOptions, SkeletonDescriptor, SourceKind,
-};
+use crate::modules::retarget::{self, RetargetOptions, SkeletonDescriptor, SourceKind};
 use crate::modules::retarget_export;
 use three_d::Context;
 
 impl App {
-    pub(crate) fn initialize_glb_retarget_preview_skeleton(
-        &mut self,
-        context: &Context,
-    ) {
+    pub(crate) fn initialize_glb_retarget_preview_skeleton(&mut self, context: &Context) {
         let Some(target) = self.glb_retarget_target.as_ref() else {
             return;
         };
-        let Ok(skin) = target.skin_data_at(self.retarget_target_skin_index)
-        else {
+        let Ok(skin) = target.skin_data_at(self.retarget_target_skin_index) else {
             return;
         };
-        if let Err(error) = self.canvas.update_target_skeleton_animation(
-            context,
-            0,
-            0.0,
-            &skin.joints,
-        ) {
+        if let Err(error) =
+            self.canvas
+                .update_target_skeleton_animation(context, 0, 0.0, &skin.joints)
+        {
             tracing::error!(
                 target: "glb_retarget",
                 error = %error,
@@ -58,8 +49,7 @@ impl App {
         };
         match GlbDocument::load(&path) {
             Ok(document) => {
-                let mut export_selection =
-                    document.default_export_selection().unwrap_or_default();
+                let mut export_selection = document.default_export_selection().unwrap_or_default();
                 export_selection.preset = GlbExportPreset::CharacterPackage;
                 self.glb_retarget_target = Some(document);
                 self.glb_retarget_target_path = Some(path.clone());
@@ -90,10 +80,9 @@ impl App {
             return;
         };
         let report = (|| {
-            let edits =
-                crate::modules::operations::spec::EditSpec::from_export_edits(
-                    &self.glb_export_edits(false),
-                );
+            let edits = crate::modules::operations::spec::EditSpec::from_export_edits(
+                &self.glb_export_edits(false),
+            );
             let source = crate::modules::operations::retarget::glb_source(
                 source,
                 self.glb_path.as_deref().and_then(Path::parent),
@@ -105,19 +94,14 @@ impl App {
             let target = crate::modules::operations::retarget::target(
                 target.clone(),
                 self.retarget_target_skin_index,
-                crate::modules::operations::retarget::document_fingerprint(
-                    target,
-                )?,
+                crate::modules::operations::retarget::document_fingerprint(target)?,
                 ["Y", "-Z", "m"],
             )?;
             Ok::<_, crate::modules::operations::OperationError>(
-                crate::modules::operations::retarget::validate(
-                    &source, &target, mapping,
-                ),
+                crate::modules::operations::retarget::validate(&source, &target, mapping),
             )
         })();
-        self.retarget_validation =
-            Some(report.unwrap_or_else(|e| invalid_report(e.to_string())));
+        self.retarget_validation = Some(report.unwrap_or_else(|e| invalid_report(e.to_string())));
     }
 
     pub(crate) fn retarget_options(&self) -> RetargetOptions {
@@ -155,14 +139,10 @@ impl App {
             let target = crate::modules::operations::retarget::target(
                 target.clone(),
                 self.retarget_target_skin_index,
-                crate::modules::operations::retarget::document_fingerprint(
-                    target,
-                )?,
+                crate::modules::operations::retarget::document_fingerprint(target)?,
                 ["Y", "-Z", "m"],
             )?;
-            Ok::<_, crate::modules::operations::OperationError>((
-                source, target,
-            ))
+            Ok::<_, crate::modules::operations::OperationError>((source, target))
         })();
         let (source, target) = match context {
             Ok(v) => v,
@@ -176,15 +156,10 @@ impl App {
         let mapping = if let Some(mapping) = self.retarget_mapping.clone() {
             mapping
         } else if let Some(legacy) = self.mapping.as_ref() {
-            match retarget::from_legacy_bvh_mapping(
-                legacy,
-                source_descriptor,
-                target_descriptor,
-            ) {
+            match retarget::from_legacy_bvh_mapping(legacy, source_descriptor, target_descriptor) {
                 Ok(mapping) => mapping,
                 Err(error) => {
-                    self.retarget_validation =
-                        Some(invalid_report(error.to_string()));
+                    self.retarget_validation = Some(invalid_report(error.to_string()));
                     return;
                 }
             }
@@ -192,11 +167,7 @@ impl App {
             self.retarget_validation = None;
             return;
         };
-        let report = retarget::validate_mapping(
-            &mapping,
-            source_descriptor,
-            target_descriptor,
-        );
+        let report = retarget::validate_mapping(&mapping, source_descriptor, target_descriptor);
         self.retarget_mapping = Some(mapping);
         self.retarget_validation = Some(report);
         self.needs_bvh_target_reload = true;
@@ -285,12 +256,25 @@ impl App {
         export_selection.selected_animations = BTreeSet::from([0]);
         export_selection.animation_output = AnimationOutputMode::Combined;
         let request = crate::modules::operations::retarget::RetargetJob::for_snapshot_export(
-            self.bvh_path.clone().unwrap_or_default(), self.bvh_target_path.clone().unwrap_or_default(), path.clone(),
+            self.bvh_path.clone().unwrap_or_default(),
+            self.bvh_target_path.clone().unwrap_or_default(),
+            path.clone(),
             crate::modules::operations::retarget::SnapshotExportSettings {
-                source_skin: 0, target_skin: target_skin_index, source_axes: [self.bvh_up_axis.clone(),self.bvh_forward_axis.clone(),self.bvh_unit.clone()],
-                edits: Default::default(), options, clip_name: "BVH Retarget".into(), selection: export_selection,
-                reduce_keys: reduce_keys.then_some(key_tolerance), overwrite: self.output_overwrite,
-            });
+                source_skin: 0,
+                target_skin: target_skin_index,
+                source_axes: [
+                    self.bvh_up_axis.clone(),
+                    self.bvh_forward_axis.clone(),
+                    self.bvh_unit.clone(),
+                ],
+                edits: Default::default(),
+                options,
+                clip_name: "BVH Retarget".into(),
+                selection: export_selection,
+                reduce_keys: reduce_keys.then_some(key_tolerance),
+                overwrite: self.output_overwrite,
+            },
+        );
         std::thread::spawn(move || {
             let mut paths = Vec::new();
             let mut details = Vec::new();
@@ -305,10 +289,8 @@ impl App {
                 )
                 .map_err(|e| e.to_string())?;
                 let fingerprint =
-                    crate::modules::operations::retarget::document_fingerprint(
-                        &target,
-                    )
-                    .map_err(|e| e.to_string())?;
+                    crate::modules::operations::retarget::document_fingerprint(&target)
+                        .map_err(|e| e.to_string())?;
                 let target = crate::modules::operations::retarget::target(
                     target,
                     target_skin_index,
@@ -320,11 +302,8 @@ impl App {
                     &source, &target, &mapping, &request,
                 )
                 .map_err(|e| e.to_string())?;
-                let report = crate::modules::operations::glb::execute_job(
-                    &job,
-                    request.overwrite,
-                )
-                .map_err(|e| e.to_string())?;
+                let report = crate::modules::operations::glb::execute_job(&job, request.overwrite)
+                    .map_err(|e| e.to_string())?;
                 details.push(format_export_report(&report));
                 paths.push(path.clone());
                 Ok(())
@@ -388,8 +367,7 @@ impl App {
         };
         match descriptor.rest_world_transforms() {
             Ok(transforms) => {
-                let positions =
-                    transforms.iter().map(|value| value.0).collect::<Vec<_>>();
+                let positions = transforms.iter().map(|value| value.0).collect::<Vec<_>>();
                 let parents = descriptor
                     .nodes
                     .iter()
@@ -430,9 +408,7 @@ impl App {
             .as_ref()
             .is_some_and(|report| report.is_valid());
         if !report_valid {
-            if let Err(error) =
-                self.canvas.load_glb_for_target_preview(context, &path)
-            {
+            if let Err(error) = self.canvas.load_glb_for_target_preview(context, &path) {
                 tracing::error!(
                     target: "bvh_studio",
                     error = %error,
@@ -450,8 +426,7 @@ impl App {
         ) {
             Ok(mut clip) => {
                 if self.bvh_reduce_keys {
-                    if let Err(error) = clip.reduce_keys(self.bvh_key_tolerance)
-                    {
+                    if let Err(error) = clip.reduce_keys(self.bvh_key_tolerance) {
                         tracing::warn!(
                             target: "retarget",
                             error = %error,
@@ -467,9 +442,7 @@ impl App {
                     error = %error,
                     "BVH preview failed"
                 );
-                if let Err(error) =
-                    self.canvas.load_glb_for_target_preview(context, &path)
-                {
+                if let Err(error) = self.canvas.load_glb_for_target_preview(context, &path) {
                     tracing::error!(
                         target: "bvh_studio",
                         error = %error,
@@ -505,10 +478,9 @@ impl App {
         };
         match AnimationRuntime::from_bytes(&bytes, path.parent()) {
             Ok(runtime) => {
-                if let Err(error) =
-                    self.canvas.load_glb_with_runtime_for_target_preview(
-                        context, &path, runtime,
-                    )
+                if let Err(error) = self
+                    .canvas
+                    .load_glb_with_runtime_for_target_preview(context, &path, runtime)
                 {
                     tracing::error!(
                         target: "bvh_studio",
@@ -516,10 +488,9 @@ impl App {
                         "Target character preview failed"
                     );
                 } else {
-                    let _ = self.canvas.update_glb_animation(
-                        0,
-                        self.bvh_frame as f32 * source.frame_time,
-                    );
+                    let _ = self
+                        .canvas
+                        .update_glb_animation(0, self.bvh_frame as f32 * source.frame_time);
                     tracing::info!(
                         target: "retarget",
                         "BVH target character preview ready"
@@ -532,20 +503,15 @@ impl App {
                     error = %error,
                     "Target Mesh preview unavailable; using skeleton-only playback"
                 );
-                match AnimationRuntime::from_bytes_skeleton_only(
-                    &bytes,
-                    path.parent(),
-                ) {
+                match AnimationRuntime::from_bytes_skeleton_only(&bytes, path.parent()) {
                     Ok(runtime) => {
                         self.canvas.load_skeleton_runtime(runtime);
-                        if let Err(error) =
-                            self.canvas.update_target_skeleton_animation(
-                                context,
-                                0,
-                                self.bvh_frame as f32 * source.frame_time,
-                                &skin.joints,
-                            )
-                        {
+                        if let Err(error) = self.canvas.update_target_skeleton_animation(
+                            context,
+                            0,
+                            self.bvh_frame as f32 * source.frame_time,
+                            &skin.joints,
+                        ) {
                             tracing::error!(
                                 target: "retarget",
                                 error = %error,
@@ -598,20 +564,11 @@ impl App {
         .flatten()
         .collect();
         let result = (|| {
-            crate::modules::operations::check_output(
-                &path,
-                &sources,
-                self.output_overwrite,
-            )
-            .map_err(|e| e.to_string())?;
-            let bytes = serde_json::to_vec_pretty(mapping)
+            crate::modules::operations::check_output(&path, &sources, self.output_overwrite)
                 .map_err(|e| e.to_string())?;
-            crate::modules::atomic_file::write(
-                &path,
-                &bytes,
-                self.output_overwrite,
-            )
-            .map_err(|e| e.to_string())
+            let bytes = serde_json::to_vec_pretty(mapping).map_err(|e| e.to_string())?;
+            crate::modules::atomic_file::write(&path, &bytes, self.output_overwrite)
+                .map_err(|e| e.to_string())
         })();
         match result {
             Ok(()) => {
@@ -729,12 +686,23 @@ impl App {
             "Building the selected animation in background"
         );
         let mut request = crate::modules::operations::retarget::RetargetJob::for_snapshot_export(
-            source_path.clone(), target_path.clone(), output_path.clone(),
+            source_path.clone(),
+            target_path.clone(),
+            output_path.clone(),
             crate::modules::operations::retarget::SnapshotExportSettings {
-                source_skin: self.retarget_source_skin_index, target_skin: target_skin_index, source_axes: ["Y".into(),"-Z".into(),"m".into()],
-                edits: crate::modules::operations::spec::EditSpec::from_export_edits(&self.glb_export_edits(false)), options,
-                clip_name: "GLB Retarget".into(), selection: export_selection, reduce_keys: reduce_keys.then_some(key_tolerance), overwrite: self.output_overwrite,
-            });
+                source_skin: self.retarget_source_skin_index,
+                target_skin: target_skin_index,
+                source_axes: ["Y".into(), "-Z".into(), "m".into()],
+                edits: crate::modules::operations::spec::EditSpec::from_export_edits(
+                    &self.glb_export_edits(false),
+                ),
+                options,
+                clip_name: "GLB Retarget".into(),
+                selection: export_selection,
+                reduce_keys: reduce_keys.then_some(key_tolerance),
+                overwrite: self.output_overwrite,
+            },
+        );
         request.source_animation = source_clip_index;
         std::thread::spawn(move || {
             let mut paths = Vec::new();
@@ -750,10 +718,8 @@ impl App {
                 )
                 .map_err(|e| e.to_string())?;
                 let fingerprint =
-                    crate::modules::operations::retarget::document_fingerprint(
-                        &target,
-                    )
-                    .map_err(|e| e.to_string())?;
+                    crate::modules::operations::retarget::document_fingerprint(&target)
+                        .map_err(|e| e.to_string())?;
                 let target = crate::modules::operations::retarget::target(
                     target,
                     target_skin_index,
@@ -765,11 +731,8 @@ impl App {
                     &source, &target, &mapping, &request,
                 )
                 .map_err(|e| e.to_string())?;
-                let report = crate::modules::operations::glb::execute_job(
-                    &job,
-                    request.overwrite,
-                )
-                .map_err(|e| e.to_string())?;
+                let report = crate::modules::operations::glb::execute_job(&job, request.overwrite)
+                    .map_err(|e| e.to_string())?;
                 details.push(format_export_report(&report));
                 paths.push(output_path.clone());
                 Ok(())
@@ -835,18 +798,17 @@ impl App {
         let Some(source_path) = self.glb_path.as_deref() else {
             return;
         };
-        let target_skin =
-            match target.skin_data_at(self.retarget_target_skin_index) {
-                Ok(skin) => skin,
-                Err(error) => {
-                    tracing::error!(
-                        target: "glb_retarget",
-                        error = %error,
-                        "Target Skin is unavailable"
-                    );
-                    return;
-                }
-            };
+        let target_skin = match target.skin_data_at(self.retarget_target_skin_index) {
+            Ok(skin) => skin,
+            Err(error) => {
+                tracing::error!(
+                    target: "glb_retarget",
+                    error = %error,
+                    "Target Skin is unavailable"
+                );
+                return;
+            }
+        };
         let options = match self.glb_retarget_options() {
             Ok(options) => options,
             Err(error) => {
@@ -879,9 +841,7 @@ impl App {
             }
         };
         let mut generated = target;
-        if let Err(error) =
-            retarget_export::apply_retarget_clip(&mut generated, clip)
-        {
+        if let Err(error) = retarget_export::apply_retarget_clip(&mut generated, clip) {
             tracing::error!(
                 target: "glb_retarget",
                 error = %error,
@@ -900,10 +860,7 @@ impl App {
                 return;
             }
         };
-        match AnimationRuntime::from_bytes(
-            &generated_bytes,
-            target_path.parent(),
-        ) {
+        match AnimationRuntime::from_bytes(&generated_bytes, target_path.parent()) {
             Ok(runtime) => {
                 self.pending_glb_retarget_runtime = Some(runtime);
                 self.glb_retarget_preview_active = true;
@@ -953,7 +910,5 @@ fn invalid_report(error: String) -> retarget::MappingValidationReport {
 }
 
 fn same_path(path: &Path, source: Option<&Path>) -> bool {
-    source.is_some_and(|source| {
-        crate::modules::operations::same_path(path, source)
-    })
+    source.is_some_and(|source| crate::modules::operations::same_path(path, source))
 }

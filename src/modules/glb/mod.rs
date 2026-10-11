@@ -21,9 +21,9 @@ pub use self::resources::{PrimitiveTarget, TextureSlot};
 mod export_selection;
 #[allow(unused_imports)]
 pub use self::export_selection::{
-    AnimationOutputMode, GlbExportAnimation, GlbExportCatalog, GlbExportMesh,
-    GlbExportNode, GlbExportPreset, GlbExportPrimitive, GlbExportReport,
-    GlbExportScene, GlbExportSelection, GlbExportSkin, GlbExportValidation,
+    AnimationOutputMode, GlbExportAnimation, GlbExportCatalog, GlbExportMesh, GlbExportNode,
+    GlbExportPreset, GlbExportPrimitive, GlbExportReport, GlbExportScene, GlbExportSelection,
+    GlbExportSkin, GlbExportValidation,
 };
 
 mod animation;
@@ -218,10 +218,7 @@ impl RootTransformPreview {
         let rotation = euler_rotation_matrix(self.euler_degrees)?;
         Ok(multiply(
             translation_matrix(self.translation),
-            multiply(
-                scale_matrix([self.scale, self.scale, self.scale]),
-                rotation,
-            ),
+            multiply(scale_matrix([self.scale, self.scale, self.scale]), rotation),
         ))
     }
 }
@@ -286,32 +283,26 @@ impl GlbDocument {
         self.skin_data_at(0)
     }
 
-    pub fn skin_data_at(
-        &self,
-        skin_index: usize,
-    ) -> Result<SkinData, GlbError> {
+    pub fn skin_data_at(&self, skin_index: usize) -> Result<SkinData, GlbError> {
         let skins = self
             .json
             .get("skins")
             .and_then(Value::as_array)
             .ok_or_else(|| GlbError::Invalid("GLB has no skins".to_owned()))?;
-        let skin = skins.get(skin_index).ok_or_else(|| {
-            GlbError::Invalid(format!("GLB has no Skin entry {skin_index}"))
-        })?;
+        let skin = skins
+            .get(skin_index)
+            .ok_or_else(|| GlbError::Invalid(format!("GLB has no Skin entry {skin_index}")))?;
         let joints = skin
             .get("joints")
             .and_then(Value::as_array)
             .ok_or_else(|| GlbError::Invalid("Skin has no joints".to_owned()))?
             .iter()
             .map(|value| {
-                let index = value.as_u64().ok_or_else(|| {
-                    GlbError::Invalid("Skin joint index is invalid".to_owned())
-                })?;
-                usize::try_from(index).map_err(|_| {
-                    GlbError::Invalid(
-                        "Skin joint index is out of range".to_owned(),
-                    )
-                })
+                let index = value
+                    .as_u64()
+                    .ok_or_else(|| GlbError::Invalid("Skin joint index is invalid".to_owned()))?;
+                usize::try_from(index)
+                    .map_err(|_| GlbError::Invalid("Skin joint index is out of range".to_owned()))
             })
             .collect::<Result<Vec<_>, _>>()?;
         let mut unique_joints = BTreeSet::new();
@@ -329,9 +320,7 @@ impl GlbDocument {
             .ok_or_else(|| GlbError::Invalid("GLB has no nodes".to_owned()))?;
         let mut parents = vec![None; node_values.len()];
         for (index, node) in node_values.iter().enumerate() {
-            if let Some(children) =
-                node.get("children").and_then(Value::as_array)
-            {
+            if let Some(children) = node.get("children").and_then(Value::as_array) {
                 for child in children {
                     let child = child.as_u64().ok_or_else(|| {
                         GlbError::Invalid(format!(
@@ -339,9 +328,7 @@ impl GlbDocument {
                         ))
                     })?;
                     let child = usize::try_from(child).map_err(|_| {
-                        GlbError::Invalid(format!(
-                            "Node {index} child index is out of range"
-                        ))
+                        GlbError::Invalid(format!("Node {index} child index is out of range"))
                     })?;
                     if child >= parents.len() {
                         return Err(GlbError::Invalid(format!(
@@ -373,11 +360,7 @@ impl GlbDocument {
                 "Skin joint index exceeds the node array".to_owned(),
             ));
         }
-        self.validate_skin_inverse_bind_matrices(
-            skin_index,
-            skin,
-            joints.len(),
-        )?;
+        self.validate_skin_inverse_bind_matrices(skin_index, skin, joints.len())?;
         let nodes = node_values
             .iter()
             .enumerate()
@@ -390,9 +373,7 @@ impl GlbDocument {
                         Some(value) => value
                             .as_str()
                             .ok_or_else(|| {
-                                GlbError::Invalid(format!(
-                                    "Node {index} name is not a string"
-                                ))
+                                GlbError::Invalid(format!("Node {index} name is not a string"))
                             })?
                             .to_owned(),
                         None => format!("Node {index}"),
@@ -408,14 +389,10 @@ impl GlbDocument {
         for (index, node) in node_values.iter().enumerate() {
             if let Some(value) = node.get("skin") {
                 let node_skin = value.as_u64().ok_or_else(|| {
-                    GlbError::Invalid(format!(
-                        "Node {index} Skin reference is not an integer"
-                    ))
+                    GlbError::Invalid(format!("Node {index} Skin reference is not an integer"))
                 })?;
                 let node_skin = usize::try_from(node_skin).map_err(|_| {
-                    GlbError::Invalid(format!(
-                        "Node {index} Skin reference is out of range"
-                    ))
+                    GlbError::Invalid(format!("Node {index} Skin reference is out of range"))
                 })?;
                 if node_skin >= skins.len() {
                     return Err(GlbError::Invalid(format!(
@@ -451,9 +428,7 @@ impl GlbDocument {
             Some(value) => value
                 .as_str()
                 .ok_or_else(|| {
-                    GlbError::Invalid(format!(
-                        "Skin {skin_index} name is not a string"
-                    ))
+                    GlbError::Invalid(format!("Skin {skin_index} name is not a string"))
                 })?
                 .to_owned(),
             None => "Skin".to_owned(),
@@ -495,15 +470,14 @@ impl GlbDocument {
                 "Skin {skin_index} inverse bind matrices must use FLOAT MAT4 values"
             )));
         }
-        let count =
-            accessor
-                .get("count")
-                .and_then(Value::as_u64)
-                .ok_or_else(|| {
-                    GlbError::Invalid(format!(
+        let count = accessor
+            .get("count")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| {
+                GlbError::Invalid(format!(
                     "Skin {skin_index} inverse bind matrix count is missing"
                 ))
-                })?;
+            })?;
         let count = usize::try_from(count).map_err(|_| {
             GlbError::Invalid(format!(
                 "Skin {skin_index} inverse bind matrix count is out of range"
@@ -587,12 +561,11 @@ impl GlbDocument {
                 "Skin {skin_index} inverse bind bufferView length is out of range"
             ))
         })?;
-        let accessor_offset =
-            usize::try_from(accessor_offset).map_err(|_| {
-                GlbError::Invalid(format!(
+        let accessor_offset = usize::try_from(accessor_offset).map_err(|_| {
+            GlbError::Invalid(format!(
                 "Skin {skin_index} inverse bind accessor offset is out of range"
             ))
-            })?;
+        })?;
         let stride = usize::try_from(stride).map_err(|_| {
             GlbError::Invalid(format!(
                 "Skin {skin_index} inverse bind byteStride is out of range"
@@ -603,12 +576,11 @@ impl GlbDocument {
                 "Skin {skin_index} inverse bind bufferView range is out of range"
             ))
         })?;
-        let first =
-            view_offset.checked_add(accessor_offset).ok_or_else(|| {
-                GlbError::Invalid(format!(
+        let first = view_offset.checked_add(accessor_offset).ok_or_else(|| {
+            GlbError::Invalid(format!(
                 "Skin {skin_index} inverse bind accessor range is out of range"
             ))
-            })?;
+        })?;
         let last = if count == 0 {
             first
         } else {
@@ -630,17 +602,17 @@ impl GlbDocument {
                 "Skin {skin_index} inverse bind accessor exceeds its bufferView"
             )));
         }
-        let bin = self.bin.as_deref().ok_or_else(|| {
-            GlbError::Invalid("Accessor requires a BIN chunk".to_owned())
-        })?;
+        let bin = self
+            .bin
+            .as_deref()
+            .ok_or_else(|| GlbError::Invalid("Accessor requires a BIN chunk".to_owned()))?;
         if view_end > bin.len() {
             return Err(GlbError::Invalid(format!(
                 "Skin {skin_index} inverse bind bufferView exceeds the BIN chunk"
             )));
         }
         let non_finite = (0..count).any(|index| {
-            let Some(start) = first.checked_add(index.saturating_mul(stride))
-            else {
+            let Some(start) = first.checked_add(index.saturating_mul(stride)) else {
                 return true;
             };
             let Some(end) = start.checked_add(64) else {
@@ -648,10 +620,7 @@ impl GlbDocument {
             };
             bin.get(start..end).is_none_or(|bytes| {
                 bytes.chunks_exact(4).any(|chunk| {
-                    !f32::from_le_bytes([
-                        chunk[0], chunk[1], chunk[2], chunk[3],
-                    ])
-                    .is_finite()
+                    !f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]).is_finite()
                 })
             })
         });
@@ -663,10 +632,7 @@ impl GlbDocument {
         Ok(())
     }
 
-    pub fn append_animation(
-        &mut self,
-        clip: &AnimationClipData,
-    ) -> Result<(), GlbError> {
+    pub fn append_animation(&mut self, clip: &AnimationClipData) -> Result<(), GlbError> {
         let backup = self.clone();
         if let Err(error) = self.append_animation_inner(clip) {
             *self = backup;
@@ -675,23 +641,17 @@ impl GlbDocument {
         Ok(())
     }
 
-    fn append_animation_inner(
-        &mut self,
-        clip: &AnimationClipData,
-    ) -> Result<(), GlbError> {
+    fn append_animation_inner(&mut self, clip: &AnimationClipData) -> Result<(), GlbError> {
         if clip.times.len() < 2
             || clip.times.iter().any(|time| !time.is_finite())
             || clip.times.windows(2).any(|pair| pair[0] >= pair[1])
         {
             return Err(GlbError::Invalid(
-                "Animation must contain at least two finite keyframe times"
-                    .to_owned(),
+                "Animation must contain at least two finite keyframe times".to_owned(),
             ));
         }
         if clip.channels.is_empty() {
-            return Err(GlbError::Invalid(
-                "Animation has no channels".to_owned(),
-            ));
+            return Err(GlbError::Invalid("Animation has no channels".to_owned()));
         }
         let input = self.append_float_accessor(
             &clip
@@ -720,16 +680,11 @@ impl GlbDocument {
             if channel.rotations.len() != clip.times.len()
                 || channel.rotations.iter().any(|rotation| {
                     rotation.iter().any(|value| !value.is_finite())
-                        || rotation
-                            .iter()
-                            .map(|value| value * value)
-                            .sum::<f32>()
-                            <= f32::EPSILON
+                        || rotation.iter().map(|value| value * value).sum::<f32>() <= f32::EPSILON
                 })
             {
                 return Err(GlbError::Invalid(
-                    "Animation rotation keyframes do not match the timeline"
-                        .to_owned(),
+                    "Animation rotation keyframes do not match the timeline".to_owned(),
                 ));
             }
             let output = self.append_float_accessor(
@@ -742,17 +697,21 @@ impl GlbDocument {
             )?;
             let sampler = samplers.len();
             samplers.push(json!({"input": input, "output": output, "interpolation": "LINEAR"}));
-            channels.push(json!({"sampler": sampler, "target": {"node": channel.node, "path": "rotation"}}));
+            channels.push(
+                json!({"sampler": sampler, "target": {"node": channel.node, "path": "rotation"}}),
+            );
             if let Some(translations) = &channel.translations {
                 if translations.len() != clip.times.len() {
-                    return Err(GlbError::Invalid("Animation translation keyframes do not match the timeline".to_owned()));
-                }
-                if translations.iter().any(|translation| {
-                    translation.iter().any(|value| !value.is_finite())
-                }) {
                     return Err(GlbError::Invalid(
-                        "Animation translation keyframes contain non-finite values"
-                            .to_owned(),
+                        "Animation translation keyframes do not match the timeline".to_owned(),
+                    ));
+                }
+                if translations
+                    .iter()
+                    .any(|translation| translation.iter().any(|value| !value.is_finite()))
+                {
+                    return Err(GlbError::Invalid(
+                        "Animation translation keyframes contain non-finite values".to_owned(),
                     ));
                 }
                 let output = self.append_float_accessor(
@@ -774,7 +733,10 @@ impl GlbDocument {
         if let Some(animations) = animations {
             animations.push(json!({"name": clip.name, "samplers": samplers, "channels": channels}));
         } else if let Some(object) = self.json.as_object_mut() {
-            object.insert("animations".to_owned(), json!([{"name": clip.name, "samplers": samplers, "channels": channels}]));
+            object.insert(
+                "animations".to_owned(),
+                json!([{"name": clip.name, "samplers": samplers, "channels": channels}]),
+            );
         } else {
             return Err(GlbError::Invalid(
                 "GLB JSON root is not an object".to_owned(),
@@ -803,9 +765,7 @@ impl GlbDocument {
             .and_then(Value::as_array_mut)
             .and_then(|nodes| nodes.get_mut(node_index))
             .ok_or_else(|| {
-                GlbError::Invalid(format!(
-                    "Animation target node {node_index} disappeared"
-                ))
+                GlbError::Invalid(format!("Animation target node {node_index} disappeared"))
             })?;
         let object = node.as_object_mut().ok_or_else(|| {
             GlbError::Invalid(format!(
@@ -821,10 +781,7 @@ impl GlbDocument {
 
     /// Replace the document's animation list with one generated clip while
     /// leaving meshes, skins, buffers, extensions, and other resources intact.
-    pub fn replace_animations(
-        &mut self,
-        clip: &AnimationClipData,
-    ) -> Result<(), GlbError> {
+    pub fn replace_animations(&mut self, clip: &AnimationClipData) -> Result<(), GlbError> {
         let backup = self.clone();
         if let Some(object) = self.json.as_object_mut() {
             object.insert("animations".to_owned(), json!([]));
@@ -844,9 +801,7 @@ impl GlbDocument {
     /// exports use `prune_for_export` so references and BIN data are rebuilt.
     #[allow(dead_code)]
     pub fn strip_render_resources(&mut self) {
-        if let Some(nodes) =
-            self.json.get_mut("nodes").and_then(Value::as_array_mut)
-        {
+        if let Some(nodes) = self.json.get_mut("nodes").and_then(Value::as_array_mut) {
             for node in nodes {
                 if let Some(object) = node.as_object_mut() {
                     object.remove("mesh");
@@ -882,8 +837,7 @@ impl GlbDocument {
             EditOperation::ScaleRoots { factor } => {
                 if !factor.is_finite() || factor <= 0.0 {
                     return Err(GlbError::Invalid(
-                        "Scale factor must be finite and greater than zero"
-                            .to_owned(),
+                        "Scale factor must be finite and greater than zero".to_owned(),
                     ));
                 }
                 let scale = scale_matrix([factor, factor, factor]);
@@ -914,10 +868,7 @@ impl GlbDocument {
         Ok(())
     }
 
-    pub fn standardize(
-        &mut self,
-        profile: &StandardizationProfile,
-    ) -> Result<(), GlbError> {
+    pub fn standardize(&mut self, profile: &StandardizationProfile) -> Result<(), GlbError> {
         if !profile.unit_scale.is_finite() || profile.unit_scale <= 0.0 {
             return Err(GlbError::Invalid(
                 "Unit scale must be finite and greater than zero".to_owned(),
@@ -928,9 +879,7 @@ impl GlbDocument {
                 factor: profile.unit_scale,
             })?;
         }
-        if profile.up_axis != Axis::Y
-            || profile.forward_axis != ForwardAxis::NegativeZ
-        {
+        if profile.up_axis != Axis::Y || profile.forward_axis != ForwardAxis::NegativeZ {
             return Err(GlbError::Unsupported(
                 "Automatic axis detection is not enabled; use a manual rotation before export"
                     .to_owned(),
@@ -944,24 +893,15 @@ impl GlbDocument {
         F: FnMut(&mut Value) -> Result<(), GlbError>,
     {
         let mut roots = BTreeSet::new();
-        if let Some(scenes) = self.json.get("scenes").and_then(Value::as_array)
-        {
+        if let Some(scenes) = self.json.get("scenes").and_then(Value::as_array) {
             for scene in scenes {
-                if let Some(nodes) =
-                    scene.get("nodes").and_then(Value::as_array)
-                {
+                if let Some(nodes) = scene.get("nodes").and_then(Value::as_array) {
                     for value in nodes {
                         let index = value.as_u64().ok_or_else(|| {
-                            GlbError::Invalid(
-                                "Scene root node index is not an integer"
-                                    .to_owned(),
-                            )
+                            GlbError::Invalid("Scene root node index is not an integer".to_owned())
                         })?;
                         let index = usize::try_from(index).map_err(|_| {
-                            GlbError::Invalid(
-                                "Scene root node index is out of range"
-                                    .to_owned(),
-                            )
+                            GlbError::Invalid("Scene root node index is out of range".to_owned())
                         })?;
                         roots.insert(index);
                     }
@@ -975,14 +915,10 @@ impl GlbDocument {
             .json
             .get_mut("nodes")
             .and_then(Value::as_array_mut)
-            .ok_or_else(|| {
-                GlbError::Invalid("GLB has no nodes array".to_owned())
-            })?;
+            .ok_or_else(|| GlbError::Invalid("GLB has no nodes array".to_owned()))?;
         for index in roots {
             let node = nodes.get_mut(index).ok_or_else(|| {
-                GlbError::Invalid(format!(
-                    "Scene references missing node {index}"
-                ))
+                GlbError::Invalid(format!("Scene references missing node {index}"))
             })?;
             operation(node)?;
         }
@@ -1003,22 +939,16 @@ impl GlbDocument {
             .get("accessors")
             .and_then(Value::as_array)
             .and_then(|items| items.get(index))
-            .ok_or_else(|| {
-                GlbError::Invalid(format!("Missing accessor {index}"))
-            })
+            .ok_or_else(|| GlbError::Invalid(format!("Missing accessor {index}")))
     }
 
-    fn read_accessor_f32(
-        &self,
-        index: usize,
-    ) -> Result<Vec<Vec<f32>>, GlbError> {
+    fn read_accessor_f32(&self, index: usize) -> Result<Vec<Vec<f32>>, GlbError> {
         let accessor = self.accessor(index)?;
         let component_type = accessor
             .get("componentType")
             .and_then(Value::as_u64)
             .unwrap_or_default();
-        if component_type != 5126
-            || accessor.get("type").and_then(Value::as_str) != Some("SCALAR")
+        if component_type != 5126 || accessor.get("type").and_then(Value::as_str) != Some("SCALAR")
         {
             return Err(GlbError::Unsupported(
                 "Animation inputs must be float scalar accessors".to_owned(),
@@ -1027,15 +957,10 @@ impl GlbDocument {
         let count = accessor
             .get("count")
             .and_then(Value::as_u64)
-            .ok_or_else(|| {
-                GlbError::Invalid("Accessor count is missing".to_owned())
-            })
+            .ok_or_else(|| GlbError::Invalid("Accessor count is missing".to_owned()))
             .and_then(|count| {
-                usize::try_from(count).map_err(|_| {
-                    GlbError::Invalid(
-                        "Accessor count is out of range".to_owned(),
-                    )
-                })
+                usize::try_from(count)
+                    .map_err(|_| GlbError::Invalid("Accessor count is out of range".to_owned()))
             })?;
         let bytes = self.accessor_bytes(accessor, 4)?;
         Ok((0..count)
@@ -1052,24 +977,16 @@ impl GlbDocument {
             .collect())
     }
 
-    fn accessor_bytes(
-        &self,
-        accessor: &Value,
-        element_size: usize,
-    ) -> Result<Vec<u8>, GlbError> {
+    fn accessor_bytes(&self, accessor: &Value, element_size: usize) -> Result<Vec<u8>, GlbError> {
         let view_index = accessor
             .get("bufferView")
             .and_then(Value::as_u64)
             .ok_or_else(|| {
-                GlbError::Unsupported(
-                    "Sparse or unbound accessors are not supported".to_owned(),
-                )
+                GlbError::Unsupported("Sparse or unbound accessors are not supported".to_owned())
             })
             .and_then(|index| {
                 usize::try_from(index).map_err(|_| {
-                    GlbError::Invalid(
-                        "Accessor bufferView index is out of range".to_owned(),
-                    )
+                    GlbError::Invalid("Accessor bufferView index is out of range".to_owned())
                 })
             })?;
         let view = self
@@ -1077,24 +994,16 @@ impl GlbDocument {
             .get("bufferViews")
             .and_then(Value::as_array)
             .and_then(|items| items.get(view_index))
-            .ok_or_else(|| {
-                GlbError::Invalid(format!("Missing bufferView {view_index}"))
-            })?;
-        let buffer_index = json_u64_field(
-            view.get("buffer"),
-            "Animation buffer index",
-            Some(0),
-        )?;
+            .ok_or_else(|| GlbError::Invalid(format!("Missing bufferView {view_index}")))?;
+        let buffer_index = json_u64_field(view.get("buffer"), "Animation buffer index", Some(0))?;
         if buffer_index != 0 {
             return Err(GlbError::Unsupported(
                 "Animation accessors must use the GLB BIN buffer".to_owned(),
             ));
         }
-        if view.get("byteStride").is_some() || accessor.get("sparse").is_some()
-        {
+        if view.get("byteStride").is_some() || accessor.get("sparse").is_some() {
             return Err(GlbError::Unsupported(
-                "Strided and sparse animation accessors are not supported"
-                    .to_owned(),
+                "Strided and sparse animation accessors are not supported".to_owned(),
             ));
         }
         let view_offset = json_u64_field(
@@ -1112,31 +1021,22 @@ impl GlbDocument {
             "Animation accessor byteOffset",
             Some(0),
         )?;
-        let count =
-            json_u64_field(accessor.get("count"), "Accessor count", None)?;
+        let count = json_u64_field(accessor.get("count"), "Accessor count", None)?;
         let offset = usize::try_from(view_offset)
             .ok()
             .and_then(|value| {
-                usize::try_from(accessor_offset).ok().and_then(
-                    |accessor_offset| value.checked_add(accessor_offset),
-                )
+                usize::try_from(accessor_offset)
+                    .ok()
+                    .and_then(|accessor_offset| value.checked_add(accessor_offset))
             })
-            .ok_or_else(|| {
-                GlbError::Invalid(
-                    "Accessor byte offset is out of range".to_owned(),
-                )
-            })?;
+            .ok_or_else(|| GlbError::Invalid("Accessor byte offset is out of range".to_owned()))?;
         let length = usize::try_from(count)
             .ok()
             .and_then(|count| count.checked_mul(element_size))
-            .ok_or_else(|| {
-                GlbError::Invalid(
-                    "Accessor byte length is out of range".to_owned(),
-                )
-            })?;
-        let end = offset.checked_add(length).ok_or_else(|| {
-            GlbError::Invalid("Accessor byte range is out of range".to_owned())
-        })?;
+            .ok_or_else(|| GlbError::Invalid("Accessor byte length is out of range".to_owned()))?;
+        let end = offset
+            .checked_add(length)
+            .ok_or_else(|| GlbError::Invalid("Accessor byte range is out of range".to_owned()))?;
         let view_end = usize::try_from(view_length)
             .ok()
             .and_then(|length| {
@@ -1145,27 +1045,25 @@ impl GlbDocument {
                     .and_then(|offset| offset.checked_add(length))
             })
             .ok_or_else(|| {
-                GlbError::Invalid(
-                    "Animation bufferView byte range is out of range"
-                        .to_owned(),
-                )
+                GlbError::Invalid("Animation bufferView byte range is out of range".to_owned())
             })?;
         if end > view_end {
             return Err(GlbError::Invalid(
                 "Animation accessor exceeds its bufferView".to_owned(),
             ));
         }
-        let bin = self.bin.as_deref().ok_or_else(|| {
-            GlbError::Invalid("Accessor requires a BIN chunk".to_owned())
-        })?;
+        let bin = self
+            .bin
+            .as_deref()
+            .ok_or_else(|| GlbError::Invalid("Accessor requires a BIN chunk".to_owned()))?;
         if view_end > bin.len() {
             return Err(GlbError::Invalid(
                 "Animation bufferView exceeds the BIN chunk".to_owned(),
             ));
         }
-        bin.get(offset..end).map(ToOwned::to_owned).ok_or_else(|| {
-            GlbError::Invalid("Animation accessor exceeds BIN chunk".to_owned())
-        })
+        bin.get(offset..end)
+            .map(ToOwned::to_owned)
+            .ok_or_else(|| GlbError::Invalid("Animation accessor exceeds BIN chunk".to_owned()))
     }
 
     fn append_float_accessor(
@@ -1185,8 +1083,7 @@ impl GlbDocument {
         };
         if values.is_empty()
             || values.iter().any(|value| {
-                value.len() != components
-                    || value.iter().any(|component| !component.is_finite())
+                value.len() != components || value.iter().any(|component| !component.is_finite())
             })
         {
             return Err(GlbError::Invalid(
@@ -1214,9 +1111,7 @@ impl GlbDocument {
             .json
             .get_mut("bufferViews")
             .and_then(Value::as_array_mut)
-            .ok_or_else(|| {
-                GlbError::Invalid("GLB has no bufferViews array".to_owned())
-            })?;
+            .ok_or_else(|| GlbError::Invalid("GLB has no bufferViews array".to_owned()))?;
         let view_index = views.len();
         views.push(json!({
             "buffer": 0,
@@ -1227,9 +1122,7 @@ impl GlbDocument {
             .json
             .get_mut("accessors")
             .and_then(Value::as_array_mut)
-            .ok_or_else(|| {
-                GlbError::Invalid("GLB has no accessors array".to_owned())
-            })?;
+            .ok_or_else(|| GlbError::Invalid("GLB has no accessors array".to_owned()))?;
         let accessor_index = accessors.len();
         accessors.push(json!({
             "bufferView": view_index,
@@ -1255,11 +1148,10 @@ fn json_u64_field(
     default: Option<u64>,
 ) -> Result<u64, GlbError> {
     match value {
-        Some(value) => value.as_u64().ok_or_else(|| {
-            GlbError::Invalid(format!("{label} must be a non-negative integer"))
-        }),
-        None => default
-            .ok_or_else(|| GlbError::Invalid(format!("{label} is missing"))),
+        Some(value) => value
+            .as_u64()
+            .ok_or_else(|| GlbError::Invalid(format!("{label} must be a non-negative integer"))),
+        None => default.ok_or_else(|| GlbError::Invalid(format!("{label} is missing"))),
     }
 }
 
@@ -1297,12 +1189,8 @@ fn euler_rotation_matrix(degrees: [f32; 3]) -> Result<[[f32; 4]; 4], GlbError> {
     Ok(multiply(rotation_z, multiply(rotation_y, rotation_x)))
 }
 
-fn rotation_matrix(
-    axis: [f32; 3],
-    radians: f32,
-) -> Result<[[f32; 4]; 4], GlbError> {
-    let length =
-        (axis[0] * axis[0] + axis[1] * axis[1] + axis[2] * axis[2]).sqrt();
+fn rotation_matrix(axis: [f32; 3], radians: f32) -> Result<[[f32; 4]; 4], GlbError> {
+    let length = (axis[0] * axis[0] + axis[1] * axis[1] + axis[2] * axis[2]).sqrt();
     if !length.is_finite() || length <= f32::EPSILON || !radians.is_finite() {
         return Err(GlbError::Invalid(
             "Rotation axis and angle must be finite".to_owned(),

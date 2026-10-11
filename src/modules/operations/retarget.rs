@@ -5,8 +5,8 @@ use crate::modules::{
     bvh::BvhDocument,
     glb::{AnimationRuntime, GlbDocument, GlbExportSelection, SkinData},
     retarget::{
-        self, MappingValidationReport, RetargetOptions, SkeletonDescriptor,
-        SkeletonMapping, SourceKind,
+        self, MappingValidationReport, RetargetOptions, SkeletonDescriptor, SkeletonMapping,
+        SourceKind,
     },
     retarget_export,
 };
@@ -103,8 +103,7 @@ impl RetargetJob {
         job.root_motion = settings.options.root_motion;
         job.normalize_heading = settings.options.normalize_initial_heading;
         job.sample_rate = settings.options.sample_rate;
-        job.selection =
-            Some(SelectionSpec::from_selection(&settings.selection));
+        job.selection = Some(SelectionSpec::from_selection(&settings.selection));
         job.reduce_keys = settings.reduce_keys;
         job.overwrite = settings.overwrite;
         job
@@ -183,9 +182,7 @@ pub enum Source {
 impl Source {
     pub fn descriptor(&self) -> &SkeletonDescriptor {
         match self {
-            Self::Bvh { descriptor, .. } | Self::Glb { descriptor, .. } => {
-                descriptor
-            }
+            Self::Bvh { descriptor, .. } | Self::Glb { descriptor, .. } => descriptor,
         }
     }
 }
@@ -210,9 +207,7 @@ pub fn glb_source(
     let runtime = AnimationRuntime::from_bytes_skeleton_only(&bytes, directory)
         .map_err(|e| OperationError::validation(e.to_string()))?;
     let clip = runtime.clips.get(clip_index).ok_or_else(|| {
-        OperationError::validation(format!(
-            "Source animation {clip_index} does not exist"
-        ))
+        OperationError::validation(format!("Source animation {clip_index} does not exist"))
     })?;
     if !clip.is_playable() {
         return Err(OperationError::validation(format!(
@@ -357,12 +352,7 @@ pub fn prompt(
         Source::Bvh {
             document,
             descriptor,
-        } => retarget::build_bvh_agent_prompt(
-            document,
-            descriptor,
-            &target.descriptor,
-            candidate,
-        )?,
+        } => retarget::build_bvh_agent_prompt(document, descriptor, &target.descriptor, candidate)?,
         Source::Glb {
             runtime,
             clip_index,
@@ -394,16 +384,14 @@ pub fn prepare(
         return Err(OperationError::validation(validation.errors.join("; ")));
     }
     let clip = match source {
-        Source::Bvh { document, .. } => {
-            retarget_export::retarget_clip_from_bvh(
-                document,
-                &target.skin,
-                mapping,
-                job.options()?,
-                &job.clip_name,
-                job.reduce_keys,
-            )?
-        }
+        Source::Bvh { document, .. } => retarget_export::retarget_clip_from_bvh(
+            document,
+            &target.skin,
+            mapping,
+            job.options()?,
+            &job.clip_name,
+            job.reduce_keys,
+        )?,
         Source::Glb {
             document,
             clip_index,
@@ -431,16 +419,15 @@ pub fn prepare(
             ..document.default_export_selection()?
         }
     };
-    if selection.animation_output
-        != crate::modules::glb::AnimationOutputMode::Combined
-    {
+    if selection.animation_output != crate::modules::glb::AnimationOutputMode::Combined {
         return Err(OperationError::validation(
             "Retarget output contains one combined clip",
         ));
     }
-    let output = job.out.as_ref().ok_or_else(|| {
-        OperationError::validation("Retarget output is required")
-    })?;
+    let output = job
+        .out
+        .as_ref()
+        .ok_or_else(|| OperationError::validation("Retarget output is required"))?;
     let mut inputs = vec![job.source.as_path(), job.target.as_path()];
     if let Some(mapping) = job.mapping.as_deref() {
         inputs.push(mapping);
@@ -454,23 +441,18 @@ pub fn prepare(
         &inputs,
         job.overwrite,
     )?;
-    jobs.into_iter().next().ok_or_else(|| {
-        OperationError::validation("Retarget produced no output job")
-    })
+    jobs.into_iter()
+        .next()
+        .ok_or_else(|| OperationError::validation("Retarget produced no output job"))
 }
 
-pub fn document_fingerprint(
-    document: &GlbDocument,
-) -> Result<String, OperationError> {
+pub fn document_fingerprint(document: &GlbDocument) -> Result<String, OperationError> {
     match document.source_path.as_deref() {
         Some(path) if !document.dirty => file_sha256(path),
         _ => Ok(retarget::sha256_hex(&document.to_bytes()?)),
     }
 }
-pub fn bvh_source(
-    document: BvhDocument,
-    axes: [&str; 3],
-) -> Result<Source, OperationError> {
+pub fn bvh_source(document: BvhDocument, axes: [&str; 3]) -> Result<Source, OperationError> {
     let hash = match document.source_path.as_deref() {
         Some(path) => file_sha256(path)?,
         None => retarget::sha256_hex(document.to_text()?.as_bytes()),

@@ -73,12 +73,9 @@ impl UpAxisPreset {
     /// compared modulo a full turn, so `-180.0` finds `YDown`.  `None`
     /// means the current rotation no longer corresponds to a preset.
     pub fn from_correction_euler_degrees(euler: [f32; 3]) -> Option<Self> {
-        Self::ALL.into_iter().find(|preset| {
-            euler_matches(
-                preset.correction_euler_degrees(),
-                normalize_euler(euler),
-            )
-        })
+        Self::ALL
+            .into_iter()
+            .find(|preset| euler_matches(preset.correction_euler_degrees(), normalize_euler(euler)))
     }
 }
 
@@ -128,12 +125,9 @@ mod tests {
     }
 
     fn determinant_3x3(matrix: &[[f32; 4]; 4]) -> f32 {
-        matrix[0][0]
-            * (matrix[1][1] * matrix[2][2] - matrix[1][2] * matrix[2][1])
-            - matrix[0][1]
-                * (matrix[1][0] * matrix[2][2] - matrix[1][2] * matrix[2][0])
-            + matrix[0][2]
-                * (matrix[1][0] * matrix[2][1] - matrix[1][1] * matrix[2][0])
+        matrix[0][0] * (matrix[1][1] * matrix[2][2] - matrix[1][2] * matrix[2][1])
+            - matrix[0][1] * (matrix[1][0] * matrix[2][2] - matrix[1][2] * matrix[2][0])
+            + matrix[0][2] * (matrix[1][0] * matrix[2][1] - matrix[1][1] * matrix[2][0])
     }
 
     fn vectors_close(left: [f32; 3], right: [f32; 3]) -> bool {
@@ -169,8 +163,7 @@ mod tests {
 
     #[test]
     fn y_down_preset_preserves_negative_z_forward() {
-        let matrix =
-            rotation_of_euler(UpAxisPreset::YDown.correction_euler_degrees());
+        let matrix = rotation_of_euler(UpAxisPreset::YDown.correction_euler_degrees());
         let forward = apply_rotation(matrix, [0.0, 0.0, -1.0]);
         assert!(vectors_close(forward, [0.0, 0.0, -1.0]));
     }

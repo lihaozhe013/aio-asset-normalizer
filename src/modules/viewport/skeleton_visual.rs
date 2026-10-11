@@ -28,10 +28,7 @@ pub struct SkeletonPose {
 }
 
 impl SkeletonPose {
-    pub fn from_positions(
-        positions: Vec<[f32; 3]>,
-        parents: Vec<Option<usize>>,
-    ) -> Self {
+    pub fn from_positions(positions: Vec<[f32; 3]>, parents: Vec<Option<usize>>) -> Self {
         let world_rotations = vec![[0.0, 0.0, 0.0, 1.0]; positions.len()];
         let end_sites = vec![None; positions.len()];
         Self {
@@ -87,9 +84,9 @@ impl SkeletonPose {
                 .as_ref()
                 .map(|positions| {
                     positions.len() == count
-                        && positions.iter().all(|point| {
-                            point.iter().all(|value| value.is_finite())
-                        })
+                        && positions
+                            .iter()
+                            .all(|point| point.iter().all(|value| value.is_finite()))
                 })
                 .unwrap_or(true)
     }
@@ -129,10 +126,7 @@ pub struct SkeletonMetrics {
 }
 
 impl SkeletonMetrics {
-    pub fn from_positions(
-        positions: &[[f32; 3]],
-        parents: &[Option<usize>],
-    ) -> Self {
+    pub fn from_positions(positions: &[[f32; 3]], parents: &[Option<usize>]) -> Self {
         let mut minimum = [f32::INFINITY; 3];
         let mut maximum = [f32::NEG_INFINITY; 3];
         let mut lengths = Vec::new();
@@ -146,8 +140,7 @@ impl SkeletonMetrics {
             }
         }
         for (index, point) in positions.iter().enumerate() {
-            let Some(parent) = parents.get(index).and_then(|value| *value)
-            else {
+            let Some(parent) = parents.get(index).and_then(|value| *value) else {
                 continue;
             };
             let Some(parent_point) = positions.get(parent) else {
@@ -225,11 +218,7 @@ pub struct SkeletonVisual {
 }
 
 impl SkeletonVisual {
-    pub fn new(
-        context: &Context,
-        color: Srgba,
-        config: SkeletonVisualConfig,
-    ) -> Self {
+    pub fn new(context: &Context, color: Srgba, config: SkeletonVisualConfig) -> Self {
         let config = sanitize_config(config);
         let empty = Instances::default();
         let mut octahedral = Gm::new(
@@ -334,8 +323,8 @@ impl SkeletonVisual {
             .as_deref()
             .filter(|positions| positions.len() == pose.positions.len())
             .unwrap_or(&pose.positions);
-        let rest_changed = pose.rest_positions.is_some()
-            && self.calibration_positions != rest_positions;
+        let rest_changed =
+            pose.rest_positions.is_some() && self.calibration_positions != rest_positions;
         if !self.has_pose
             || self.parents != pose.parents
             || rest_changed
@@ -343,8 +332,7 @@ impl SkeletonVisual {
         {
             self.parents = pose.parents.clone();
             self.calibration_positions = rest_positions.to_vec();
-            self.metrics =
-                SkeletonMetrics::from_positions(rest_positions, &pose.parents);
+            self.metrics = SkeletonMetrics::from_positions(rest_positions, &pose.parents);
         }
         let mut bone_instances = Vec::new();
         let mut octahedral_instances = Vec::new();
@@ -356,8 +344,7 @@ impl SkeletonVisual {
         for (index, point) in pose.positions.iter().enumerate() {
             expand_bounds(&mut minimum, &mut maximum, *point);
             let depth = joint_depth(index, &pose.parents);
-            let has_child =
-                pose.parents.iter().any(|parent| *parent == Some(index));
+            let has_child = pose.parents.iter().any(|parent| *parent == Some(index));
             let size_factor = if depth == 0 {
                 1.35
             } else if !has_child {
@@ -366,13 +353,9 @@ impl SkeletonVisual {
                 1.0
             };
             let radius = self.metrics.joint_radius * size_factor;
-            joint_transforms.push(
-                Mat4::from_translation(point_to_vec(*point))
-                    * Mat4::from_scale(radius),
-            );
-            if let Some(parent) =
-                pose.parents.get(index).and_then(|value| *value)
-            {
+            joint_transforms
+                .push(Mat4::from_translation(point_to_vec(*point)) * Mat4::from_scale(radius));
+            if let Some(parent) = pose.parents.get(index).and_then(|value| *value) {
                 let Some(parent_position) = pose.positions.get(parent) else {
                     continue;
                 };
@@ -389,17 +372,12 @@ impl SkeletonVisual {
                     let radius = self
                         .metrics
                         .bone_radius(rest_bone_length, self.config.width_scale);
-                    let origin =
-                        Mat4::from_translation(point_to_vec(*parent_position));
+                    let origin = Mat4::from_translation(point_to_vec(*parent_position));
                     let rotation = rotation_from_y(direction);
                     bone_instances.push(
                         origin
                             * rotation
-                            * Mat4::from_nonuniform_scale(
-                                radius,
-                                bone_length,
-                                radius,
-                            ),
+                            * Mat4::from_nonuniform_scale(radius, bone_length, radius),
                     );
                     octahedral_instances.push(
                         origin
@@ -426,9 +404,7 @@ impl SkeletonVisual {
                     expand_bounds(&mut minimum, &mut maximum, *end_site);
                     end_site_instances.push(
                         Mat4::from_translation(point_to_vec(*end_site))
-                            * Mat4::from_scale(
-                                self.metrics.joint_radius * 0.62,
-                            ),
+                            * Mat4::from_scale(self.metrics.joint_radius * 0.62),
                     );
                 }
             }
@@ -615,11 +591,7 @@ fn length(value: [f32; 3]) -> f32 {
     (value[0] * value[0] + value[1] * value[1] + value[2] * value[2]).sqrt()
 }
 
-fn expand_bounds(
-    minimum: &mut [f32; 3],
-    maximum: &mut [f32; 3],
-    point: [f32; 3],
-) {
+fn expand_bounds(minimum: &mut [f32; 3], maximum: &mut [f32; 3], point: [f32; 3]) {
     if point.iter().any(|value| !value.is_finite()) {
         return;
     }
@@ -695,8 +667,7 @@ mod tests {
         let metrics = SkeletonMetrics::from_positions(&positions, &parents);
         assert!(metrics.bone_radius(2.0, 1.0) > metrics.bone_radius(0.2, 1.0));
         let moved = vec![[0.0, 10.0, 0.0], [0.0, 12.0, 0.0], [0.0, 12.2, 0.0]];
-        let rest_metrics =
-            SkeletonMetrics::from_positions(&positions, &parents);
+        let rest_metrics = SkeletonMetrics::from_positions(&positions, &parents);
         let frame_metrics = SkeletonMetrics::from_positions(&moved, &parents);
         assert_eq!(rest_metrics, metrics);
         assert_eq!(frame_metrics.joint_radius, metrics.joint_radius);
@@ -708,10 +679,9 @@ mod tests {
         let parallel = rotation_from_y([0.0, 1.0, 0.0]);
         for matrix in [zero, parallel] {
             for value in [
-                matrix.x.x, matrix.x.y, matrix.x.z, matrix.x.w, matrix.y.x,
-                matrix.y.y, matrix.y.z, matrix.y.w, matrix.z.x, matrix.z.y,
-                matrix.z.z, matrix.z.w, matrix.w.x, matrix.w.y, matrix.w.z,
-                matrix.w.w,
+                matrix.x.x, matrix.x.y, matrix.x.z, matrix.x.w, matrix.y.x, matrix.y.y, matrix.y.z,
+                matrix.y.w, matrix.z.x, matrix.z.y, matrix.z.z, matrix.z.w, matrix.w.x, matrix.w.y,
+                matrix.w.z, matrix.w.w,
             ] {
                 assert!(value.is_finite());
             }

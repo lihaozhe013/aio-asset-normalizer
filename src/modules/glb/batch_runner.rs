@@ -14,8 +14,7 @@ use crate::modules::logging::safe_path_label;
 use crate::modules::operation_support::{ErrorKind, OperationError};
 
 use super::{
-    GlbBatchRecipe, GlbDocument, GlbExportPreset, GlbExportReport,
-    GlbExportSelection, GlbSummary,
+    GlbBatchRecipe, GlbDocument, GlbExportPreset, GlbExportReport, GlbExportSelection, GlbSummary,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -180,8 +179,7 @@ pub fn run_export(
                 entry.input.display()
             )));
         }
-        snapshots
-            .push(GlbDocument::from_bytes(&bytes, Some(entry.input.clone()))?);
+        snapshots.push(GlbDocument::from_bytes(&bytes, Some(entry.input.clone()))?);
     }
     let source_paths = request
         .inputs
@@ -267,16 +265,15 @@ fn preflight_entry(request: &BatchRequest, input: &Path) -> BatchEntry {
         }
     };
     entry.source_sha256 = Some(sha256_hex(&bytes));
-    let document =
-        match GlbDocument::from_bytes(&bytes, Some(input.to_path_buf())) {
-            Ok(document) => document,
-            Err(error) => {
-                entry.error = Some(error.to_string());
-                entry.error_kind = Some(OperationError::from(error).kind);
-                entry.status = BatchFileStatus::Error;
-                return entry;
-            }
-        };
+    let document = match GlbDocument::from_bytes(&bytes, Some(input.to_path_buf())) {
+        Ok(document) => document,
+        Err(error) => {
+            entry.error = Some(error.to_string());
+            entry.error_kind = Some(OperationError::from(error).kind);
+            entry.status = BatchFileStatus::Error;
+            return entry;
+        }
+    };
     entry.summary = Some(document.summary());
     let selection = match request
         .selection
@@ -418,17 +415,12 @@ fn apply_path_conflicts(request: &BatchRequest, entries: &mut [BatchEntry]) {
                         output.path.display()
                     ));
                 } else {
-                    errors.push(format!(
-                        "Output already exists: {}",
-                        output.path.display()
-                    ));
+                    errors.push(format!("Output already exists: {}", output.path.display()));
                 }
             }
         }
         if errors.is_empty() {
-            if !entry.warnings.is_empty()
-                && entry.status == BatchFileStatus::Ready
-            {
+            if !entry.warnings.is_empty() && entry.status == BatchFileStatus::Ready {
                 entry.status = BatchFileStatus::ReadyWithWarnings;
             }
             continue;

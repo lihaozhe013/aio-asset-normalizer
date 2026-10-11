@@ -129,8 +129,7 @@ fn bvh_rest_pose_is_offsets_not_the_first_motion_frame() {
         ],
     };
     let source_descriptor =
-        SkeletonDescriptor::from_bvh(&document, String::new(), "Y", "-Z", "m")
-            .unwrap();
+        SkeletonDescriptor::from_bvh(&document, String::new(), "Y", "-Z", "m").unwrap();
     let target_descriptor = SkeletonDescriptor::from_skin(
         &target,
         SourceKind::Glb,
@@ -142,10 +141,8 @@ fn bvh_rest_pose_is_offsets_not_the_first_motion_frame() {
         &HashSet::new(),
     )
     .unwrap();
-    let mut mapping = SkeletonMapping::new(
-        source_descriptor.endpoint(),
-        target_descriptor.endpoint(),
-    );
+    let mut mapping =
+        SkeletonMapping::new(source_descriptor.endpoint(), target_descriptor.endpoint());
     mapping.bones = vec![
         MappingBone {
             source: source_descriptor.node_ref(0),
@@ -197,16 +194,11 @@ fn glb_to_glb_retarget_replaces_only_target_animations() {
         false,
         true,
     );
-    let source_document =
-        crate::modules::glb::GlbDocument::load(&source_path).unwrap();
-    let target_document =
-        crate::modules::glb::GlbDocument::load(&target_path).unwrap();
+    let source_document = crate::modules::glb::GlbDocument::load(&source_path).unwrap();
+    let target_document = crate::modules::glb::GlbDocument::load(&target_path).unwrap();
     let source_bytes = source_document.to_bytes().unwrap();
-    let runtime = AnimationRuntime::from_bytes_skeleton_only(
-        &source_bytes,
-        source_path.parent(),
-    )
-    .unwrap();
+    let runtime =
+        AnimationRuntime::from_bytes_skeleton_only(&source_bytes, source_path.parent()).unwrap();
     let animated_nodes = runtime.clips[0]
         .channels
         .iter()
@@ -235,8 +227,7 @@ fn glb_to_glb_retarget_replaces_only_target_animations() {
         &HashSet::new(),
     )
     .unwrap();
-    let mut mapping =
-        SkeletonMapping::new(source.endpoint(), target.endpoint());
+    let mut mapping = SkeletonMapping::new(source.endpoint(), target.endpoint());
     mapping.bones = vec![
         MappingBone {
             source: source.node_ref(0),
@@ -285,11 +276,8 @@ fn glb_to_glb_retarget_replaces_only_target_animations() {
     assert_eq!(json["extras"]["keep"], true);
     assert_eq!(json["extensions"]["EXT_fixture"]["keep"], true);
 
-    let output_runtime = AnimationRuntime::from_bytes_skeleton_only(
-        &output_bytes,
-        target_path.parent(),
-    )
-    .unwrap();
+    let output_runtime =
+        AnimationRuntime::from_bytes_skeleton_only(&output_bytes, target_path.parent()).unwrap();
     let pose = output_runtime.sample_nodes(0, 1.0).unwrap();
     let angle = 2.0
         * pose[0].world_rotation[2]
@@ -303,14 +291,10 @@ fn glb_to_glb_retarget_replaces_only_target_animations() {
 
 #[test]
 fn bvh_preview_positions_use_explicit_axes_and_units() {
-    let converted =
-        convert_bvh_position_to_glb([100.0, 0.0, 0.0], "Y", "-Z", "cm")
-            .unwrap();
+    let converted = convert_bvh_position_to_glb([100.0, 0.0, 0.0], "Y", "-Z", "cm").unwrap();
     assert_eq!(converted, [1.0, 0.0, 0.0]);
 
-    let converted =
-        convert_bvh_position_to_glb([0.0, 0.0, 100.0], "Y", "+Z", "cm")
-            .unwrap();
+    let converted = convert_bvh_position_to_glb([0.0, 0.0, 100.0], "Y", "+Z", "cm").unwrap();
     assert_eq!(converted, [0.0, 0.0, -1.0]);
 }
 
@@ -335,9 +319,7 @@ fn root_motion_is_rebased_and_scaled_or_can_be_disabled() {
             scale: [1.0; 3],
         }],
     };
-    let source =
-        SkeletonDescriptor::from_bvh(&document, String::new(), "Y", "-Z", "m")
-            .unwrap();
+    let source = SkeletonDescriptor::from_bvh(&document, String::new(), "Y", "-Z", "m").unwrap();
     let target_descriptor = SkeletonDescriptor::from_skin(
         &target,
         SourceKind::Glb,
@@ -349,8 +331,7 @@ fn root_motion_is_rebased_and_scaled_or_can_be_disabled() {
         &HashSet::new(),
     )
     .unwrap();
-    let mut mapping =
-        SkeletonMapping::new(source.endpoint(), target_descriptor.endpoint());
+    let mut mapping = SkeletonMapping::new(source.endpoint(), target_descriptor.endpoint());
     mapping.bones = vec![MappingBone {
         source: source.node_ref(0),
         target: target_descriptor.node_ref(0),
@@ -397,9 +378,7 @@ fn write_glb_fixture(
     for value in [0.0_f32, 1.0] {
         bin.extend_from_slice(&value.to_le_bytes());
     }
-    for rotation in
-        [[0.0_f32, 0.0, 0.0, 1.0], [0.0, 0.0, 0.70710677, 0.70710677]]
-    {
+    for rotation in [[0.0_f32, 0.0, 0.0, 1.0], [0.0, 0.0, 0.70710677, 0.70710677]] {
         for value in rotation {
             bin.extend_from_slice(&value.to_le_bytes());
         }
@@ -450,8 +429,7 @@ fn write_glb_fixture(
     .to_vec()
     .unwrap();
     let serial = FIXTURE_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let path = std::env::temp_dir()
-        .join(format!("{prefix}-{}-{serial}.glb", std::process::id()));
+    let path = std::env::temp_dir().join(format!("{prefix}-{}-{serial}.glb", std::process::id()));
     std::fs::write(&path, bytes).unwrap();
     path
 }

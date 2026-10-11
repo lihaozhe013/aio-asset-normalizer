@@ -52,9 +52,7 @@ pub fn run(args: FbxArgs) -> i32 {
 
 fn convert(args: &ConvertArgs) -> i32 {
     const COMMAND: &str = "fbx.convert";
-    let fail = |results: Value, error: CliError| {
-        output::emit_failure(COMMAND, results, &error)
-    };
+    let fail = |results: Value, error: CliError| output::emit_failure(COMMAND, results, &error);
 
     if args.out.is_some() && args.inputs.len() != 1 {
         return fail(
@@ -85,16 +83,10 @@ fn convert(args: &ConvertArgs) -> i32 {
         let input = &request.input;
         let output = request.output.clone();
         let result = if args.dry_run {
-            aio_asset_normalizer::modules::operations::converter::preflight(
-                &request,
-            )
-            .map(|()| None)
+            aio_asset_normalizer::modules::operations::converter::preflight(&request).map(|()| None)
         } else {
-            aio_asset_normalizer::modules::operations::converter::execute(
-                &request,
-                next_task_id(),
-            )
-            .map(Some)
+            aio_asset_normalizer::modules::operations::converter::execute(&request, next_task_id())
+                .map(Some)
         };
         match result {
             Ok(summary) => files.push(json!({"input":input,"output":output,"ok":true,"summary":summary.map(|v|json!({"nodes":v.nodes,"meshes":v.meshes,"materials":v.materials,"skins":v.skins,"animations":v.animations})),"written":!args.dry_run})),

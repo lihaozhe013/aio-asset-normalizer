@@ -266,8 +266,7 @@ fn texture_replacement_embeds_png_and_duplicates_shared_material() {
         "aio-asset-normalizer-texture-{}.png",
         std::process::id()
     ));
-    image::save_buffer(&path, &[255, 0, 0, 255], 1, 1, image::ColorType::Rgba8)
-        .unwrap();
+    image::save_buffer(&path, &[255, 0, 0, 255], 1, 1, image::ColorType::Rgba8).unwrap();
 
     document
         .replace_texture(
@@ -350,12 +349,10 @@ fn compact_export_fixture() -> GlbDocument {
     }
     for matrix in [
         [
-            1.0_f32, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0,
-            0.0, 0.0, 0.0, 1.0,
+            1.0_f32, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
         ],
         [
-            1.0_f32, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0,
-            0.0, 0.0, 0.0, 1.0,
+            1.0_f32, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
         ],
     ] {
         for component in matrix {
@@ -463,14 +460,16 @@ fn character_package_prunes_scene_graph_resources_and_reindexes_references() {
         report.output_bin_bytes
     );
     assert!(report.output_bin_bytes.is_multiple_of(4));
-    assert!(document.json["bufferViews"].as_array().unwrap().iter().all(
-        |view| {
+    assert!(document.json["bufferViews"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|view| {
             view.get("byteOffset")
                 .and_then(Value::as_u64)
                 .unwrap_or(0)
                 .is_multiple_of(4)
-        }
-    ));
+        }));
     assert_eq!(document.json["nodes"][0]["extras"]["keep"], true);
     assert!(document.json.get("cameras").is_none());
     assert_eq!(document.json["meshes"][0]["name"], "Body mesh");
@@ -478,15 +477,10 @@ fn character_package_prunes_scene_graph_resources_and_reindexes_references() {
     assert!(document.to_bytes().unwrap() != original);
     gltf::Gltf::from_slice(&document.to_bytes().unwrap()).unwrap();
     assert_eq!(document.to_bytes().unwrap().len(), report.output_glb_bytes);
-    let runtime = AnimationRuntime::from_bytes_skeleton_only(
-        &document.to_bytes().unwrap(),
-        None,
-    )
-    .unwrap();
+    let runtime =
+        AnimationRuntime::from_bytes_skeleton_only(&document.to_bytes().unwrap(), None).unwrap();
     assert_eq!(runtime.clips.len(), 1);
-    let mesh_runtime =
-        AnimationRuntime::from_bytes(&document.to_bytes().unwrap(), None)
-            .unwrap();
+    let mesh_runtime = AnimationRuntime::from_bytes(&document.to_bytes().unwrap(), None).unwrap();
     assert_eq!(mesh_runtime.primitives.len(), 1);
 }
 
@@ -560,8 +554,7 @@ fn compact_export_combines_selected_animations_and_reachable_targets() {
 }
 
 #[test]
-fn skeleton_animation_removes_render_resources_but_keeps_skin_and_animation_targets(
-) {
+fn skeleton_animation_removes_render_resources_but_keeps_skin_and_animation_targets() {
     let mut document = compact_export_fixture();
     let mut selection = character_export_selection();
     selection.preset = GlbExportPreset::SkeletonAnimation;
@@ -580,9 +573,7 @@ fn skeleton_animation_removes_render_resources_but_keeps_skin_and_animation_targ
         .as_array()
         .unwrap()
         .iter()
-        .all(|node| {
-            node.get("mesh").is_none() && node.get("camera").is_none()
-        }));
+        .all(|node| { node.get("mesh").is_none() && node.get("camera").is_none() }));
     gltf::Gltf::from_slice(&document.to_bytes().unwrap()).unwrap();
 }
 
@@ -606,10 +597,8 @@ fn compact_export_rejects_a_selected_node_from_another_skin() {
 fn compact_export_removes_cameras_and_punctual_lights() {
     let mut document = compact_export_fixture();
     document.json["extensionsUsed"] = json!(["KHR_lights_punctual"]);
-    document.json["extensions"] =
-        json!({"KHR_lights_punctual": {"lights": [{"type": "point"}]} });
-    document.json["nodes"][0]["extensions"] =
-        json!({"KHR_lights_punctual": {"light": 0}});
+    document.json["extensions"] = json!({"KHR_lights_punctual": {"lights": [{"type": "point"}]} });
+    document.json["nodes"][0]["extensions"] = json!({"KHR_lights_punctual": {"light": 0}});
 
     document
         .prune_for_export(&character_export_selection())
@@ -625,9 +614,7 @@ fn compact_export_removes_cameras_and_punctual_lights() {
         .all(|node| node
             .get("extensions")
             .and_then(Value::as_object)
-            .is_none_or(
-                |extensions| !extensions.contains_key("KHR_lights_punctual")
-            )));
+            .is_none_or(|extensions| !extensions.contains_key("KHR_lights_punctual"))));
 }
 
 #[test]
@@ -654,8 +641,8 @@ fn compact_export_rejects_external_buffers_and_unknown_extensions() {
         .prune_for_export(&character_export_selection())
         .unwrap();
     assert_eq!(
-        extras_extension.json["nodes"][0]["extras"]["metadata"]["extensions"]
-            ["VENDOR_data"]["index"],
+        extras_extension.json["nodes"][0]["extras"]["metadata"]["extensions"]["VENDOR_data"]
+            ["index"],
         99
     );
 
@@ -696,8 +683,7 @@ fn compact_export_validates_empty_and_out_of_range_selection() {
 #[test]
 fn compact_export_reindexes_material_texture_image_and_sampler_references() {
     let mut document = compact_export_fixture();
-    document.json["materials"][0]["pbrMetallicRoughness"]["baseColorTexture"] =
-        json!({"index": 1});
+    document.json["materials"][0]["pbrMetallicRoughness"]["baseColorTexture"] = json!({"index": 1});
     document.json["textures"] = json!([
         {"name": "Unused texture", "source": 0, "sampler": 0},
         {"name": "Body texture", "source": 1, "sampler": 1}
@@ -706,8 +692,7 @@ fn compact_export_reindexes_material_texture_image_and_sampler_references() {
         {"name": "Unused image", "uri": "data:image/png;base64,AA=="},
         {"name": "Body image", "uri": "data:image/png;base64,AA=="}
     ]);
-    document.json["samplers"] =
-        json!([{"magFilter": 9728}, {"magFilter": 9729}]);
+    document.json["samplers"] = json!([{"magFilter": 9728}, {"magFilter": 9729}]);
 
     let report = document
         .prune_for_export(&character_export_selection())
@@ -716,8 +701,7 @@ fn compact_export_reindexes_material_texture_image_and_sampler_references() {
     assert_eq!(report.output.materials, 1);
     assert_eq!(report.output.images, 1);
     assert_eq!(
-        document.json["materials"][0]["pbrMetallicRoughness"]
-            ["baseColorTexture"]["index"],
+        document.json["materials"][0]["pbrMetallicRoughness"]["baseColorTexture"]["index"],
         0
     );
     assert_eq!(document.json["textures"][0]["name"], "Body texture");
@@ -731,8 +715,7 @@ fn compact_export_reindexes_material_texture_image_and_sampler_references() {
 #[test]
 fn compact_export_rejects_external_image_uris() {
     let mut document = compact_export_fixture();
-    document.json["materials"][0]["pbrMetallicRoughness"]["baseColorTexture"] =
-        json!({"index": 0});
+    document.json["materials"][0]["pbrMetallicRoughness"]["baseColorTexture"] = json!({"index": 0});
     document.json["textures"] = json!([{"source": 0}]);
     document.json["images"] = json!([{"uri": "textures/body.png"}]);
 
@@ -745,8 +728,7 @@ fn compact_export_rejects_external_image_uris() {
 #[test]
 fn skeleton_animation_rejects_morph_target_channels() {
     let mut document = compact_export_fixture();
-    document.json["animations"][0]["channels"][0]["target"]["path"] =
-        json!("weights");
+    document.json["animations"][0]["channels"][0]["target"]["path"] = json!("weights");
     let mut selection = character_export_selection();
     selection.preset = GlbExportPreset::SkeletonAnimation;
     selection.selected_nodes.clear();

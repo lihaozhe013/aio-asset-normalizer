@@ -67,12 +67,8 @@ impl From<RetargetError> for OperationError {
         }
     }
 }
-impl From<crate::modules::retarget_export::RetargetExportError>
-    for OperationError
-{
-    fn from(
-        error: crate::modules::retarget_export::RetargetExportError,
-    ) -> Self {
+impl From<crate::modules::retarget_export::RetargetExportError> for OperationError {
+    fn from(error: crate::modules::retarget_export::RetargetExportError) -> Self {
         use crate::modules::retarget_export::RetargetExportError::*;
         match error {
             Retarget(e) => e.into(),
@@ -87,9 +83,8 @@ pub fn load_json<T: for<'de> serde::Deserialize<'de>>(
     label: &str,
 ) -> Result<T, OperationError> {
     let text = std::fs::read_to_string(path)?;
-    serde_json::from_str(&text).map_err(|e| {
-        OperationError::validation(format!("Invalid {label}: {e}"))
-    })
+    serde_json::from_str(&text)
+        .map_err(|e| OperationError::validation(format!("Invalid {label}: {e}")))
 }
 pub fn file_sha256(path: &Path) -> Result<String, OperationError> {
     Ok(crate::modules::retarget::sha256_hex(&std::fs::read(path)?))
@@ -136,11 +131,7 @@ pub fn same_path(left: &Path, right: &Path) -> bool {
         left == right
     }
 }
-pub fn check_output(
-    path: &Path,
-    sources: &[&Path],
-    overwrite: bool,
-) -> Result<(), OperationError> {
+pub fn check_output(path: &Path, sources: &[&Path], overwrite: bool) -> Result<(), OperationError> {
     if sources.iter().any(|source| same_path(path, source)) {
         return Err(OperationError::validation(
             "Output must not replace an input file",
@@ -194,8 +185,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let blocker = dir.path().join("blocker");
         std::fs::write(&blocker, b"original").unwrap();
-        let error =
-            check_output(&blocker.join("out.glb"), &[], false).unwrap_err();
+        let error = check_output(&blocker.join("out.glb"), &[], false).unwrap_err();
         assert_eq!(error.kind, ErrorKind::Io);
         assert_eq!(std::fs::read(blocker).unwrap(), b"original");
     }
@@ -206,8 +196,7 @@ mod tests {
         let nested = dir.path().join("nested");
         std::fs::create_dir(&nested).unwrap();
         std::fs::create_dir(dir.path().join("other")).unwrap();
-        std::os::unix::fs::symlink(&nested, dir.path().join("other/link"))
-            .unwrap();
+        std::os::unix::fs::symlink(&nested, dir.path().join("other/link")).unwrap();
         let source = dir.path().join("source.glb");
         std::fs::write(&source, b"source").unwrap();
         let output = dir.path().join("other/link/../source.glb");
