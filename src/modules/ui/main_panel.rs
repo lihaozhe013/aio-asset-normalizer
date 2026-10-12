@@ -106,6 +106,7 @@ pub fn render_ui(
         })
         .inner;
     about_dialog::render(app, ui.ctx());
+    crate::app_mcp_setup::render(app, ui.ctx());
     content_rect
 }
 
@@ -162,6 +163,9 @@ fn render_page_tabs(app: &mut App, ui: &mut three_d::egui::Ui) {
     let mut stop_job = false;
     let status_row = Vec2::new(ui.available_width(), ui.spacing().interact_size.y);
     ui.allocate_ui_with_layout(status_row, Layout::right_to_left(Align::Center), |ui| {
+        if ui.button("Connect AI").clicked() {
+            app.open_mcp_setup();
+        }
         if let Some((session, task, connected)) = status {
             if task.is_some() {
                 stop_job = ui.button("Stop MCP task").clicked();

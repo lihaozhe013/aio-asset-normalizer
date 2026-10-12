@@ -7,6 +7,7 @@ pub mod glb;
 #[cfg(feature = "desktop")]
 pub mod i18n;
 pub mod logging;
+pub mod mcp_setup;
 pub mod operations;
 #[cfg(feature = "desktop")]
 pub mod preferences;

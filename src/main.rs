@@ -7,6 +7,7 @@ mod app_export;
 mod app_fbx_converter;
 mod app_glb_batch;
 mod app_glb_editor;
+mod app_mcp_setup;
 mod app_preview;
 mod app_retarget;
 mod app_retarget_prompt;
@@ -18,8 +19,8 @@ mod window;
 /// stay in the desktop binary so the library never links egui or three-d.
 pub mod modules {
     pub use aio_asset_normalizer::modules::{
-        atomic_file, automation, blender, build_info, bvh, glb, i18n, logging, operations,
-        preferences, retarget, retarget_export, task_lock,
+        atomic_file, automation, blender, build_info, bvh, glb, i18n, logging, mcp_setup,
+        operations, preferences, retarget, retarget_export, task_lock,
     };
 
     pub mod ui;

@@ -54,6 +54,32 @@ the configured path pointed at the AppImage file; its internal mount directory
 is temporary. MCP configuration paths should be absolute and must refer to the
 installed package rather than a Cargo `target` directory for normal use.
 
+### Configure an AI client from the GUI
+
+Open **Help → Connect AI** or use the **Connect AI** button beside the session
+status. The dialog detects the MCP server shipped with the running application,
+shows the resolved command and arguments, and generates one setup prompt for
+the AI client currently in use. Select **Copy setup prompt** and paste the
+result into that client's agent. The agent is asked to preserve existing MCP
+settings, avoid replacing a conflicting server entry without asking, reconnect
+the server, verify the required tools, and call the read-only `session_list`
+tool.
+
+The dialog reports **Copied** only when the system clipboard accepts the full
+prompt. If clipboard access fails, select and copy the prompt from its preview.
+The dialog does not confirm that the AI client has loaded the server; the agent
+reports connection status after it verifies the tools. Some clients require a
+restart before the server appears.
+
+The command is resolved from the running installation each time the dialog is
+opened or refreshed. Windows and macOS use the MCP executable beside the GUI;
+Linux binary installations use the sibling MCP executable. Linux AppImages use
+the outer `.AppImage` path with `--mcp`, never the temporary mount directory.
+If the matching MCP executable or a stable AppImage path cannot be found, the
+dialog explains the issue and disables copying until the path can be resolved.
+Development builds use the MCP binary beside the GUI in the build output; move
+or rebuild both binaries together before configuring an agent.
+
 ## Connection self-check
 
 Restart or reconnect the MCP client after saving its configuration. Confirm

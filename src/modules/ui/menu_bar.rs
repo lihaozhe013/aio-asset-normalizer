@@ -26,6 +26,7 @@ pub enum MenuAction {
     OpenGlbEditor,
     OpenBvhStudio,
     OpenFbxConverter,
+    ConnectAi,
     About,
     SetLanguage(crate::modules::i18n::LanguagePreference),
     Quit,
@@ -165,6 +166,10 @@ pub fn render(
                 });
 
                 ui.menu_button(i18n.tr("menu.help"), |ui| {
+                    if ui.button("Connect AI").clicked() {
+                        actions.push(MenuAction::ConnectAi);
+                        ui.close();
+                    }
                     if ui.button(i18n.tr("menu.about")).clicked() {
                         actions.push(MenuAction::About);
                         ui.close();

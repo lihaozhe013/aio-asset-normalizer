@@ -285,6 +285,38 @@ $BIN retarget run --source motion.bvh --target target.glb --mapping mapping.json
 Build the native service and GUI from the same checkout, then configure an MCP
 client with the paths described in `docs/MCP.md`.
 
+### GUI setup prompt
+
+1. Open **Help → Connect AI** from each of GLB Editor, BVH Studio, and FBX
+   Converter. Confirm the dialog opens without changing the current page or
+   document. Confirm the permanent **Connect AI** button opens the same dialog.
+2. Confirm a packaged installation reports the MCP executable beside the GUI
+   on Windows and macOS, and the sibling executable on a Linux binary install.
+   In an AppImage run, confirm the command is the absolute outer `.AppImage`
+   path and the arguments contain only `--mcp`; no temporary mount path should
+   appear.
+3. Confirm the prompt preview contains that same command and arguments, and its
+   JSON remains valid when the installation path contains spaces, quotes,
+   backslashes, or Unicode. Confirm **Connection details** shows the service
+   name and stdio transport.
+4. Copy the prompt and paste it into a supported local AI agent. Confirm it
+   identifies the client, preserves unrelated MCP settings, and asks before
+   replacing a conflicting `aio-asset-normalizer` entry. Have it reconnect,
+   verify `glb_inspect`, `session_list`, and `session_capture`, and call
+   `session_list` without opening a document or exporting a file. Repeat the
+   prompt and confirm an identical entry is not duplicated.
+5. Confirm clipboard feedback says **Copied** only after a successful system
+   clipboard write. If clipboard access fails, confirm an error is shown and
+   the prompt can still be selected and copied from the preview.
+6. Hide or remove the sibling MCP executable and refresh. Confirm the dialog
+   shows an actionable error and disables copying. For Unix builds, remove its
+   execute permission and confirm the dialog reports that separately. For an
+   AppImage run, confirm incomplete runtime paths or an executable outside
+   `APPDIR` do not produce a temporary mount path.
+7. Resize the application to a small window. Confirm the dialog can scroll,
+   closes without resetting the active page, and resolving its command again
+   with **Refresh** does not persist a copied absolute path in preferences.
+
 1. Launch the MCP executable through the client. Confirm `initialize` negotiates
    successfully, `tools/list` exposes typed schemas, and stdout contains only
    protocol messages. Call `session_list` while the GUI is closed and confirm

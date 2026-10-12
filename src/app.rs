@@ -7,6 +7,7 @@ use std::time::Instant;
 
 use crate::app_fbx_converter::ConverterFileState;
 use crate::app_glb_batch::GlbBatchState;
+use crate::app_mcp_setup::McpSetupDialogState;
 use crate::modules::blender::task::ConverterMessage;
 use crate::modules::preferences::FileTreePreferences;
 use crate::modules::retarget::{MappingValidationReport, SkeletonMapping};
@@ -107,6 +108,7 @@ pub struct App {
     pub bvh_key_tolerance: f32,
     pub(crate) show_about: bool,
     pub(crate) about_icon: Option<three_d::egui::TextureHandle>,
+    pub(crate) mcp_setup: McpSetupDialogState,
     pub(crate) task_busy: bool,
     pub(crate) active_task_id: Option<u64>,
     last_frame_time: Instant,
@@ -253,6 +255,7 @@ impl App {
             bvh_key_tolerance: 0.001,
             show_about: false,
             about_icon: None,
+            mcp_setup: McpSetupDialogState::default(),
             task_busy: false,
             active_task_id: None,
             last_frame_time: Instant::now(),
@@ -876,6 +879,7 @@ impl App {
                 self.refresh_v2_retarget_mapping();
             }
             MenuAction::About => self.show_about = true,
+            MenuAction::ConnectAi => self.open_mcp_setup(),
             MenuAction::SetLanguage(preference) => {
                 self.i18n.set_preference(*preference);
                 self.needs_save = true;
