@@ -1,77 +1,37 @@
 # GLB processing
 
-Start with `glb inspect <GLB>...`. Read `results.files` for the resource catalog and
-Skin hierarchies. Indices are local to each asset; exact names may be ambiguous.
-Inspect the generated output again after successful processing.
+Call `glb_inspect` with an absolute `input` path first. Read the returned
+summary, export catalog, and Skin hierarchies before choosing resource indices.
+Inspect the generated output again after a successful edit.
 
 ## Current-file edits
 
-Query `schema --command glb.edit`. An identity export needs only:
+Call `glb_edit` with a typed `job` object. Its `input` and `output` paths
+must be absolute. An omitted or empty `edits` object means identity edits.
+Include `selection` or `export` only when you need to restrict the exported
+resources; the fields are mutually exclusive.
 
-```json
-{
-  "input": "/absolute/assets/hero.glb",
-  "output": "/absolute/output/hero.glb"
-}
-```
+For texture replacement, choose mesh, primitive, and texture slot indices from
+the inspection result, and provide an absolute PNG or JPEG path. Shared
+materials are duplicated by default so other primitives keep their textures.
+Edits apply before resource selection.
 
-Run `glb edit --job <job.json> --dry-run`, then the same command without dry-run.
-An omitted `edits` object and an empty object both mean identity edits.
-
-For a selected character animation and texture replacement, adapt the IDs after
-inspection, and query the schema for available texture slots:
-
-```json
-{
-  "input": "/absolute/assets/hero.glb",
-  "output": "/absolute/output/hero.glb",
-  "edits": {
-    "textures": [
-      {"mesh": 0, "primitive": 0, "slot": "base-color",
-       "image": "/absolute/textures/body.png", "duplicate_shared_material": true}
-    ],
-    "rotate_roots_degrees": [0, 90, 0],
-    "scale_roots": 1,
-    "translate_roots": [0, 0, 0],
-    "bake_root_transform": true,
-    "trim": {"animation": 0, "start": 0, "end": 1},
-    "animation_rate": {"animation": 0, "rate": 1.5}
-  },
-  "selection": {
-    "preset": "character", "scene": 0, "skin": 0,
-    "nodes": [0], "primitives": {"0": [0]}, "animations": [0],
-    "animation_output": "combined"
-  }
-}
-```
-
-Textures are PNG or JPEG. By default a shared material is duplicated so other
-primitives keep their textures. Texture replacements execute in list order,
-followed by trim, root rotation/scale/translation, animation rate, Smart Loop,
-and resource selection. Disabling baking leaves root transforms out of export.
-
-Use `edits.smart_loop = {"animation": 0, "transition_seconds": 0.2}` for a
-transition loop. Smart Loop and root-motion removal cannot be combined for compact
-exports. Every edited animation must remain selected in a compact export.
-
-`selection` and `export` are mutually exclusive. If no explicit selection is
-needed, use `export: {"preset": "character"}` or `"skeleton"`. The default
-`preserve-all` retains the complete document. Unknown extensions survive
-preserve-all; unsupported reference remapping makes compact exports fail safely.
+Smart Loop edits cannot be combined with root-motion removal in compact exports.
+Every edited animation must remain selected. Preserve-all retains the full
+document and unknown extensions; compact export fails safely when extension
+references cannot be remapped.
 
 ## Batch standardization
 
-```text
-glb export --input-root <INPUT_DIR> --recursive --output-root <OUTPUT_DIR> --preset character --dry-run
-```
+Call `glb_batch` with absolute `input_root`, `inputs`, and `output_root`
+paths. Start with `action: "preflight"`, then use `action: "export"` after
+reviewing the planned files, warnings, and conflicts. Provide either a
+`recipe` or an explicit `selection`, not both.
 
-Query `schema --command glb.export` for a job. It accepts `inputs`, `input_root`,
-`output_root`, `overwrite`, and either `recipe` or `selection`. An explicit batch
-selection resolves the supplied indices independently in every input: use it only
-when those IDs intentionally mean the same resources in all assets.
-
-`character` and `skeleton` support `animation_output: "split"`. Read planned output
-paths rather than predicting sanitized animation names or duplicate suffixes.
-Preflight rejects source/output collisions and existing files without overwrite.
-A recursive scan excludes the output subtree; identical input/output roots are
-rejected. On execution failure retain and report `completed_outputs`.
+An explicit batch selection resolves the same indices independently in every
+input. Use it only when those indices intentionally represent the same resources
+across all assets. Character and skeleton recipes support split animation
+output. Read the returned output paths instead of predicting sanitized names.
+Preflight rejects source/output collisions and existing files unless overwrite
+was authorized. Recursive scans exclude the output subtree. On execution failure,
+report completed outputs and remaining files.

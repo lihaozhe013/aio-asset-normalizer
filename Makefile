@@ -1,27 +1,25 @@
-.PHONY: run build clean dev build-cli
+.PHONY: default run build clean dev build-mac build-win build-appimage
 
 default: dev
 
 dev:
-	cargo run --bin aio-asset-normalizer
+	cargo build --locked --features mcp --bin aio-asset-normalizer --bin aio-asset-normalizer-mcp
+	cargo run --locked --features mcp --bin aio-asset-normalizer
 
 build:
-	cargo build --release --all
+	cargo build --locked --release --features mcp --bin aio-asset-normalizer --bin aio-asset-normalizer-mcp
 
-run:
-	cargo run --release aio-asset-normalizer
+run: build
+	cargo run --locked --release --features mcp --bin aio-asset-normalizer
 
 clean:
 	cargo clean
 
-build-cli:
-	cargo build --locked --release --no-default-features --features cli --bin aio-asset-normalizer-cli && uv run ./packaging/build-cli.py --skip-build
+build-mac: build
+	uv run ./packaging/build-mac-app.py
 
-build-mac:
-	cargo build --release && uv run ./packaging/build-mac-app.py
+build-win: build
+	uv run ./packaging/build-windows.py --skip-build
 
-build-win:
-	cargo build --release && uv run ./packaging/build-windows.py
-
-build-appimage:
-	cargo build --release && uv run ./packaging/build-appimage.py
+build-appimage: build
+	uv run ./packaging/build-appimage.py

@@ -51,26 +51,15 @@ binary. The AppImage contains both binaries. Configure MCP clients to launch the
 
 ## MCP service
 
-The native MCP server uses stdio and has no Python or Node.js runtime dependency. Install the desktop package once, then copy the platform-specific client configuration from [`docs/MCP.md`](../docs/MCP.md). File tools do not start the GUI. Call `session_open` when visual review is needed; it connects to a running window or launches the installed GUI. The standalone headless CLI remains available in its existing archive.
+The native MCP server uses stdio and has no Python or Node.js runtime dependency.
+Install the desktop package once, then copy the platform-specific client
+configuration from [`docs/MCP.md`](../docs/MCP.md). File tools do not start the
+GUI. Call `session_open` when visual review is needed; it connects to a running
+window or launches the installed GUI.
 
-## CLI (headless)
+## Make targets
 
-```bash
-uv run packaging/build-cli.py
-```
-
-The script builds the `aio-asset-normalizer-cli` executable and packages it as a
-standalone archive: `.zip` on Windows, `.tar.gz` elsewhere. Each archive contains
-the executable, the embedded CLI reference as `CLI.md`, a short `README.txt`,
-and `skills/aio-asset-normalizer/` with its four workflow references. The script
-builds with `--no-default-features --features cli`, excluding GUI dependencies.
-
-The archive name is `aio-asset-normalizer-cli-<version>-<platform>-<arch>`, where
-`<platform>` is `win`, `macos`, or `linux` and `<arch>` is `x86-64` or `arm64`.
-Use `--skip-build` to package an existing executable, `--debug` for the debug
-profile, and `--platform`/`--arch` to override the detected target.
-
-The command reference and Blender script are embedded. GLB/BVH/retarget workflows
-need no Blender installation; Converter requires a separately installed Blender. The
-nightly release publishes the three archives next to the installers; the CLI
-reference itself lives in [`docs/CLI.md`](../docs/CLI.md).
+From the repository root, `make build` builds the release GUI and MCP server.
+`make dev` builds and launches the debug pair. `make build-win`,
+`make build-mac`, and `make build-appimage` build and package the matching
+desktop distribution.

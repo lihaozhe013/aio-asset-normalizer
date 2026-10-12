@@ -185,8 +185,8 @@ where
     }
 }
 
-/// Mirror routed events to the process console. The CLI enables this so
-/// progress and diagnostics go to stderr while stdout stays machine-readable.
+/// Mirror routed events to the process console. The stdio server sends
+/// diagnostics to stderr while keeping stdout available for protocol messages.
 struct ConsoleLayer {
     enabled: bool,
 }
@@ -292,7 +292,7 @@ impl LogRuntime {
     /// Initialize file logging and mirror the same records to stderr.
     ///
     /// `level` overrides the default `RUST_LOG` filter when present.
-    pub fn init_cli(level: Option<&str>) -> Self {
+    pub fn init_stdio(level: Option<&str>) -> Self {
         Self::init_internal(true, level)
     }
 

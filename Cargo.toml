@@ -2,14 +2,14 @@
 name = "aio-asset-normalizer"
 version = "0.1.0"
 edition = "2021"
-description = "A cross-platform GLB editor and generic BVH motion standardization tool with a headless CLI"
+default-run = "aio-asset-normalizer"
+description = "A cross-platform GLB editor and generic BVH motion standardization tool with a local MCP server"
 license = "MIT"
 authors = []
 
 [features]
-default = ["desktop", "cli"]
+default = ["desktop"]
 desktop = ["dep:three-d", "dep:three-d-asset", "dep:egui-phosphor", "dep:winit", "dep:rfd", "dep:arboard", "dep:open", "dep:sys-locale", "dep:serde_yaml", "dep:winres"]
-cli = ["dep:clap"]
 mcp = ["dep:rmcp", "dep:tokio"]
 
 [[bin]]
@@ -18,26 +18,9 @@ path = "src/main.rs"
 required-features = ["desktop"]
 
 [[bin]]
-name = "aio-asset-normalizer-cli"
-path = "src/bin/aio-asset-normalizer-cli/main.rs"
-required-features = ["cli"]
-
-[[bin]]
 name = "aio-asset-normalizer-mcp"
 path = "src/bin/aio-asset-normalizer-mcp/main.rs"
 required-features = ["mcp"]
-
-[[test]]
-name = "cli"
-required-features = ["cli"]
-
-[[test]]
-name = "agent_workflows"
-required-features = ["cli"]
-
-[[test]]
-name = "converter"
-required-features = ["cli"]
 
 [[test]]
 name = "mcp_server"
@@ -64,7 +47,6 @@ winit = { version = "0.28", optional = true }
 
 three-d-asset = { version = "0.10", features = ["gltf", "image"], optional = true }
 egui-phosphor = { version = "0.12", optional = true }
-clap = { version = "4", features = ["derive"], optional = true }
 rmcp = { version = "3.5", default-features = false, features = ["server", "transport-io", "macros"], optional = true }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"], optional = true }
 base64 = "0.22"

@@ -1,6 +1,6 @@
 //! Headless GLB batch preflight and export runner.
 //!
-//! The desktop application and the CLI both drive this runner. Progress is
+//! The desktop application and MCP server both drive this runner. Progress is
 //! reported through a callback so callers can forward it to any channel or
 //! render it directly.
 

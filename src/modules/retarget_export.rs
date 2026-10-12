@@ -1,6 +1,6 @@
 //! Shared retarget export pipeline.
 //!
-//! Both the desktop application and the CLI generate a target animation clip
+//! The desktop application and MCP server generate a target animation clip
 //! from a BVH or GLB source and write a retargeted GLB through these helpers so
 //! validation, key reduction, animation replacement, and atomic export stay in
 //! one place.

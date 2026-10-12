@@ -486,7 +486,7 @@ fn session_error(kind: &str, message: impl Into<String>) -> CallToolResult {
 
 #[tokio::main]
 async fn main() {
-    let _logging = aio_asset_normalizer::modules::logging::LogRuntime::init_cli(Some("info"));
+    let _logging = aio_asset_normalizer::modules::logging::LogRuntime::init_stdio(Some("info"));
     let server = McpServer::new();
     match server.serve(rmcp::transport::stdio()).await {
         Ok(service) => {

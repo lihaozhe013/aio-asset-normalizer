@@ -1,11 +1,9 @@
-name: Build and publish packages
+name: Build and publish desktop packages
 
 on:
   push:
     branches:
-      - build
       - publish
-  workflow_dispatch:
 
 concurrency:
   group: packaging-${{ github.ref }}
@@ -16,144 +14,66 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_BACKTRACE: 1
 
 jobs:
   windows:
     name: Windows x86-64 installer
     runs-on: windows-2025
-
     steps:
-      - name: Check out source
-        uses: actions/checkout@v7
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Set up Python
-        uses: actions/setup-python@v7
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: false
-
-      - name: Cache Cargo
-        uses: actions/cache@v6
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
           key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-cargo-
-
-      - name: Build Windows installer
-        run: uv run packaging/build-windows.py
-
-      - name: Verify Windows installer
-        shell: pwsh
-        run: |
-          $installer = Get-ChildItem -Path packaging/out -Filter *.exe -File
-          if ($null -eq $installer) {
-            throw "No Windows installer was produced."
-          }
-          if (-not (Test-Path target/release/aio-asset-normalizer-mcp.exe)) {
-            throw "The native MCP executable was not built."
-          }
-
-      - name: Upload Windows installer
-        uses: actions/upload-artifact@v7
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-
+      - name: Build GUI and MCP executables
+        run: cargo build --locked --release --features mcp --bin aio-asset-normalizer --bin aio-asset-normalizer-mcp
+      - name: Package Windows installer
+        run: uv run packaging/build-windows.py --skip-build
+      - uses: actions/upload-artifact@v7
         with:
           name: aio-asset-normalizer-windows-x86-64
           path: packaging/out/*.exe
           if-no-files-found: error
 
-      - name: Build Windows CLI archive
-        run: uv run packaging/build-cli.py
-
-      - name: Verify Windows CLI archive
-        shell: pwsh
-        run: |
-          $archive = Get-ChildItem -Path packaging/out -Filter *.zip -File
-          if ($null -eq $archive) {
-            throw "No Windows CLI archive was produced."
-          }
-
-      - name: Upload Windows CLI archive
-        uses: actions/upload-artifact@v7
-        with:
-          name: aio-asset-normalizer-cli-windows-x86-64
-          path: packaging/out/*.zip
-          if-no-files-found: error
-
   macos:
     name: macOS arm64 app and DMG
     runs-on: macos-15
-
     steps:
-      - name: Check out source
-        uses: actions/checkout@v7
-
-      - name: Confirm Apple Silicon runner
-        run: test "$(uname -m)" = "arm64"
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Set up Python
-        uses: actions/setup-python@v7
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: false
-
-      - name: Cache Cargo
-        uses: actions/cache@v6
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
           key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-cargo-
-
-      - name: Build macOS app and DMG
-        run: |
-          cargo build --locked --release --features mcp --bin aio-asset-normalizer --bin aio-asset-normalizer-mcp
-          uv run packaging/build-mac-app.py
-
-      - name: Verify macOS package
-        run: |
-          test -s packaging/out/*.dmg
-          test -x "packaging/out/AIO Asset Normalizer.app/Contents/MacOS/aio-asset-normalizer"
-          test -x "packaging/out/AIO Asset Normalizer.app/Contents/MacOS/aio-asset-normalizer-mcp"
-
-      - name: Upload macOS package
-        uses: actions/upload-artifact@v7
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-
+      - name: Build GUI and MCP executables
+        run: cargo build --locked --release --features mcp --bin aio-asset-normalizer --bin aio-asset-normalizer-mcp
+      - name: Package macOS app and DMG
+        run: uv run packaging/build-mac-app.py
+      - uses: actions/upload-artifact@v7
         with:
           name: aio-asset-normalizer-macos-arm64
           path: packaging/out/
-          if-no-files-found: error
-
-      - name: Build macOS CLI archive
-        run: uv run packaging/build-cli.py
-
-      - name: Verify macOS CLI archive
-        run: test -s packaging/out/*.tar.gz
-
-      - name: Upload macOS CLI archive
-        uses: actions/upload-artifact@v7
-        with:
-          name: aio-asset-normalizer-cli-macos-arm64
-          path: packaging/out/*.tar.gz
           if-no-files-found: error
 
   linux:
@@ -161,12 +81,9 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       APPIMAGE_EXTRACT_AND_RUN: "1"
-
     steps:
-      - name: Check out source
-        uses: actions/checkout@v7
-
-      - name: Install Linux build dependencies
+      - uses: actions/checkout@v7
+      - name: Install desktop build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y \
@@ -190,120 +107,58 @@ jobs:
             libxkbcommon-x11-dev \
             libxrandr-dev \
             pkg-config
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Set up Python
-        uses: actions/setup-python@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: false
-
-      - name: Cache Cargo
-        uses: actions/cache@v6
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
           key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-cargo-
-
-      - name: Build AppImage
-        run: |
-          cargo build --locked --release --features mcp --bin aio-asset-normalizer --bin aio-asset-normalizer-mcp
-          uv run packaging/build-appimage.py
-
-      - name: Verify AppImage
-        run: test -s packaging/out/*.AppImage
-
-      - name: Upload AppImage
-        uses: actions/upload-artifact@v7
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-
+      - name: Build GUI and MCP executables
+        run: cargo build --locked --release --features mcp --bin aio-asset-normalizer --bin aio-asset-normalizer-mcp
+      - name: Package AppImage
+        run: uv run packaging/build-appimage.py
+      - uses: actions/upload-artifact@v7
         with:
           name: aio-asset-normalizer-linux-x86-64-appimage
           path: packaging/out/*.AppImage
           if-no-files-found: error
 
-      - name: Build Linux CLI archive
-        run: uv run packaging/build-cli.py
-
-      - name: Verify Linux CLI archive
-        run: test -s packaging/out/*.tar.gz
-
-      - name: Upload Linux CLI archive
-        uses: actions/upload-artifact@v7
-        with:
-          name: aio-asset-normalizer-cli-linux-x86-64
-          path: packaging/out/*.tar.gz
-          if-no-files-found: error
-
   release:
-    name: Publish nightly release
-    if: github.ref == 'refs/heads/publish'
-    needs:
-      - windows
-      - macos
-      - linux
+    name: Publish Nightly release
+    needs: [windows, macos, linux]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
-
     steps:
-      - name: Download Windows artifact
-        uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@v8
         with:
           name: aio-asset-normalizer-windows-x86-64
           path: staging/windows
-
-      - name: Download macOS artifact
-        uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@v8
         with:
           name: aio-asset-normalizer-macos-arm64
           path: staging/macos
-
-      - name: Download Linux artifact
-        uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@v8
         with:
           name: aio-asset-normalizer-linux-x86-64-appimage
           path: staging/linux
-
-      - name: Download Windows CLI artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: aio-asset-normalizer-cli-windows-x86-64
-          path: staging/cli-windows
-
-      - name: Download macOS CLI artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: aio-asset-normalizer-cli-macos-arm64
-          path: staging/cli-macos
-
-      - name: Download Linux CLI artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: aio-asset-normalizer-cli-linux-x86-64
-          path: staging/cli-linux
-
       - name: Prepare release assets
         shell: bash
         run: |
           set -euo pipefail
           shopt -s nullglob
-
           windows_installers=(staging/windows/*.exe)
           macos_disk_images=(staging/macos/*.dmg)
           linux_appimages=(staging/linux/*.AppImage)
-          windows_cli_archives=(staging/cli-windows/*.zip)
-          macos_cli_archives=(staging/cli-macos/*.tar.gz)
-          linux_cli_archives=(staging/cli-linux/*.tar.gz)
-
           if (( ${#windows_installers[@]} != 1 )); then
             echo "Expected exactly one Windows installer."
             exit 1
@@ -316,28 +171,11 @@ jobs:
             echo "Expected exactly one Linux AppImage."
             exit 1
           fi
-          if (( ${#windows_cli_archives[@]} != 1 )); then
-            echo "Expected exactly one Windows CLI archive."
-            exit 1
-          fi
-          if (( ${#macos_cli_archives[@]} != 1 )); then
-            echo "Expected exactly one macOS CLI archive."
-            exit 1
-          fi
-          if (( ${#linux_cli_archives[@]} != 1 )); then
-            echo "Expected exactly one Linux CLI archive."
-            exit 1
-          fi
-
           mkdir -p release-assets
           cp -- "${windows_installers[0]}" release-assets/aio-asset-normalizer-windows-x86-64.exe
           cp -- "${macos_disk_images[0]}" release-assets/aio-asset-normalizer-macos-arm64.dmg
           cp -- "${linux_appimages[0]}" release-assets/aio-asset-normalizer-linux-x86-64.AppImage
-          cp -- "${windows_cli_archives[0]}" release-assets/aio-asset-normalizer-cli-windows-x86-64.zip
-          cp -- "${macos_cli_archives[0]}" release-assets/aio-asset-normalizer-cli-macos-arm64.tar.gz
-          cp -- "${linux_cli_archives[0]}" release-assets/aio-asset-normalizer-cli-linux-x86-64.tar.gz
-
-      - name: Update nightly tag
+      - name: Update nightly tag and release assets
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
@@ -345,7 +183,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           tag_lookup_ref="repos/${REPOSITORY}/git/ref/tags/nightly"
           tag_update_ref="repos/${REPOSITORY}/git/refs/tags/nightly"
           if gh api "${tag_lookup_ref}" >/dev/null 2>&1; then
@@ -358,29 +195,12 @@ jobs:
               -f "sha=${COMMIT_SHA}" >/dev/null
           fi
 
-      - name: Replace nightly release assets
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
-          COMMIT_SHA: ${{ github.sha }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
           releases_api="repos/${REPOSITORY}/releases"
-          release_id=""
           release_body=$(cat <<EOF
           Automated nightly build for commit ${COMMIT_SHA}.
 
-          ## Headless CLI
-
-          The standalone CLI archives (\`aio-asset-normalizer-cli-*\`) each contain a
-          self-contained executable. Run \`aio-asset-normalizer-cli docs --raw\` for the
-          full command and JSON reference; stdout is one JSON envelope per run and logs
-          go to stderr.
-
-          ## ⚠️ Note for macOS users
-          Builds are unsigned (no Apple Developer ID). After dragging AIO Asset Normalizer.app into Applications, clear the quarantine flag once:
+          ## macOS
+          Builds are unsigned (no Apple Developer ID). After moving AIO Asset Normalizer.app into Applications, clear the quarantine flag once:
           \`\`\`
           xattr -cr "/Applications/AIO Asset Normalizer.app"
           \`\`\`
@@ -415,9 +235,6 @@ jobs:
             release-assets/aio-asset-normalizer-windows-x86-64.exe \
             release-assets/aio-asset-normalizer-macos-arm64.dmg \
             release-assets/aio-asset-normalizer-linux-x86-64.AppImage \
-            release-assets/aio-asset-normalizer-cli-windows-x86-64.zip \
-            release-assets/aio-asset-normalizer-cli-macos-arm64.tar.gz \
-            release-assets/aio-asset-normalizer-cli-linux-x86-64.tar.gz \
             --repo "${REPOSITORY}" \
             --clobber
 

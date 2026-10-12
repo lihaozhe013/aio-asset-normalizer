@@ -124,13 +124,14 @@ rg "\[fbx_converter\]" \
 
 ## Shared execution and output policy
 
-GUI and CLI execute `operations::converter::ConversionRequest` using the same
-fixed profile. Overwrite is opt-in in both interfaces. Each conversion uses a
+The GUI and `fbx_convert` MCP tool use `operations::converter::ConversionRequest`
+with the same fixed profile. Overwrite is opt-in. Each conversion uses a
 unique temporary script directory and temporary GLB in the destination directory.
 The core re-parses the generated GLB before atomic commit. Failed conversion or
 validation preserves the old output; no-clobber commit also protects a file
 created after preflight. Batch output collisions are rejected before execution.
 
-CLI `--dry-run` checks inputs, supported formats, dependency discovery, and path
-conflicts without starting Blender or creating destination directories. Its
-`preflight-only` report is not a successful import or generated-GLB validation.
+The GUI preflight checks inputs, supported formats, Blender availability, and
+path conflicts without starting Blender or creating destination directories.
+Passing preflight does not prove conversion or generated-GLB validation will
+succeed.

@@ -1,8 +1,8 @@
 # MCP Integration
 
 AIO Asset Normalizer includes a native, local MCP server for AI clients. The
-server uses stdio and the same Rust operation services as the GUI and CLI. It
-does not require Python or Node.js.
+server uses stdio and the same Rust operation services as the GUI. It does not
+require Python or Node.js.
 
 ## Install and configure
 

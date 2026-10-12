@@ -1,7 +1,7 @@
 //! Shared GLB export pipeline steps.
 //!
-//! The desktop application and the CLI apply the same pending edits, split
-//! animation output, and export selection so both front ends stay identical.
+//! The desktop application and MCP server apply the same pending edits, split
+//! animation output, and export selection.
 
 use crate::modules::operation_support::{check_output, OperationError};
 use std::path::PathBuf;

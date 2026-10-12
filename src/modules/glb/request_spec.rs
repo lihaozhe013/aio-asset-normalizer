@@ -88,7 +88,7 @@ impl From<RootMotionModeArg> for RootMotionRemovalMode {
     }
 }
 
-/// Resolved recipe options that both the CLI flags and job files produce.
+/// Resolved recipe options shared by file jobs and UI requests.
 #[derive(Debug, Clone)]
 pub struct RecipeOptions {
     pub preset: GlbExportPreset,

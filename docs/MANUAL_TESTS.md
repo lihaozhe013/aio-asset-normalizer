@@ -246,43 +246,9 @@ rg "\[glb_export\]" "/path/to/aio-asset-normalizer/logs/glb-export.log" \
 
 Generated log files are local artifacts and must remain untracked.
 
-## CLI
-
-`cargo test --test cli` covers the command contract end to end. For a manual
-pass, build the CLI and drive it against a known GLB, BVH, and target GLB:
-
-```bash
-cargo build --bin aio-asset-normalizer-cli
-BIN=target/debug/aio-asset-normalizer-cli
-
-$BIN docs --raw | head           # embedded reference
-$BIN glb inspect asset.glb       # summary, catalog, Skin hierarchies (JSON)
-$BIN glb export asset.glb --output-root out --preset skeleton --dry-run
-$BIN glb export asset.glb --output-root out --preset skeleton
-$BIN glb export asset.glb --output-root out --preset skeleton   # exits 3
-$BIN bvh inspect motion.bvh
-$BIN retarget prompt --source motion.bvh --target target.glb --out prompt.md
-$BIN retarget validate --source motion.bvh --target target.glb --mapping mapping.json
-$BIN retarget run --source motion.bvh --target target.glb --mapping mapping.json \
-  --out retargeted.glb --preset character
-```
-
-1. Confirm every command prints one JSON envelope on stdout with
-   `schema_version: 1`, and that progress and diagnostics appear only on stderr.
-2. Confirm exit codes: `0` success, `2` for an unknown flag, `3` for an invalid
-   or blocked operation, `4` for an unreadable input, and `5` when Blender is
-   missing for `fbx convert`.
-3. Confirm a re-run without `--overwrite` is blocked and that `--overwrite`
-   replaces the output atomically with no `.tmp` file left behind.
-4. Confirm the classified error code in `error.code` matches the process exit
-   code.
-5. On Windows, run the CLI from `cmd.exe` and confirm stdout and stderr are
-   visible (the CLI is a console application and does not use the GUI
-   subsystem).
-
 ## MCP and GUI Session Integration
 
-Build the native service and GUI from the same checkout, then configure an MCP
+Run `make build` to build the release GUI and MCP server, then configure an MCP
 client with the paths described in `docs/MCP.md`.
 
 ### GUI setup prompt
@@ -332,7 +298,7 @@ client with the paths described in `docs/MCP.md`.
    protocol messages. Call `session_list` while the GUI is closed and confirm
    it returns an empty list without launching a window.
 2. Call `glb_inspect` on a known absolute GLB path. Confirm the structured result
-   includes the same summary and export catalog as the CLI. Call it with a
+   includes the expected summary and export catalog. Call it with a
    missing absolute path and confirm the client receives a structured error.
 3. Call `session_open` with no ID. Confirm the GUI launches, its status panel
    reports the bridge, and the returned session state has a revision. Call
@@ -344,7 +310,7 @@ client with the paths described in `docs/MCP.md`.
    viewport. Confirm the preview reflects the edit, capture metadata reports
    the same revision, and PNG content is present. Export to a new absolute path,
    poll `job_get`, reopen the output through `glb_inspect`, and compare it with
-   the CLI output for identical inputs and settings.
+   the file-oriented MCP result for identical inputs and settings.
 5. In BVH Studio, open a BVH, set explicit axes and units, set a valid trim,
    position playback at a chosen frame, pause, capture, and export. Reopen and
    inspect the BVH output. Confirm invalid units or trim leave the previous
@@ -353,7 +319,7 @@ client with the paths described in `docs/MCP.md`.
    explicit target GLB and Mapping v2, validate it, preview the retargeted pose,
    capture the viewport, exit preview, and export. Confirm name suggestions
    remain suggestions and never replace authored mappings. Reparse each GLB
-   output and compare its report with the file-oriented MCP or CLI request.
+   output and compare its report with the corresponding file-oriented MCP request.
 7. Configure a GLB batch with multiple inputs and a recipe, run preflight,
    query results, export, and verify every per-file output. Repeat with one
    invalid input and with an output failure; completed outputs must remain and

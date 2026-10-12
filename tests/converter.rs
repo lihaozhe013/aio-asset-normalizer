@@ -1,7 +1,11 @@
 //! Converter submission safety and an opt-in real Blender integration test.
 use aio_asset_normalizer::modules::{
     atomic_file,
-    operations::converter::{self, ConversionRequest},
+    glb::{pipeline::ExportEdits, GlbDocument},
+    operations::{
+        self,
+        converter::{self, ConversionRequest},
+    },
 };
 use std::process::Command;
 mod support;
@@ -44,27 +48,18 @@ fn converter_dry_run_checks_dependencies_without_generating_artifacts() {
     let fake = dir.path().join("blender-placeholder");
     std::fs::write(&fake, b"").unwrap();
     let out = dir.path().join("new/model.glb");
-    let result = Command::new(env!("CARGO_BIN_EXE_aio-asset-normalizer-cli"))
-        .args([
-            "fbx",
-            "convert",
-            input.to_str().unwrap(),
-            "--out",
-            out.to_str().unwrap(),
-            "--blender",
-            fake.to_str().unwrap(),
-            "--dry-run",
-        ])
-        .output()
-        .unwrap();
-    assert!(result.status.success());
-    let value: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
-    assert_eq!(value["results"]["validation_scope"], "preflight-only");
+    converter::preflight(&ConversionRequest {
+        input,
+        output: out.clone(),
+        blender: Some(fake),
+        overwrite: false,
+    })
+    .unwrap();
     assert!(!out.parent().unwrap().exists());
 }
 #[test]
 #[ignore = "Requires the fixed Blender version installed by the integration workflow"]
-fn real_blender_converter_matches_cli_and_snapshot_request() {
+fn real_blender_converter_produces_inspectable_and_exportable_glb() {
     let blender = aio_asset_normalizer::modules::blender::bridge::find_blender(None)
         .expect("Blender must be installed for this opt-in test");
     let dir = tempfile::tempdir().unwrap();
@@ -82,64 +77,35 @@ fn real_blender_converter_matches_cli_and_snapshot_request() {
         .status()
         .unwrap()
         .success());
-    let cli = dir.path().join("cli.glb");
-    let gui = dir.path().join("gui.glb");
-    let result = Command::new(env!("CARGO_BIN_EXE_aio-asset-normalizer-cli"))
-        .args([
-            "fbx",
-            "convert",
-            input.to_str().unwrap(),
-            "--out",
-            cli.to_str().unwrap(),
-            "--blender",
-            blender.to_str().unwrap(),
-        ])
-        .output()
-        .unwrap();
-    assert!(
-        result.status.success(),
-        "{}",
-        String::from_utf8_lossy(&result.stdout)
-    );
+    let converted = dir.path().join("converted.glb");
     converter::execute(
         &ConversionRequest {
             input,
-            output: gui.clone(),
+            output: converted.clone(),
             blender: Some(blender),
             overwrite: false,
         },
         1,
     )
     .unwrap();
-    assert_eq!(std::fs::read(&cli).unwrap(), std::fs::read(gui).unwrap());
-    let inspect = Command::new(env!("CARGO_BIN_EXE_aio-asset-normalizer-cli"))
-        .args(["glb", "inspect", cli.to_str().unwrap()])
-        .output()
-        .unwrap();
-    assert!(inspect.status.success());
+    let document = GlbDocument::load(&converted).unwrap();
+    assert!(document.summary().meshes > 0);
     let output = dir.path().join("standardized");
-    for dry_run in [true, false] {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_aio-asset-normalizer-cli"));
-        command.args([
-            "glb",
-            "export",
-            cli.to_str().unwrap(),
-            "--output-root",
-            output.to_str().unwrap(),
-            "--preset",
-            "preserve-all",
-        ]);
-        if dry_run {
-            command.arg("--dry-run");
-        }
-        let result = command.output().unwrap();
-        assert!(
-            result.status.success(),
-            "{}",
-            String::from_utf8_lossy(&result.stdout)
-        );
+    let selection = document.default_export_selection().unwrap();
+    let jobs = operations::glb::prepare_export(
+        &document,
+        &ExportEdits::default(),
+        &selection,
+        &output,
+        &[&converted],
+        false,
+    )
+    .unwrap();
+    for job in jobs {
+        operations::glb::execute_job(&job, false).unwrap();
     }
-    assert!(output.join("cli_full.glb").is_file());
+    assert!(output.is_file());
+    assert!(GlbDocument::load(&output).is_ok());
 }
 
 #[test]
