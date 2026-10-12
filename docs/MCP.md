@@ -65,14 +65,26 @@ settings, avoid replacing a conflicting server entry without asking, reconnect
 the server, verify the required tools, and call the read-only `session_list`
 tool.
 
+Switch the dialog to **One-time use** when you want an agent to use MCP for the
+current task without registering a persistent server. This prompt asks the
+agent to launch the detected command directly as a temporary stdio child
+process, negotiate MCP, inspect tool schemas, perform the requested task, and
+close the process when finished. The agent can use an MCP client SDK already
+available in its environment or a temporary Python 3 standard-library client;
+the prompt does not ask it to install dependencies or edit client/project
+configuration. The process must stay alive for related calls such as job
+polling, then be closed. The agent must say if its execution sandbox cannot
+launch or manage a local child process and must not silently switch to
+persistent configuration.
+
 The dialog reports **Copied** only when the system clipboard accepts the full
 prompt. If clipboard access fails, select and copy the prompt from its preview.
 The dialog does not confirm that the AI client has loaded the server; the agent
 reports connection status after it verifies the tools. Some clients require a
 restart before the server appears.
 
-The command is resolved from the running installation each time the dialog is
-opened or refreshed. Windows and macOS use the MCP executable beside the GUI;
+The launch data is resolved from the running installation each time the dialog
+is opened or refreshed. Windows and macOS use the MCP executable beside the GUI;
 Linux binary installations use the sibling MCP executable. Linux AppImages use
 the outer `.AppImage` path with `--mcp`, never the temporary mount directory.
 If the matching MCP executable or a stable AppImage path cannot be found, the

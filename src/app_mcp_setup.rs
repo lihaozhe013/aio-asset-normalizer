@@ -1,12 +1,13 @@
 use crate::{
     app::App,
-    modules::mcp_setup::{self, McpLaunchSpec, McpSetupError},
+    modules::mcp_setup::{self, McpLaunchSpec, McpPromptMode, McpSetupError},
 };
 use three_d::egui;
 
 #[derive(Default)]
 pub(crate) struct McpSetupDialogState {
     opened: bool,
+    mode: McpPromptMode,
     launch: Option<Result<McpLaunchSpec, McpSetupError>>,
     prompt: Option<String>,
     prompt_error: Option<String>,
@@ -26,7 +27,7 @@ impl McpSetupDialogState {
     fn refresh(&mut self) {
         let launch = mcp_setup::detect_launch_spec();
         let (prompt, prompt_error) = match &launch {
-            Ok(spec) => match mcp_setup::build_setup_prompt(spec) {
+            Ok(spec) => match build_prompt(self.mode, spec) {
                 Ok(prompt) => (Some(prompt), None),
                 Err(error) => (None, Some(error.to_string())),
             },
@@ -35,6 +36,23 @@ impl McpSetupDialogState {
         self.prompt = prompt;
         self.prompt_error = prompt_error;
         self.launch = Some(launch);
+        self.copy_status = CopyStatus::Idle;
+    }
+
+    fn refresh_prompt(&mut self) {
+        let Some(Ok(spec)) = self.launch.as_ref() else {
+            return;
+        };
+        match build_prompt(self.mode, spec) {
+            Ok(prompt) => {
+                self.prompt = Some(prompt);
+                self.prompt_error = None;
+            }
+            Err(error) => {
+                self.prompt = None;
+                self.prompt_error = Some(error.to_string());
+            }
+        }
         self.copy_status = CopyStatus::Idle;
     }
 
@@ -73,6 +91,13 @@ impl McpSetupDialogState {
     }
 }
 
+fn build_prompt(mode: McpPromptMode, spec: &McpLaunchSpec) -> Result<String, McpSetupError> {
+    match mode {
+        McpPromptMode::PersistentSetup => mcp_setup::build_setup_prompt(spec),
+        McpPromptMode::OneTimeUse => mcp_setup::build_one_time_prompt(spec),
+    }
+}
+
 impl App {
     pub(crate) fn open_mcp_setup(&mut self) {
         self.mcp_setup.refresh();
@@ -106,7 +131,29 @@ pub(crate) fn render(app: &mut App, ctx: &egui::Context) {
 }
 
 fn render_contents(state: &mut McpSetupDialogState, ui: &mut egui::Ui) {
-    ui.label("Copy this prompt and paste it into your local AI agent.");
+    let mut selected_mode = state.mode;
+    ui.horizontal(|ui| {
+        ui.selectable_value(
+            &mut selected_mode,
+            McpPromptMode::PersistentSetup,
+            "Configure agent",
+        );
+        ui.selectable_value(
+            &mut selected_mode,
+            McpPromptMode::OneTimeUse,
+            "One-time use",
+        );
+    });
+    if selected_mode != state.mode {
+        state.mode = selected_mode;
+        state.refresh_prompt();
+    }
+    ui.label(match state.mode {
+        McpPromptMode::PersistentSetup => "Copy this prompt and paste it into your local AI agent.",
+        McpPromptMode::OneTimeUse => {
+            "Copy this prompt to use MCP for one task without saving client configuration."
+        }
+    });
     ui.add_space(8.0);
 
     let launch = state.launch.clone();
@@ -167,7 +214,13 @@ fn render_contents(state: &mut McpSetupDialogState, ui: &mut egui::Ui) {
     ui.add_space(8.0);
     let can_copy = state.prompt.is_some();
     if ui
-        .add_enabled(can_copy, egui::Button::new("Copy setup prompt"))
+        .add_enabled(
+            can_copy,
+            egui::Button::new(match state.mode {
+                McpPromptMode::PersistentSetup => "Copy setup prompt",
+                McpPromptMode::OneTimeUse => "Copy one-time prompt",
+            }),
+        )
         .clicked()
     {
         state.copy_prompt();
@@ -184,7 +237,10 @@ fn render_contents(state: &mut McpSetupDialogState, ui: &mut egui::Ui) {
 
     if let Some(prompt) = state.prompt.as_ref() {
         ui.add_space(8.0);
-        ui.label("Setup prompt preview (select text to copy manually)");
+        ui.label(match state.mode {
+            McpPromptMode::PersistentSetup => "Setup prompt preview (select text to copy manually)",
+            McpPromptMode::OneTimeUse => "One-time prompt preview (select text to copy manually)",
+        });
         egui::Frame::group(ui.style()).show(ui, |ui| {
             egui::ScrollArea::vertical()
                 .max_height(240.0)

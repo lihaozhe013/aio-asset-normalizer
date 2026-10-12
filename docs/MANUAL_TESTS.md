@@ -316,6 +316,13 @@ client with the paths described in `docs/MCP.md`.
 7. Resize the application to a small window. Confirm the dialog can scroll,
    closes without resetting the active page, and resolving its command again
    with **Refresh** does not persist a copied absolute path in preferences.
+8. Switch between **Configure agent** and **One-time use**. Confirm each mode
+   copies its matching prompt with the same launch command and arguments. In
+   one-time mode, confirm the agent prompt requires local process execution,
+   forbids persistent configuration changes and dependency installation, keeps
+   the process alive through related calls, and closes it afterward. Test in a
+   client sandbox that blocks child processes and confirm the prompt directs
+   the agent to report the limitation without falling back to persistent setup.
 
 1. Launch the MCP executable through the client. Confirm `initialize` negotiates
    successfully, `tools/list` exposes typed schemas, and stdout contains only

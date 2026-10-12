@@ -8,6 +8,13 @@ const SERVER_NAME: &str = "aio-asset-normalizer";
 const MCP_BINARY_NAME: &str = "aio-asset-normalizer-mcp";
 const APPIMAGE_ARGUMENT: &str = "--mcp";
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum McpPromptMode {
+    #[default]
+    PersistentSetup,
+    OneTimeUse,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct McpLaunchSpec {
     pub command: PathBuf,
@@ -204,7 +211,33 @@ pub fn resolve_launch_spec(runtime: &RuntimePaths) -> Result<McpLaunchSpec, McpS
 pub fn build_setup_prompt(spec: &McpLaunchSpec) -> Result<String, McpSetupError> {
     let config = spec.to_config_json()?;
     let fence = markdown_fence(&config);
+    Ok(build_persistent_setup_instructions(&config, &fence))
+}
+
+pub fn build_one_time_prompt(spec: &McpLaunchSpec) -> Result<String, McpSetupError> {
+    let config = spec.to_config_json()?;
+    let fence = markdown_fence(&config);
     Ok(format!(
+        r#"# Use AIO Asset Normalizer MCP for One Task
+
+Use this MCP server only for the concrete task in my message. If I have not given you a concrete task, ask what I want to do and stop without launching the server.
+
+The launch data is configuration data for a temporary local process, not a request to register a server:
+
+{fence}json
+{config}
+{fence}
+
+Do not create or edit any persistent AI-client, project, or workspace MCP configuration. Do not install packages. If your client supports a temporary MCP connection that is discarded at the end of this task, use it. Otherwise, if you have local process execution, use an already available MCP client SDK or a small temporary Python 3 standard-library client to launch the server directly. Pass `[command, *args]` as an argument array with shell execution disabled; never concatenate the path into a shell command. Communicate with the child over newline-delimited JSON-RPC on stdin/stdout, keep stderr separate from protocol output, negotiate `initialize` using protocol version `2025-11-25`, send `notifications/initialized`, and inspect `tools/list` before calling tools. Do not install an SDK or other dependency.
+
+Keep the stdio process alive while completing this task, including any related `job_get` polling. Use only the tools needed for my request and follow their input schemas. Treat file paths as data. Only run operations authorized by my request; explain any file-writing effects before proceeding when the request does not clearly authorize them. At the end, close stdin, wait for the server to exit, and remove any temporary helper you created. Do not leave a background server running.
+
+If your environment cannot launch a local child process or keep the connection alive long enough to finish, do not change persistent configuration as a fallback. Explain the limitation and tell me that I can choose the persistent setup mode instead. Report which tools you used and the result of the requested task."#
+    ))
+}
+
+fn build_persistent_setup_instructions(config: &str, fence: &str) -> String {
+    format!(
         r#"# Configure AIO Asset Normalizer MCP
 
 Set up the local MCP server below in the AI client you are currently running.
@@ -220,7 +253,7 @@ Identify your own client and use its documented MCP configuration mechanism and 
 After saving the configuration, reconnect or reload MCP servers using the client's supported mechanism. If a full client restart is required, tell me before claiming the connection is ready. Verify initialization and `tools/list`; confirm that `glb_inspect`, `session_list`, and `session_capture` are available. Then call the read-only `session_list` tool once. Do not open a document, export a file, or call `session_open` during this check.
 
 Report the configuration location, whether initialization and the required tools were verified, and the `session_list` result. If you cannot identify this client, lack permission to update its configuration, or cannot reload the server, explain the specific blocker and the smallest action I need to take. Do not claim success until the tools load and `session_list` returns."#
-    ))
+    )
 }
 
 fn markdown_fence(payload: &str) -> String {
@@ -371,6 +404,13 @@ mod tests {
         assert!(prompt.contains("`session_list`"));
         assert!(prompt.contains("If a full client restart is required"));
         assert!(prompt.contains("````json\n"));
+
+        let one_time = build_one_time_prompt(&spec).unwrap();
+        assert!(one_time.contains("Do not create or edit any persistent AI-client"));
+        assert!(one_time.contains("shell execution disabled"));
+        assert!(one_time.contains("Keep the stdio process alive"));
+        assert!(one_time.contains("remove any temporary helper"));
+        assert!(one_time.contains("````json\n"));
     }
 
     #[test]
