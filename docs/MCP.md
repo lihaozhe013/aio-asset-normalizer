@@ -56,14 +56,19 @@ installed package rather than a Cargo `target` directory for normal use.
 
 ### Configure an AI client from the GUI
 
-Open **Help → Connect AI** or use the **Connect AI** button beside the session
-status. The dialog detects the MCP server shipped with the running application,
-shows the resolved command and arguments, and generates one setup prompt for
-the AI client currently in use. Select **Copy setup prompt** and paste the
-result into that client's agent. The agent is asked to preserve existing MCP
-settings, avoid replacing a conflicting server entry without asking, reconnect
-the server, verify the required tools, and call the read-only `session_list`
-tool.
+Open **Help → Connect AI** or use the **Connect AI** button at the right side of
+the page navigation row. The dialog detects the MCP server shipped with the
+running application, shows the resolved command and arguments, and generates
+one setup prompt for the AI client currently in use. Select **Copy setup prompt**
+and paste the result into that client's agent. The agent is asked to preserve
+existing MCP settings, avoid replacing a conflicting server entry without
+asking, reconnect the server, verify the required tools, and call the read-only
+`session_list` tool.
+
+To inspect app-side GUI session activity or stop an active GUI task, expand
+**MCP diagnostics** in the dialog. This status only describes the application's
+GUI bridge and does not confirm that an AI client has configured or connected
+the MCP server.
 
 Switch the dialog to **One-time use** when you want an agent to use MCP for the
 current task without registering a persistent server. This prompt asks the

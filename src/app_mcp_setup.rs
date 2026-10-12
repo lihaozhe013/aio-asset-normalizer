@@ -110,27 +110,47 @@ pub(crate) fn render(app: &mut App, ctx: &egui::Context) {
         return;
     }
 
-    let state = &mut app.mcp_setup;
-    let mut opened = state.opened;
-    let available_width = (ctx.content_rect().width() - 24.0).clamp(240.0, 640.0);
-    let available_height = (ctx.content_rect().height() - 96.0).max(160.0);
-    egui::Window::new("Connect your AI agent")
-        .open(&mut opened)
-        .default_width(available_width.min(640.0))
-        .min_width(available_width.min(360.0))
-        .max_width(available_width)
-        .resizable(true)
-        .collapsible(false)
-        .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
-        .show(ctx, |ui| {
-            egui::ScrollArea::vertical()
-                .max_height(available_height)
-                .show(ui, |ui| render_contents(state, ui));
-        });
-    state.opened = opened;
+    let runtime_status = app.automation_status();
+    let stop_task_requested = {
+        let state = &mut app.mcp_setup;
+        let mut opened = state.opened;
+        let mut stop_task_requested = false;
+        let available_width = (ctx.content_rect().width() - 24.0).clamp(240.0, 640.0);
+        let available_height = (ctx.content_rect().height() - 96.0).max(160.0);
+        egui::Window::new("Connect your AI agent")
+            .open(&mut opened)
+            .default_width(available_width.min(640.0))
+            .min_width(available_width.min(360.0))
+            .max_width(available_width)
+            .resizable(true)
+            .collapsible(false)
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .show(ctx, |ui| {
+                egui::ScrollArea::vertical()
+                    .max_height(available_height)
+                    .show(ui, |ui| {
+                        render_contents(
+                            state,
+                            runtime_status.as_ref(),
+                            &mut stop_task_requested,
+                            ui,
+                        )
+                    });
+            });
+        state.opened = opened;
+        stop_task_requested
+    };
+    if stop_task_requested {
+        app.cancel_active_automation_job();
+    }
 }
 
-fn render_contents(state: &mut McpSetupDialogState, ui: &mut egui::Ui) {
+fn render_contents(
+    state: &mut McpSetupDialogState,
+    runtime_status: Option<&(String, Option<String>, bool)>,
+    stop_task_requested: &mut bool,
+    ui: &mut egui::Ui,
+) {
     let mut selected_mode = state.mode;
     ui.horizontal(|ui| {
         ui.selectable_value(
@@ -209,6 +229,33 @@ fn render_contents(state: &mut McpSetupDialogState, ui: &mut egui::Ui) {
                     serde_json::to_string(&spec.args).unwrap_or_else(|_| "[]".to_owned())
                 ));
             }
+        });
+
+    egui::CollapsingHeader::new("MCP diagnostics")
+        .default_open(false)
+        .show(ui, |ui| {
+            match runtime_status {
+                Some((session, task, recently_active)) => {
+                    ui.label(format!("GUI session: {session}"));
+                    ui.label(if *recently_active {
+                        "Recent GUI request received"
+                    } else {
+                        "Waiting for a GUI session request"
+                    });
+                    if let Some(task) = task {
+                        ui.label(format!("Active task: {task}"));
+                        if ui.button("Stop MCP task").clicked() {
+                            *stop_task_requested = true;
+                        }
+                    }
+                }
+                None => {
+                    ui.label("No GUI session is currently registered.");
+                }
+            }
+            ui.small(
+                "This reports app-side GUI activity only. It does not confirm that your AI agent is configured.",
+            );
         });
 
     ui.add_space(8.0);

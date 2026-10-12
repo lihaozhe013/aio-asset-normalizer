@@ -289,7 +289,10 @@ client with the paths described in `docs/MCP.md`.
 
 1. Open **Help → Connect AI** from each of GLB Editor, BVH Studio, and FBX
    Converter. Confirm the dialog opens without changing the current page or
-   document. Confirm the permanent **Connect AI** button opens the same dialog.
+   document. Confirm the **Connect AI** button shares the page navigation row
+   and there is no persistent MCP listening indicator below it. Expand **MCP
+   diagnostics** and confirm the status is described as app-side activity, not
+   proof that an AI client is configured.
 2. Confirm a packaged installation reports the MCP executable beside the GUI
    on Windows and macOS, and the sibling executable on a Linux binary install.
    In an AppImage run, confirm the command is the absolute outer `.AppImage`
@@ -376,10 +379,11 @@ client with the paths described in `docs/MCP.md`.
     using `scope: "window"`. Confirm unavailable captures return an explicit
     status rather than a stale image.
 12. Start a multi-output batch or Blender conversion, query progress, and
-    request cancellation. Confirm the GUI Stop MCP task control has the same
-    cooperative behavior, committed atomic outputs remain intact, and the job
-    reports completed files. Close the GUI during a Blender job and confirm
-    the child process is stopped before the application exits.
+    request cancellation. Open **Connect AI → MCP diagnostics** and confirm
+    the Stop MCP task control has the same cooperative behavior, committed
+    atomic outputs remain intact, and the job reports completed files. Close the
+    GUI during a Blender job and confirm the child process is stopped before
+    the application exits.
 13. Stop the GUI and confirm its session manifest becomes unreachable. Restart
     it and confirm a new session ID is registered; the old session and running
     jobs are not claimed as restored.

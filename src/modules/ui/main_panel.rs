@@ -115,7 +115,11 @@ fn render_page_tabs(app: &mut App, ui: &mut three_d::egui::Ui) {
     Frame::NONE
         .inner_margin(Margin::symmetric(8, 2))
         .show(ui, |ui| {
-            ui.horizontal(|ui| {
+            let header_size = Vec2::new(
+                ui.available_width(),
+                ui.spacing().interact_size.y + ui.spacing().item_spacing.y,
+            );
+            ui.allocate_ui_with_layout(header_size, Layout::left_to_right(Align::Center), |ui| {
                 ui.label(RichText::new("AIO Asset Normalizer").strong());
                 ui.separator();
                 if ui
@@ -156,30 +160,12 @@ fn render_page_tabs(app: &mut App, ui: &mut three_d::egui::Ui) {
                         app.exit_glb_retarget_preview();
                     }
                 }
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    if ui.button("Connect AI").clicked() {
+                        app.open_mcp_setup();
+                    }
+                });
             });
         });
-    ui.separator();
-    let status = app.automation_status();
-    let mut stop_job = false;
-    let status_row = Vec2::new(ui.available_width(), ui.spacing().interact_size.y);
-    ui.allocate_ui_with_layout(status_row, Layout::right_to_left(Align::Center), |ui| {
-        if ui.button("Connect AI").clicked() {
-            app.open_mcp_setup();
-        }
-        if let Some((session, task, connected)) = status {
-            if task.is_some() {
-                stop_job = ui.button("Stop MCP task").clicked();
-            }
-            let connection = if connected { "connected" } else { "listening" };
-            let label = task.map_or_else(
-                || format!("MCP {connection} · {session}"),
-                |task| format!("MCP {connection} · {session} · {task}"),
-            );
-            ui.small(label);
-        }
-    });
-    if stop_job {
-        app.cancel_active_automation_job();
-    }
     ui.separator();
 }
