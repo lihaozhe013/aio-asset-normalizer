@@ -6,7 +6,7 @@ use crate::modules::ui::{
     tabs, theme,
 };
 use egui_phosphor::regular::{ARROWS_CLOCKWISE, CUBE, PERSON_SIMPLE_RUN};
-use three_d::egui::{self, Key, Panel, RichText, ScrollArea};
+use three_d::egui::{self, Key, Panel, ScrollArea};
 
 pub fn render_ui(
     app: &mut App,
@@ -209,12 +209,8 @@ fn render_page_tabs(app: &mut App, ui: &mut three_d::egui::Ui) {
     let clicked = Frame::NONE
         .inner_margin(Margin::symmetric(8, 4))
         .show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(RichText::new("AIO Asset Normalizer").strong());
-                ui.separator();
-                tabs::segmented(ui, &entries, selected)
-            })
-            .inner
+            ui.horizontal(|ui| tabs::segmented(ui, &entries, selected))
+                .inner
         })
         .inner;
     if let Some(index) = clicked {
