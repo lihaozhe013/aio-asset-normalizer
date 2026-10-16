@@ -1,10 +1,14 @@
 use crate::app::{App, BottomPanelTab};
 use crate::modules::ui::menu_bar::Page;
+use crate::modules::ui::{tabs, theme};
+use egui_phosphor::regular::{
+    FILM_STRIP, PAUSE, PLAY, SKIP_BACK, SKIP_FORWARD, TERMINAL,
+};
+use three_d::egui::*;
 
 pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
-    use three_d::egui::*;
-
-    let has_animation = app.page == Page::GlbEditor && !app.glb_animation_entries().is_empty();
+    let has_animation =
+        app.page == Page::GlbEditor && !app.glb_animation_entries().is_empty();
     if !has_animation && app.bottom_panel_tab == BottomPanelTab::Animation {
         app.bottom_panel_tab = BottomPanelTab::DebugLog;
     }
@@ -16,24 +20,30 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
         .show_inside(ui, |ui| {
             ui.add_space(4.0);
             ui.horizontal(|ui| {
-                if has_animation
-                    && ui
-                        .selectable_label(
-                            app.bottom_panel_tab == BottomPanelTab::Animation,
-                            app.i18n.tr("bottom.animation"),
-                        )
-                        .clicked()
-                {
-                    app.bottom_panel_tab = BottomPanelTab::Animation;
+                let mut available: Vec<BottomPanelTab> = Vec::new();
+                if has_animation {
+                    available.push(BottomPanelTab::Animation);
                 }
-                if ui
-                    .selectable_label(
-                        app.bottom_panel_tab == BottomPanelTab::DebugLog,
-                        app.i18n.tr("bottom.debug_log"),
-                    )
-                    .clicked()
-                {
-                    app.bottom_panel_tab = BottomPanelTab::DebugLog;
+                available.push(BottomPanelTab::DebugLog);
+                let entries: Vec<tabs::TabEntry> = available
+                    .iter()
+                    .map(|tab| match tab {
+                        BottomPanelTab::Animation => tabs::TabEntry {
+                            icon: FILM_STRIP,
+                            label: app.i18n.tr("bottom.animation").to_owned(),
+                        },
+                        BottomPanelTab::DebugLog => tabs::TabEntry {
+                            icon: TERMINAL,
+                            label: app.i18n.tr("bottom.debug_log").to_owned(),
+                        },
+                    })
+                    .collect();
+                let selected = available
+                    .iter()
+                    .position(|tab| *tab == app.bottom_panel_tab)
+                    .unwrap_or(available.len().saturating_sub(1));
+                if let Some(index) = tabs::segmented(ui, &entries, selected) {
+                    app.bottom_panel_tab = available[index];
                 }
             });
             ui.separator();
@@ -52,9 +62,6 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
 }
 
 fn render_animation_timeline(app: &mut App, ui: &mut three_d::egui::Ui) {
-    use egui_phosphor::regular::{PAUSE, PLAY, SKIP_BACK, SKIP_FORWARD};
-    use three_d::egui::*;
-
     let entries = app.glb_animation_entries();
     if entries.is_empty() {
         ui.label(app.i18n.tr("glb.no_animations"));
@@ -87,14 +94,21 @@ fn render_animation_timeline(app: &mut App, ui: &mut three_d::egui::Ui) {
         if let Some((_, duration, playable, unsupported)) = entries.get(selected_index) {
             if !playable {
                 ui.colored_label(
-                    Color32::YELLOW,
-                    format!("{}: {}", app.i18n.tr("glb.unsupported"), unsupported),
+                    theme::WARNING,
+                    format!(
+                        "{}: {}",
+                        app.i18n.tr("glb.unsupported"),
+                        unsupported
+                    ),
                 );
                 return;
             }
 
             ui.checkbox(&mut app.glb_animation_loop, app.i18n.tr("glb.loop"));
-            ui.label(format!("{:.3}s / {:.3}s", app.glb_animation_time, duration));
+            ui.monospace(format!(
+                "{:.3}s / {:.3}s",
+                app.glb_animation_time, duration
+            ));
         }
     });
 
@@ -102,16 +116,21 @@ fn render_animation_timeline(app: &mut App, ui: &mut three_d::egui::Ui) {
     if let Some((_, duration, playable, _)) = entries.get(selected_index) {
         if *playable {
             ui.horizontal(|ui| {
-                let icon_size = 18.0;
+                let icon_size = 16.0;
+                let button_size = Vec2::splat(28.0);
 
                 // Play / Pause
-                let play_icon = if app.glb_animation_playing {
-                    PAUSE
+                let (play_icon, play_hint) = if app.glb_animation_playing {
+                    (PAUSE, "glb.pause")
                 } else {
-                    PLAY
+                    (PLAY, "glb.play")
                 };
                 if ui
-                    .button(RichText::new(play_icon).size(icon_size))
+                    .add_sized(
+                        button_size,
+                        Button::new(RichText::new(play_icon).size(icon_size)),
+                    )
+                    .on_hover_text(app.i18n.tr(play_hint))
                     .clicked()
                 {
                     app.glb_animation_playing = !app.glb_animation_playing;
@@ -119,7 +138,11 @@ fn render_animation_timeline(app: &mut App, ui: &mut three_d::egui::Ui) {
 
                 // Step back
                 if ui
-                    .button(RichText::new(SKIP_BACK).size(icon_size))
+                    .add_sized(
+                        button_size,
+                        Button::new(RichText::new(SKIP_BACK).size(icon_size)),
+                    )
+                    .on_hover_text(app.i18n.tr("glb.step_back"))
                     .clicked()
                 {
                     app.step_glb_animation(-1.0);
@@ -127,7 +150,13 @@ fn render_animation_timeline(app: &mut App, ui: &mut three_d::egui::Ui) {
 
                 // Step forward
                 if ui
-                    .button(RichText::new(SKIP_FORWARD).size(icon_size))
+                    .add_sized(
+                        button_size,
+                        Button::new(
+                            RichText::new(SKIP_FORWARD).size(icon_size),
+                        ),
+                    )
+                    .on_hover_text(app.i18n.tr("glb.step_forward"))
                     .clicked()
                 {
                     app.step_glb_animation(1.0);

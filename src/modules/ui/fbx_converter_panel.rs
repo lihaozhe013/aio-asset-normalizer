@@ -1,5 +1,7 @@
 use crate::app::App;
 use crate::app_fbx_converter::ConverterStatus;
+use crate::modules::ui::theme;
+use egui_phosphor::regular::{CHECK_CIRCLE, INFO, WARNING_CIRCLE, X_CIRCLE};
 
 /// Central-panel content for the FBX Converter page: Blender discovery,
 /// batch start, and per-file status. The file tree lives in the left panel.
@@ -45,7 +47,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
             }
             None => {
                 ui.colored_label(
-                    Color32::from_rgb(225, 118, 117),
+                    theme::ERROR,
                     app.i18n.tr("converter.blender_missing"),
                 );
             }
@@ -55,7 +57,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
 
     ui.checkbox(
         &mut app.converter_overwrite,
-        "Overwrite existing conversion outputs",
+        app.i18n.tr("converter.overwrite_outputs"),
     );
 
     let selected_count = app.converter_file_tree.selected_files().len();
@@ -111,14 +113,32 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
                         .unwrap_or_default()
                         .to_string_lossy()
                         .into_owned();
-                    let status = match state.status {
-                        ConverterStatus::Pending => app.i18n.tr("converter.status_pending"),
-                        ConverterStatus::Running => app.i18n.tr("converter.status_running"),
-                        ConverterStatus::Success => app.i18n.tr("converter.status_success"),
-                        ConverterStatus::Failed => app.i18n.tr("converter.status_failed"),
+                    let (icon, color, status) = match state.status {
+                        ConverterStatus::Pending => (
+                            INFO,
+                            theme::TEXT_MUTED,
+                            app.i18n.tr("converter.status_pending"),
+                        ),
+                        ConverterStatus::Running => (
+                            WARNING_CIRCLE,
+                            theme::INFO,
+                            app.i18n.tr("converter.status_running"),
+                        ),
+                        ConverterStatus::Success => (
+                            CHECK_CIRCLE,
+                            theme::SUCCESS,
+                            app.i18n.tr("converter.status_success"),
+                        ),
+                        ConverterStatus::Failed => (
+                            X_CIRCLE,
+                            theme::ERROR,
+                            app.i18n.tr("converter.status_failed"),
+                        ),
                     };
                     ui.horizontal(|ui| {
-                        ui.label(format!("{name}  {status}"));
+                        ui.label(RichText::new(icon).color(color));
+                        ui.label(&name);
+                        ui.label(RichText::new(status).color(color).weak());
                         if state.status == ConverterStatus::Success {
                             let output_name = state
                                 .output
@@ -129,7 +149,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
                             ui.label(RichText::new(output_name).weak());
                         }
                         if let Some(error) = &state.error {
-                            ui.colored_label(Color32::from_rgb(225, 118, 117), error);
+                            ui.colored_label(theme::ERROR, error);
                         }
                     });
                 }

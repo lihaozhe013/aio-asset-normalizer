@@ -1,4 +1,4 @@
-use crate::{app::App, modules::build_info};
+use crate::{app::App, modules::build_info, modules::ui::theme};
 
 pub fn render(app: &mut App, ctx: &three_d::egui::Context) {
     use three_d::egui::*;
@@ -35,8 +35,11 @@ pub fn render(app: &mut App, ctx: &three_d::egui::Context) {
                 ui.horizontal(|ui| {
                     ui.add_space(left_pad);
                     Frame::NONE
-                        .fill(Color32::from_rgb(248, 240, 230))
-                        .stroke(Stroke::new(1.0_f32, Color32::from_rgb(224, 198, 176)))
+                        .fill(theme::ABOUT_ICON_BACKDROP)
+                        .stroke(Stroke::new(
+                            1.0_f32,
+                            theme::ABOUT_ICON_BACKDROP_STROKE,
+                        ))
                         .corner_radius(CornerRadius::same(12))
                         .inner_margin(Margin::same(8))
                         .show(ui, |ui| {

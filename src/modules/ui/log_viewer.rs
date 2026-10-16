@@ -4,6 +4,7 @@ use std::path::Path;
 use crate::modules::i18n::I18n;
 use crate::modules::logging::{LogEvent, LogLevel, LogTarget};
 use crate::modules::preferences::LogViewerPreferences;
+use crate::modules::ui::theme;
 use three_d::egui;
 
 const MAX_VISIBLE_SESSION_ENTRIES: usize = 5_000;
@@ -122,7 +123,10 @@ impl LogViewer {
             }
         });
         if !self.storage_available {
-            ui.colored_label(egui::Color32::YELLOW, i18n.tr("log.storage_unavailable"));
+            ui.colored_label(
+                theme::WARNING,
+                i18n.tr("log.storage_unavailable"),
+            );
         }
 
         ui.horizontal(|ui| {

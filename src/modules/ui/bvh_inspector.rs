@@ -3,13 +3,20 @@ use crate::modules::bvh::SuggestionConfidence;
 use crate::modules::ui::glb_export_panel;
 use crate::modules::ui::menu_bar::MenuAction;
 use crate::modules::ui::skeleton_panel::{self, SkeletonPanelContext};
+use crate::modules::ui::theme;
 
 pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
     use three_d::egui::*;
     ui.heading(app.i18n.tr("page.bvh_studio"));
     ui.horizontal(|ui| {
-        ui.checkbox(&mut app.canvas.show_source_skeleton, "Source BVH skeleton");
-        ui.checkbox(&mut app.canvas.show_target_skeleton, "Target Skin skeleton");
+        ui.checkbox(
+            &mut app.canvas.show_source_skeleton,
+            app.i18n.tr("bvh.show_source_skeleton"),
+        );
+        ui.checkbox(
+            &mut app.canvas.show_target_skeleton,
+            app.i18n.tr("bvh.show_target_skeleton"),
+        );
     });
     skeleton_panel::render(
         app,
@@ -94,7 +101,10 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
         if ui.button(app.i18n.tr("bvh.trim_apply")).clicked() {
             app.trim_bvh();
         }
-        ui.checkbox(&mut app.output_overwrite, "Overwrite existing outputs");
+        ui.checkbox(
+            &mut app.output_overwrite,
+            app.i18n.tr("common.overwrite_outputs"),
+        );
         if ui.button(app.i18n.tr("menu.export")).clicked() {
             app.dispatch_action(&MenuAction::Export);
         }
@@ -114,7 +124,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
     ui.separator();
     ui.horizontal(|ui| {
         ui.label(app.i18n.tr("bvh.target_glb"));
-        if ui.button("Choose target GLB").clicked() {
+        if ui.button(app.i18n.tr("common.choose_target_glb")).clicked() {
             if let Some(path) = rfd::FileDialog::new()
                 .add_filter("GLB", &["glb"])
                 .pick_file()
@@ -140,7 +150,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
     }
     ui.label(app.i18n.tr("bvh.target_hint"));
     let mut axes_changed = false;
-    ComboBox::from_label("BVH up axis")
+    ComboBox::from_label(app.i18n.tr("bvh.up_axis"))
         .selected_text(app.bvh_up_axis.clone())
         .show_ui(ui, |ui| {
             for axis in ["+X", "-X", "+Y", "-Y", "+Z", "-Z"] {
@@ -149,7 +159,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
                     .changed();
             }
         });
-    ComboBox::from_label("BVH forward axis")
+    ComboBox::from_label(app.i18n.tr("bvh.forward_axis"))
         .selected_text(app.bvh_forward_axis.clone())
         .show_ui(ui, |ui| {
             for axis in ["+X", "-X", "+Y", "-Y", "+Z", "-Z"] {
@@ -158,7 +168,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
                     .changed();
             }
         });
-    ComboBox::from_label("BVH unit")
+    ComboBox::from_label(app.i18n.tr("bvh.unit"))
         .selected_text(app.bvh_unit.clone())
         .show_ui(ui, |ui| {
             for unit in ["m", "cm", "mm"] {
@@ -173,27 +183,40 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
         .as_ref()
         .and_then(|document| app.bvh_span_diagnostic(document).ok());
     if let Some((raw_span, converted_span)) = bvh_diagnostic {
-        ui.label(format!(
-            "Raw span: {:.4} / Converted span: {:.4} m",
-            raw_span, converted_span
+        ui.label(app.i18n.text(
+            "bvh.raw_span",
+            &[
+                ("raw", format!("{raw_span:.4}")),
+                ("converted", format!("{converted_span:.4}")),
+            ],
         ));
         if converted_span < 0.05 || converted_span > 100.0 {
             let hint = if converted_span < 0.05 {
-                "Try Use m if this file stores metre offsets."
+                app.i18n.tr("bvh.unit_hint_small")
             } else {
-                "Try Use cm or Use mm if this file stores smaller offsets."
+                app.i18n.tr("bvh.unit_hint_large")
             };
             ui.colored_label(
-                Color32::YELLOW,
-                format!(
-                    "Current unit produces a {:.3} m skeleton. {hint}",
-                    converted_span,
+                theme::WARNING,
+                app.i18n.text(
+                    "bvh.unit_warning",
+                    &[
+                        ("span", format!("{converted_span:.3}")),
+                        ("hint", hint.to_owned()),
+                    ],
                 ),
             );
         }
         ui.horizontal(|ui| {
             for unit in ["m", "cm", "mm"] {
-                if ui.button(format!("Use {unit}")).clicked() && unit_shortcut != unit {
+                if ui
+                    .button(
+                        app.i18n
+                            .text("bvh.use_unit", &[("unit", unit.to_owned())]),
+                    )
+                    .clicked()
+                    && unit_shortcut != unit
+                {
                     app.set_bvh_unit_from_ui(unit);
                 }
             }
@@ -224,7 +247,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
         let summary = target.summary();
         if summary.skins > 0 {
             let mut skin_changed = false;
-            ComboBox::from_label("Target Skin")
+            ComboBox::from_label(app.i18n.tr("common.target_skin"))
                 .selected_text(app.retarget_target_skin_index.to_string())
                 .show_ui(ui, |ui| {
                     for index in 0..summary.skins {
@@ -232,7 +255,10 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
                             .selectable_value(
                                 &mut app.retarget_target_skin_index,
                                 index,
-                                format!("Skin {index}"),
+                                app.i18n.text(
+                                    "common.skin_n",
+                                    &[("index", index.to_string())],
+                                ),
                             )
                             .changed();
                     }
@@ -261,12 +287,15 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
         }
     }
     if ui
-        .checkbox(&mut app.retarget_root_motion, "Root motion")
+        .checkbox(
+            &mut app.retarget_root_motion,
+            app.i18n.tr("bvh.root_motion"),
+        )
         .changed()
         || ui
             .checkbox(
                 &mut app.retarget_normalize_initial_heading,
-                "Normalize initial heading",
+                app.i18n.tr("bvh.normalize_heading"),
             )
             .changed()
     {
@@ -276,7 +305,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
     if let Some(mapping) = app.retarget_mapping.as_mut() {
         if let Some(root_motion) = mapping.root_motion.as_mut() {
             ui.horizontal(|ui| {
-                ui.label("Root translation scale");
+                ui.label(app.i18n.tr("bvh.root_translation_scale"));
                 root_scale_changed = ui
                     .add(
                         DragValue::new(&mut root_motion.translation_scale)
@@ -292,26 +321,35 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
         app.needs_bvh_target_reload = true;
     }
     ui.horizontal(|ui| {
-        if ui.button("Import Mapping").clicked() {
+        if ui.button(app.i18n.tr("common.import_mapping")).clicked() {
             app.import_mapping();
         }
-        if ui.button("Export Agent Mapping Prompt").clicked() {
+        if ui
+            .button(app.i18n.tr("common.export_agent_prompt"))
+            .clicked()
+        {
             app.export_retarget_agent_prompt();
         }
     });
     if let Some(report) = app.retarget_validation.as_ref() {
         ui.separator();
-        ui.label("Mapping v2 validation");
+        ui.label(app.i18n.tr("bvh.mapping_v2_validation"));
         if report.is_valid() {
-            ui.colored_label(Color32::LIGHT_GREEN, "Valid");
+            ui.colored_label(theme::SUCCESS, app.i18n.tr("bvh.valid"));
         } else {
-            ui.colored_label(Color32::YELLOW, "Invalid");
+            ui.colored_label(theme::WARNING, app.i18n.tr("bvh.invalid"));
         }
         for error in report.errors.iter().take(6) {
-            ui.label(error);
+            ui.colored_label(theme::ERROR, error);
         }
         for warning in report.warnings.iter().take(4) {
-            ui.colored_label(Color32::YELLOW, format!("Warning: {warning}"));
+            ui.colored_label(
+                theme::WARNING,
+                app.i18n.text(
+                    "common.warning_prefix",
+                    &[("message", warning.clone())],
+                ),
+            );
         }
     }
     ui.separator();
@@ -344,9 +382,12 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
             report.coverage_percent(document.joints.len())
         ));
         if report.is_valid() {
-            ui.colored_label(Color32::LIGHT_GREEN, app.i18n.tr("bvh.mapping_valid"));
+            ui.colored_label(theme::SUCCESS, app.i18n.tr("bvh.mapping_valid"));
         } else {
-            ui.colored_label(Color32::YELLOW, app.i18n.tr("bvh.mapping_invalid"));
+            ui.colored_label(
+                theme::WARNING,
+                app.i18n.tr("bvh.mapping_invalid"),
+            );
         }
         for (label, values) in [
             (

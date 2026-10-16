@@ -9,11 +9,23 @@ pub fn configure(ctx: &Context) {
         "noto_sans_sc".to_owned(),
         Arc::new(FontData::from_static(NOTO_SANS_SC)),
     );
-    for family in [FontFamily::Proportional, FontFamily::Monospace] {
-        let list = fonts.families.get_mut(&family).unwrap();
-        list.clear();
-        list.push("noto_sans_sc".to_owned());
-    }
+
+    // Keep the built-in proportional fonts first so Latin text renders with
+    // egui's defaults; Noto Sans SC falls back for CJK glyphs.
+    fonts
+        .families
+        .entry(FontFamily::Proportional)
+        .or_default()
+        .push("noto_sans_sc".to_owned());
+
+    // The built-in monospace fonts must stay first so logs and time codes
+    // render in a true monospaced face; Noto covers CJK inside monospace
+    // output only.
+    fonts
+        .families
+        .entry(FontFamily::Monospace)
+        .or_default()
+        .push("noto_sans_sc".to_owned());
 
     // Register Phosphor icon font (appended after CJK text font)
     egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);

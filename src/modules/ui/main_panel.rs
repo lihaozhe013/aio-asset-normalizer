@@ -1,19 +1,22 @@
 use crate::app::App;
 use crate::modules::ui::{
-    about_dialog, bottom_panel, bvh_inspector, fbx_converter_panel, fonts, glb_inspector,
-    menu_bar::{self, Page},
+    about_dialog, bottom_panel, bvh_inspector, empty_state,
+    fbx_converter_panel, fonts, glb_inspector,
+    menu_bar::{self, MenuAction, Page},
+    tabs, theme,
 };
+use egui_phosphor::regular::{ARROWS_CLOCKWISE, CUBE, PERSON_SIMPLE_RUN};
+use three_d::egui::{self, Key, Panel, RichText, ScrollArea};
 
 pub fn render_ui(
     app: &mut App,
     ui: &mut three_d::egui::Ui,
     _window_width: u32,
 ) -> three_d::egui::Rect {
-    use three_d::egui::*;
-
-    if !app.fonts_configured {
+    if !app.ui_configured {
         fonts::configure(ui.ctx());
-        app.fonts_configured = true;
+        theme::apply(ui.ctx());
+        app.ui_configured = true;
     }
 
     match app.page {
@@ -22,6 +25,9 @@ pub fn render_ui(
         Page::FbxConverter => app.converter_file_tree.handle_dropped_files(ui.ctx()),
     }
     app.poll_tasks();
+    for action in keyboard_shortcuts(ui, app.page) {
+        app.dispatch_action(&action);
+    }
     let actions = menu_bar::render(
         ui,
         &app.i18n,
@@ -96,10 +102,12 @@ pub fn render_ui(
 
     bottom_panel::render(app, ui);
 
-    let content_rect = CentralPanel::no_frame()
+    let content_rect = egui::CentralPanel::no_frame()
         .show_inside(ui, |ui| {
             if app.page == Page::FbxConverter {
                 fbx_converter_panel::render(app, ui);
+            } else if page_is_empty(app) {
+                render_empty_state(app, ui);
             }
             let (_, rect) = ui.allocate_space(ui.available_size());
             rect
@@ -110,62 +118,138 @@ pub fn render_ui(
     content_rect
 }
 
+/// Whether the active page has no content to preview in the 3D viewport.
+fn page_is_empty(app: &App) -> bool {
+    match app.page {
+        Page::GlbEditor => app.glb.is_none() && !app.canvas.has_glb_skeleton(),
+        Page::BvhStudio => {
+            app.canvas.skeleton.is_none()
+                && app.canvas.target_skeleton.is_none()
+        }
+        Page::FbxConverter => false,
+    }
+}
+
+fn render_empty_state(app: &mut App, ui: &mut three_d::egui::Ui) {
+    let (icon, title_key, hint_key, action) = match app.page {
+        Page::GlbEditor => (
+            CUBE,
+            "empty.glb_title",
+            "empty.glb_hint",
+            MenuAction::ImportGlb,
+        ),
+        Page::BvhStudio => (
+            PERSON_SIMPLE_RUN,
+            "empty.bvh_title",
+            "empty.bvh_hint",
+            MenuAction::ImportBvh,
+        ),
+        Page::FbxConverter => return,
+    };
+    let action_label = match action {
+        MenuAction::ImportGlb => app.i18n.tr("menu.import_glb"),
+        _ => app.i18n.tr("menu.import_bvh"),
+    };
+    let clicked = empty_state::render(
+        ui,
+        icon,
+        app.i18n.tr(title_key),
+        app.i18n.tr(hint_key),
+        Some(action_label),
+    );
+    if clicked {
+        app.dispatch_action(&action);
+    }
+}
+
+/// Global keyboard shortcuts mapped onto existing menu actions.
+///
+/// The command modifier maps to Cmd on macOS and Ctrl elsewhere.
+fn keyboard_shortcuts(ui: &three_d::egui::Ui, page: Page) -> Vec<MenuAction> {
+    ui.input(|input| {
+        let mut actions = Vec::new();
+        if !input.modifiers.command {
+            return actions;
+        }
+        if input.key_pressed(Key::O) {
+            actions.push(match page {
+                Page::BvhStudio => MenuAction::ImportBvh,
+                _ => MenuAction::ImportGlb,
+            });
+        }
+        if input.key_pressed(Key::S) {
+            actions.push(MenuAction::Save);
+        }
+        if input.key_pressed(Key::E) {
+            actions.push(MenuAction::Export);
+        }
+        actions
+    })
+}
+
 fn render_page_tabs(app: &mut App, ui: &mut three_d::egui::Ui) {
-    use three_d::egui::*;
-    Frame::NONE
-        .inner_margin(Margin::symmetric(8, 2))
+    use three_d::egui::{Frame, Margin};
+
+    let entries = [
+        tabs::TabEntry {
+            icon: CUBE,
+            label: app.i18n.tr("page.glb_editor").to_owned(),
+        },
+        tabs::TabEntry {
+            icon: PERSON_SIMPLE_RUN,
+            label: app.i18n.tr("page.bvh_studio").to_owned(),
+        },
+        tabs::TabEntry {
+            icon: ARROWS_CLOCKWISE,
+            label: app.i18n.tr("page.fbx_converter").to_owned(),
+        },
+    ];
+    let order = [Page::GlbEditor, Page::BvhStudio, Page::FbxConverter];
+    let selected = order.iter().position(|page| *page == app.page).unwrap_or(0);
+    let clicked = Frame::NONE
+        .inner_margin(Margin::symmetric(8, 4))
         .show(ui, |ui| {
-            let header_size = Vec2::new(
-                ui.available_width(),
-                ui.spacing().interact_size.y + ui.spacing().item_spacing.y,
-            );
-            ui.allocate_ui_with_layout(header_size, Layout::left_to_right(Align::Center), |ui| {
+            ui.horizontal(|ui| {
                 ui.label(RichText::new("AIO Asset Normalizer").strong());
                 ui.separator();
-                if ui
-                    .selectable_label(app.page == Page::GlbEditor, app.i18n.tr("page.glb_editor"))
-                    .clicked()
-                {
-                    app.page = Page::GlbEditor;
-                    app.canvas.clear_glb_skeleton();
-                    if app.glb_retarget_preview_active {
-                        app.exit_glb_retarget_preview();
-                    } else {
-                        app.request_glb_reload(crate::reload::GlbReloadKind::OpenModel);
-                    }
-                }
-                if ui
-                    .selectable_label(app.page == Page::BvhStudio, app.i18n.tr("page.bvh_studio"))
-                    .clicked()
-                {
-                    app.page = Page::BvhStudio;
-                    app.canvas.show_origin = false;
-                    app.canvas.clear_glb_skeleton();
-                    if app.glb_retarget_preview_active {
-                        app.exit_glb_retarget_preview();
-                    }
-                    app.needs_bvh_target_reload = true;
-                    app.refresh_v2_retarget_mapping();
-                }
-                if ui
-                    .selectable_label(
-                        app.page == Page::FbxConverter,
-                        app.i18n.tr("page.fbx_converter"),
-                    )
-                    .clicked()
-                {
-                    app.page = Page::FbxConverter;
-                    app.canvas.clear_glb_skeleton();
-                    if app.glb_retarget_preview_active {
-                        app.exit_glb_retarget_preview();
-                    }
-                }
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if ui.button("Connect AI").clicked() {
-                        app.open_mcp_setup();
-                    }
-                });
-            });
-        });
+                tabs::segmented(ui, &entries, selected)
+            })
+            .inner
+        })
+        .inner;
+    if let Some(index) = clicked {
+        switch_page(app, order[index]);
+    }
     ui.separator();
+}
+
+/// Apply a page switch with the per-page reset and reload side effects.
+///
+/// Re-selecting the active page keeps its original refresh semantics, so
+/// there is deliberately no same-page guard here.
+fn switch_page(app: &mut App, page: Page) {
+    app.page = page;
+    app.canvas.clear_glb_skeleton();
+    match page {
+        Page::GlbEditor => {
+            if app.glb_retarget_preview_active {
+                app.exit_glb_retarget_preview();
+            } else {
+                app.request_glb_reload(crate::reload::GlbReloadKind::OpenModel);
+            }
+        }
+        Page::BvhStudio => {
+            app.canvas.show_origin = false;
+            if app.glb_retarget_preview_active {
+                app.exit_glb_retarget_preview();
+            }
+            app.needs_bvh_target_reload = true;
+            app.refresh_v2_retarget_mapping();
+        }
+        Page::FbxConverter => {
+            if app.glb_retarget_preview_active {
+                app.exit_glb_retarget_preview();
+            }
+        }
+    }
 }

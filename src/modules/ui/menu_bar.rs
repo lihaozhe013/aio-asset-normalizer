@@ -46,7 +46,11 @@ pub fn render(
         .show(ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button(i18n.tr("menu.file"), |ui| {
-                    if ui.button(i18n.tr("menu.import_glb")).clicked() {
+                    if ui
+                        .button(i18n.tr("menu.import_glb"))
+                        .on_hover_text(shortcut_label())
+                        .clicked()
+                    {
                         actions.push(MenuAction::ImportGlb);
                         ui.close();
                     }
@@ -63,11 +67,19 @@ pub fn render(
                         ui.close();
                     }
                     ui.separator();
-                    if ui.button(i18n.tr("menu.save")).clicked() {
+                    if ui
+                        .button(i18n.tr("menu.save"))
+                        .on_hover_text(shortcut_label())
+                        .clicked()
+                    {
                         actions.push(MenuAction::Save);
                         ui.close();
                     }
-                    if ui.button(i18n.tr("menu.export")).clicked() {
+                    if ui
+                        .button(i18n.tr("menu.export"))
+                        .on_hover_text(shortcut_label())
+                        .clicked()
+                    {
                         actions.push(MenuAction::Export);
                         ui.close();
                     }
@@ -107,39 +119,31 @@ pub fn render(
                 });
 
                 ui.menu_button(i18n.tr("menu.view"), |ui| {
+                    let mut grid = show_grid;
                     if ui
-                        .button(format!(
-                            "[{}] {}",
-                            if show_grid { "x" } else { " " },
-                            i18n.tr("menu.show_grid")
-                        ))
-                        .clicked()
+                        .checkbox(&mut grid, i18n.tr("menu.show_grid"))
+                        .changed()
                     {
                         actions.push(MenuAction::ToggleGrid);
                         ui.close();
                     }
+                    let mut axes = show_axes;
                     if ui
-                        .button(format!(
-                            "[{}] {}",
-                            if show_axes { "x" } else { " " },
-                            i18n.tr("menu.show_axes")
-                        ))
-                        .clicked()
+                        .checkbox(&mut axes, i18n.tr("menu.show_axes"))
+                        .changed()
                     {
                         actions.push(MenuAction::ToggleAxes);
                         ui.close();
                     }
+                    let mut origin = show_origin;
                     if ui
-                        .button(format!(
-                            "[{}] {}",
-                            if show_origin { "x" } else { " " },
-                            i18n.tr("menu.show_origin")
-                        ))
-                        .clicked()
+                        .checkbox(&mut origin, i18n.tr("menu.show_origin"))
+                        .changed()
                     {
                         actions.push(MenuAction::ToggleOrigin);
                         ui.close();
                     }
+                    ui.separator();
                     if ui.button(i18n.tr("menu.reset_camera")).clicked() {
                         actions.push(MenuAction::ResetCamera);
                         ui.close();
@@ -178,4 +182,12 @@ pub fn render(
             });
         });
     actions
+}
+
+/// Human-readable text for the global import/save/export shortcut.
+///
+/// The command modifier is Cmd on macOS and Ctrl on other platforms, so the
+/// label mentions both.
+fn shortcut_label() -> String {
+    "Ctrl/Cmd+O / S / E".to_owned()
 }

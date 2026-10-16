@@ -4,6 +4,7 @@ use crate::modules::glb::{TextureSlot, UpAxisPreset};
 use crate::modules::ui::glb_batch_panel;
 use crate::modules::ui::glb_export_panel;
 use crate::modules::ui::skeleton_panel::{self, SkeletonPanelContext};
+use crate::modules::ui::theme;
 
 pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
     let selected_files = app.file_tree.selected_files();
@@ -63,8 +64,14 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
 fn render_current(app: &mut App, ui: &mut three_d::egui::Ui) {
     use three_d::egui::*;
     if app.glb_retarget_preview_active {
-        ui.colored_label(Color32::LIGHT_BLUE, "Retarget preview is active");
-        if ui.button("Exit retarget preview").clicked() {
+        ui.colored_label(
+            theme::INFO,
+            app.i18n.tr("glb.retarget_preview_active"),
+        );
+        if ui
+            .button(app.i18n.tr("glb.exit_retarget_preview"))
+            .clicked()
+        {
             app.exit_glb_retarget_preview();
         }
         skeleton_panel::render(
@@ -77,7 +84,7 @@ fn render_current(app: &mut App, ui: &mut three_d::egui::Ui) {
     }
     if !app.glb_retarget_preview_active && app.canvas.has_glb_skeleton() {
         ui.colored_label(
-            Color32::LIGHT_BLUE,
+            theme::INFO,
             app.i18n.tr(if app.canvas.is_glb_skeleton_only_preview() {
                 "glb.skeleton_preview"
             } else {
@@ -118,7 +125,10 @@ fn render_current(app: &mut App, ui: &mut three_d::egui::Ui) {
         }
     });
     if !summary.extensions.is_empty() {
-        ui.label(format!("Extensions: {}", summary.extensions.join(", ")));
+        ui.label(app.i18n.text(
+            "glb.extensions",
+            &[("list", summary.extensions.join(", "))],
+        ));
     }
     render_named_items(ui, app.i18n.tr("glb.scene_names"), document.scene_names());
     render_named_items(ui, app.i18n.tr("glb.node_names"), document.node_names());
@@ -229,13 +239,13 @@ fn render_current(app: &mut App, ui: &mut three_d::egui::Ui) {
         }
     });
     if let Some(error) = app.root_preview_error() {
-        ui.colored_label(Color32::YELLOW, error);
+        ui.colored_label(theme::WARNING, error);
     }
 
     let animation_label = app.i18n.tr("glb.animation").to_owned();
     ui.collapsing(animation_label, |ui| {
         if summary.animations == 0 {
-            ui.colored_label(Color32::LIGHT_BLUE, app.i18n.tr("glb.no_animations"));
+            ui.colored_label(theme::INFO, app.i18n.tr("glb.no_animations"));
         } else {
             ui.label(app.i18n.tr("glb.timeline_hint"));
             let entries = app.glb_animation_entries();
@@ -247,8 +257,12 @@ fn render_current(app: &mut App, ui: &mut three_d::egui::Ui) {
                 });
                 if !playable {
                     ui.colored_label(
-                        Color32::YELLOW,
-                        format!("{}: {}", app.i18n.tr("glb.unsupported"), unsupported),
+                        theme::WARNING,
+                        format!(
+                            "{}: {}",
+                            app.i18n.tr("glb.unsupported"),
+                            unsupported
+                        ),
                     );
                 }
                 ui.horizontal(|ui| {
@@ -371,15 +385,16 @@ fn render_current(app: &mut App, ui: &mut three_d::egui::Ui) {
 fn render_retarget_tab(app: &mut App, ui: &mut three_d::egui::Ui) {
     use three_d::egui::*;
 
-    ui.collapsing("Animation retargeting", |ui| {
-        ui.label("Retarget the selected source animation onto a user-selected GLB Skin.");
-        if ui.button("Choose target GLB").clicked() {
+    let title = app.i18n.tr("glb.retarget.title").to_owned();
+    ui.collapsing(title, |ui| {
+        ui.label(app.i18n.tr("glb.retarget.hint"));
+        if ui.button(app.i18n.tr("common.choose_target_glb")).clicked() {
             app.import_glb_retarget_target();
         }
         if let Some(path) = app.glb_retarget_target_path.as_ref() {
             ui.label(path.display().to_string());
         } else {
-            ui.label("No retarget target selected");
+            ui.label(app.i18n.tr("glb.retarget.no_target"));
         }
         if let Some(target) = app.glb_retarget_target.as_ref() {
             let target_summary = target.summary();
@@ -390,7 +405,7 @@ fn render_retarget_tab(app: &mut App, ui: &mut three_d::egui::Ui) {
                 .unwrap_or(0);
             if target_summary.skins > 0 && source_skin_count > 0 {
                 let mut changed = false;
-                ComboBox::from_label("Source Skin")
+                ComboBox::from_label(app.i18n.tr("common.source_skin"))
                     .selected_text(app.retarget_source_skin_index.to_string())
                     .show_ui(ui, |ui| {
                         for index in 0..source_skin_count {
@@ -398,12 +413,15 @@ fn render_retarget_tab(app: &mut App, ui: &mut three_d::egui::Ui) {
                                 .selectable_value(
                                     &mut app.retarget_source_skin_index,
                                     index,
-                                    format!("Skin {index}"),
+                                    app.i18n.text(
+                                        "common.skin_n",
+                                        &[("index", index.to_string())],
+                                    ),
                                 )
                                 .changed();
                         }
                     });
-                ComboBox::from_label("Target Skin")
+                ComboBox::from_label(app.i18n.tr("common.target_skin"))
                     .selected_text(app.retarget_target_skin_index.to_string())
                     .show_ui(ui, |ui| {
                         for index in 0..target_summary.skins {
@@ -411,7 +429,10 @@ fn render_retarget_tab(app: &mut App, ui: &mut three_d::egui::Ui) {
                                 .selectable_value(
                                     &mut app.retarget_target_skin_index,
                                     index,
-                                    format!("Skin {index}"),
+                                    app.i18n.text(
+                                        "common.skin_n",
+                                        &[("index", index.to_string())],
+                                    ),
                                 )
                                 .changed();
                         }
@@ -421,16 +442,19 @@ fn render_retarget_tab(app: &mut App, ui: &mut three_d::egui::Ui) {
                 }
             }
         }
-        ui.checkbox(&mut app.retarget_root_motion, "Root motion");
+        ui.checkbox(
+            &mut app.retarget_root_motion,
+            app.i18n.tr("bvh.root_motion"),
+        );
         ui.checkbox(
             &mut app.retarget_normalize_initial_heading,
-            "Normalize initial heading",
+            app.i18n.tr("bvh.normalize_heading"),
         );
         let mut root_scale_changed = false;
         if let Some(mapping) = app.retarget_mapping.as_mut() {
             if let Some(root_motion) = mapping.root_motion.as_mut() {
                 ui.horizontal(|ui| {
-                    ui.label("Root translation scale");
+                    ui.label(app.i18n.tr("bvh.root_translation_scale"));
                     root_scale_changed = ui
                         .add(
                             DragValue::new(&mut root_motion.translation_scale)
@@ -444,26 +468,38 @@ fn render_retarget_tab(app: &mut App, ui: &mut three_d::egui::Ui) {
         if root_scale_changed {
             app.refresh_glb_retarget_mapping();
         }
-        if ui.button("Import Mapping").clicked() {
+        if ui.button(app.i18n.tr("common.import_mapping")).clicked() {
             app.import_mapping();
         }
-        ui.checkbox(&mut app.output_overwrite, "Overwrite existing outputs");
-        if ui.button("Export Agent Mapping Prompt").clicked() {
+        ui.checkbox(
+            &mut app.output_overwrite,
+            app.i18n.tr("common.overwrite_outputs"),
+        );
+        if ui
+            .button(app.i18n.tr("common.export_agent_prompt"))
+            .clicked()
+        {
             app.export_glb_retarget_agent_prompt();
         }
-        if ui.button("Preview retargeted animation").clicked() {
+        if ui.button(app.i18n.tr("glb.retarget.preview")).clicked() {
             app.preview_glb_retarget();
         }
-        if ui.button("Export retargeted GLB").clicked() {
+        if ui.button(app.i18n.tr("glb.retarget.export_glb")).clicked() {
             app.export_glb_retarget();
         }
         if let Some(report) = app.retarget_validation.as_ref() {
             if report.is_valid() {
-                ui.colored_label(Color32::LIGHT_GREEN, "Mapping v2 valid");
+                ui.colored_label(
+                    theme::SUCCESS,
+                    app.i18n.tr("common.mapping_valid"),
+                );
             } else {
-                ui.colored_label(Color32::YELLOW, "Mapping v2 invalid");
+                ui.colored_label(
+                    theme::WARNING,
+                    app.i18n.tr("common.mapping_invalid"),
+                );
                 for error in report.errors.iter().take(4) {
-                    ui.label(error);
+                    ui.colored_label(theme::ERROR, error);
                 }
             }
         }

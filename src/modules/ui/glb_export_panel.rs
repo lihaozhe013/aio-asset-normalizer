@@ -6,10 +6,9 @@ use crate::modules::glb::{
     RootMotionRemovalMode,
 };
 use crate::modules::i18n::I18n;
+use crate::modules::ui::theme;
 
 pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
-    use three_d::egui::*;
-
     let Some(document) = app.glb.as_ref() else {
         return;
     };
@@ -17,7 +16,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
         Ok(catalog) => catalog,
         Err(error) => {
             ui.colored_label(
-                three_d::egui::Color32::YELLOW,
+                theme::WARNING,
                 format!("{}: {error}", app.i18n.tr("glb.export_selection")),
             );
             return;
@@ -97,15 +96,21 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
                 }
                 Err(error) => {
                     ui.colored_label(
-                        Color32::YELLOW,
-                        format!("{}: {error}", app.i18n.tr("glb.export_estimate")),
+                        theme::WARNING,
+                        format!(
+                            "{}: {error}",
+                            app.i18n.tr("glb.export_estimate")
+                        ),
                     );
                 }
             }
         }
-        ui.colored_label(Color32::LIGHT_BLUE, app.i18n.tr("glb.export_estimate_hint"));
+        ui.colored_label(theme::INFO, app.i18n.tr("glb.export_estimate_hint"));
     }
-    ui.checkbox(&mut app.output_overwrite, "Overwrite existing outputs");
+    ui.checkbox(
+        &mut app.output_overwrite,
+        app.i18n.tr("common.overwrite_outputs"),
+    );
     app.glb_export_selection = selection;
     if app.task_busy {
         ui.label(app.i18n.tr("glb.export_busy"));
@@ -164,14 +169,18 @@ pub fn render_selection_controls(
         }
 
         if catalog.scenes.is_empty() {
-            ui.colored_label(Color32::YELLOW, i18n.tr("glb.export_no_scenes"));
+            ui.colored_label(theme::WARNING, i18n.tr("glb.export_no_scenes"));
         } else {
             let previous_scene = selection.scene_index;
             selection.scene_index = selection
                 .scene_index
                 .min(catalog.scenes.len().saturating_sub(1));
             ComboBox::from_label(i18n.tr("glb.export_scene"))
-                .selected_text(scene_label(catalog, selection.scene_index))
+                .selected_text(scene_label(
+                    i18n,
+                    catalog,
+                    selection.scene_index,
+                ))
                 .show_ui(ui, |ui| {
                     for scene in &catalog.scenes {
                         ui.selectable_value(
@@ -193,13 +202,20 @@ pub fn render_selection_controls(
 
         if show_skin {
             if catalog.skins.is_empty() {
-                ui.colored_label(Color32::YELLOW, i18n.tr("glb.export_no_skins"));
+                ui.colored_label(
+                    theme::WARNING,
+                    i18n.tr("glb.export_no_skins"),
+                );
             } else {
                 selection.skin_index = selection
                     .skin_index
                     .filter(|index| *index < catalog.skins.len());
                 ComboBox::from_label(i18n.tr("glb.export_skin"))
-                    .selected_text(skin_label(catalog, selection.skin_index))
+                    .selected_text(skin_label(
+                        i18n,
+                        catalog,
+                        selection.skin_index,
+                    ))
                     .show_ui(ui, |ui| {
                         ui.selectable_value(
                             &mut selection.skin_index,
@@ -210,7 +226,12 @@ pub fn render_selection_controls(
                             ui.selectable_value(
                                 &mut selection.skin_index,
                                 Some(skin.index),
-                                format!("{} ({} joints)", skin.name, skin.joint_count),
+                                format!(
+                                    "{} ({} {})",
+                                    skin.name,
+                                    skin.joint_count,
+                                    i18n.tr("bvh.joints")
+                                ),
                             );
                         }
                     });
@@ -238,8 +259,6 @@ fn render_node_selection(
     catalog: &GlbExportCatalog,
     selection: &mut GlbExportSelection,
 ) {
-    use three_d::egui::*;
-
     ui.label(i18n.tr("glb.export_nodes"));
     ui.horizontal(|ui| {
         if ui.button(i18n.tr("glb.export_select_all")).clicked() {
@@ -261,15 +280,25 @@ fn render_node_selection(
     let has_roots = !roots.is_empty();
     let mut rendered_meshes = BTreeSet::new();
     for root in roots {
-        render_node(ui, catalog, selection, root, false, 0, &mut rendered_meshes);
+        render_node(
+            ui,
+            i18n,
+            catalog,
+            selection,
+            root,
+            false,
+            0,
+            &mut rendered_meshes,
+        );
     }
     if !has_roots {
-        ui.colored_label(Color32::YELLOW, i18n.tr("glb.export_no_nodes"));
+        ui.colored_label(theme::WARNING, i18n.tr("glb.export_no_nodes"));
     }
 }
 
 fn render_node(
     ui: &mut three_d::egui::Ui,
+    i18n: &I18n,
     catalog: &GlbExportCatalog,
     selection: &mut GlbExportSelection,
     node_index: usize,
@@ -291,7 +320,8 @@ fn render_node(
             node.name,
             node.index,
             node.mesh
-                .map(|mesh| format!(" · Mesh {mesh}"))
+                .map(|mesh| i18n
+                    .text("common.mesh_suffix", &[("index", mesh.to_string())]))
                 .unwrap_or_default()
         );
         let changed = ui
@@ -308,13 +338,21 @@ fn render_node(
 
     if let Some(mesh_index) = node.mesh {
         if rendered_meshes.insert(mesh_index) {
-            render_mesh_primitives(ui, catalog, selection, mesh_index, depth + 1);
+            render_mesh_primitives(
+                ui,
+                i18n,
+                catalog,
+                selection,
+                mesh_index,
+                depth + 1,
+            );
         }
     }
     let child_selected = selected_ancestor || explicitly_selected;
     for child in &node.children {
         render_node(
             ui,
+            i18n,
             catalog,
             selection,
             *child,
@@ -327,6 +365,7 @@ fn render_node(
 
 fn render_mesh_primitives(
     ui: &mut three_d::egui::Ui,
+    i18n: &I18n,
     catalog: &GlbExportCatalog,
     selection: &mut GlbExportSelection,
     mesh_index: usize,
@@ -336,7 +375,13 @@ fn render_mesh_primitives(
         return;
     };
     ui.indent(format!("mesh-{mesh_index}"), |ui| {
-        ui.label(format!("Mesh {}: {}", mesh.index, mesh.name));
+        ui.label(i18n.text(
+            "common.mesh_label",
+            &[
+                ("index", mesh.index.to_string()),
+                ("name", mesh.name.clone()),
+            ],
+        ));
         let all_primitives = mesh
             .primitives
             .iter()
@@ -348,15 +393,17 @@ fn render_mesh_primitives(
                 .get(&mesh_index)
                 .map(|values| values.contains(&primitive.index))
                 .unwrap_or(true);
-            let label = format!(
-                "{}Primitive {}{}",
-                " ".repeat(depth),
-                primitive.index,
-                primitive
-                    .material
-                    .map(|material| format!(" · Material {material}"))
-                    .unwrap_or_default()
+            let mut label = i18n.text(
+                "common.primitive_label",
+                &[("index", primitive.index.to_string())],
             );
+            if let Some(material) = primitive.material {
+                label.push_str(&i18n.text(
+                    "common.material_suffix",
+                    &[("index", material.to_string())],
+                ));
+            }
+            let label = format!("{}{}", " ".repeat(depth), label);
             if ui.checkbox(&mut checked, label).changed() {
                 let values = selection
                     .selected_primitives
@@ -405,7 +452,7 @@ fn render_animation_selection(
         }
     });
     if catalog.animations.is_empty() {
-        ui.colored_label(Color32::LIGHT_BLUE, i18n.tr("glb.export_no_animations"));
+        ui.colored_label(theme::INFO, i18n.tr("glb.export_no_animations"));
     } else {
         for animation in &catalog.animations {
             let mut checked = selection.selected_animations.contains(&animation.index);
@@ -551,7 +598,12 @@ fn render_root_motion_controls(
                     .nodes
                     .get(*node_index)
                     .map(node_label)
-                    .unwrap_or_else(|| format!("Node {node_index}"));
+                    .unwrap_or_else(|| {
+                        i18n.text(
+                            "common.node_label",
+                            &[("index", node_index.to_string())],
+                        )
+                    });
                 ui.selectable_value(
                     &mut selection.root_motion_node_override,
                     Some(*node_index),
@@ -565,7 +617,7 @@ fn render_root_motion_controls(
     });
     if let Err(error) = info {
         ui.colored_label(
-            Color32::YELLOW,
+            theme::WARNING,
             format!("{}: {error}", i18n.tr("glb.export_root_motion_node")),
         );
     }
@@ -580,18 +632,19 @@ fn render_validation(
     i18n: &I18n,
     validation: &crate::modules::glb::GlbExportValidation,
 ) {
-    use three_d::egui::*;
-
     if validation.is_valid() {
-        ui.colored_label(Color32::LIGHT_GREEN, i18n.tr("glb.export_valid"));
+        ui.colored_label(theme::SUCCESS, i18n.tr("glb.export_valid"));
     } else {
-        ui.colored_label(Color32::YELLOW, i18n.tr("glb.export_invalid"));
+        ui.colored_label(theme::WARNING, i18n.tr("glb.export_invalid"));
         for error in validation.errors.iter().take(6) {
             ui.label(error);
         }
     }
     for warning in validation.warnings.iter().take(4) {
-        ui.colored_label(Color32::YELLOW, format!("Warning: {warning}"));
+        ui.colored_label(
+            theme::WARNING,
+            i18n.text("common.warning_prefix", &[("message", warning.clone())]),
+        );
     }
 }
 
@@ -604,21 +657,31 @@ fn preset_label(i18n: &I18n, preset: GlbExportPreset) -> String {
     .to_owned()
 }
 
-fn scene_label(catalog: &GlbExportCatalog, index: usize) -> String {
+fn scene_label(
+    i18n: &I18n,
+    catalog: &GlbExportCatalog,
+    index: usize,
+) -> String {
     catalog
         .scenes
         .get(index)
         .map(scene_label_from_scene)
-        .unwrap_or_else(|| format!("Scene {index}"))
+        .unwrap_or_else(|| {
+            i18n.text("common.scene_label", &[("index", index.to_string())])
+        })
 }
 
 fn scene_label_from_scene(scene: &crate::modules::glb::GlbExportScene) -> String {
     format!("{} [{}]", scene.name, scene.index)
 }
 
-fn skin_label(catalog: &GlbExportCatalog, index: Option<usize>) -> String {
+fn skin_label(
+    i18n: &I18n,
+    catalog: &GlbExportCatalog,
+    index: Option<usize>,
+) -> String {
     index
         .and_then(|index| catalog.skins.get(index))
         .map(|skin| format!("{} [{}]", skin.name, skin.index))
-        .unwrap_or_else(|| "None".to_owned())
+        .unwrap_or_else(|| i18n.tr("common.none").to_owned())
 }

@@ -13,26 +13,43 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui, context: SkeletonPanelC
     use three_d::egui::*;
 
     let mut config = app.canvas.skeleton_config;
-    ui.collapsing("Skeleton Display", |ui| {
-        ComboBox::from_label("Display mode")
+    let i18n = app.i18n.clone();
+    ui.collapsing(i18n.tr("skeleton.title"), |ui| {
+        ComboBox::from_label(i18n.tr("skeleton.display_mode"))
             .selected_text(match config.mode {
-                SkeletonDisplayMode::Octahedral => "Octahedral",
-                SkeletonDisplayMode::Stick => "Stick",
-                SkeletonDisplayMode::Lines => "Lines",
+                SkeletonDisplayMode::Octahedral => {
+                    i18n.tr("skeleton.mode_octahedral")
+                }
+                SkeletonDisplayMode::Stick => i18n.tr("skeleton.mode_stick"),
+                SkeletonDisplayMode::Lines => i18n.tr("skeleton.mode_lines"),
             })
             .show_ui(ui, |ui| {
                 ui.selectable_value(
                     &mut config.mode,
                     SkeletonDisplayMode::Octahedral,
-                    "Octahedral",
+                    i18n.tr("skeleton.mode_octahedral"),
                 );
-                ui.selectable_value(&mut config.mode, SkeletonDisplayMode::Stick, "Stick");
-                ui.selectable_value(&mut config.mode, SkeletonDisplayMode::Lines, "Lines");
+                ui.selectable_value(
+                    &mut config.mode,
+                    SkeletonDisplayMode::Stick,
+                    i18n.tr("skeleton.mode_stick"),
+                );
+                ui.selectable_value(
+                    &mut config.mode,
+                    SkeletonDisplayMode::Lines,
+                    i18n.tr("skeleton.mode_lines"),
+                );
             });
-        ui.checkbox(&mut config.show_joints, "Show joints");
-        ui.checkbox(&mut config.show_end_sites, "Show End Sites");
-        ui.checkbox(&mut config.in_front, "In Front");
-        ui.add(Slider::new(&mut config.width_scale, 0.25..=3.0).text("Bone width"));
+        ui.checkbox(&mut config.show_joints, i18n.tr("skeleton.show_joints"));
+        ui.checkbox(
+            &mut config.show_end_sites,
+            i18n.tr("skeleton.show_end_sites"),
+        );
+        ui.checkbox(&mut config.in_front, i18n.tr("skeleton.in_front"));
+        ui.add(
+            Slider::new(&mut config.width_scale, 0.25..=3.0)
+                .text(i18n.tr("skeleton.bone_width")),
+        );
         ui.horizontal(|ui| {
             let include_source_fit = matches!(
                 context,
@@ -40,28 +57,34 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui, context: SkeletonPanelC
                     include_source_fit: true
                 }
             );
-            if include_source_fit && ui.button("Fit source").clicked() {
+            if include_source_fit
+                && ui.button(i18n.tr("skeleton.fit_source")).clicked()
+            {
                 if let Some((minimum, maximum)) = app.canvas.skeleton_bounds() {
                     app.camera.focus_on_bounds(minimum, maximum);
                 }
             }
             match context {
                 SkeletonPanelContext::Bvh { .. } => {
-                    if ui.button("Fit target").clicked() {
-                        if let Some((minimum, maximum)) = app.canvas.target_skeleton_bounds() {
+                    if ui.button(i18n.tr("skeleton.fit_target")).clicked() {
+                        if let Some((minimum, maximum)) =
+                            app.canvas.target_skeleton_bounds()
+                        {
                             app.camera.focus_on_bounds(minimum, maximum);
                         }
                     }
                 }
                 SkeletonPanelContext::Glb => {
-                    if ui.button("Fit skeleton").clicked() {
-                        if let Some((minimum, maximum)) = app.canvas.glb_skeleton_bounds() {
+                    if ui.button(i18n.tr("skeleton.fit_skeleton")).clicked() {
+                        if let Some((minimum, maximum)) =
+                            app.canvas.glb_skeleton_bounds()
+                        {
                             app.camera.focus_on_bounds(minimum, maximum);
                         }
                     }
                 }
             }
-            if ui.button("Fit all").clicked() {
+            if ui.button(i18n.tr("skeleton.fit_all")).clicked() {
                 let mut bounds = if include_source_fit {
                     app.canvas.skeleton_bounds()
                 } else {

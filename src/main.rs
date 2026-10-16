@@ -83,7 +83,11 @@ fn main() {
         app.camera.set_viewport(viewport);
 
         let screen = frame_input.screen();
-        let mut clear_rt = screen.clear(ClearState::color_and_depth(0.12, 0.13, 0.17, 1.0, 1.0));
+        // Align the viewport background with the UI theme background so the
+        // 3D canvas blends seamlessly with the surrounding panels.
+        let [red, green, blue, _] = modules::ui::theme::VIEWPORT_CLEAR;
+        let mut clear_rt = screen
+            .clear(ClearState::color_and_depth(red, green, blue, 1.0, 1.0));
 
         if show_scene && app.canvas.show_axes {
             for axis in &app.canvas.axes {

@@ -3,6 +3,7 @@ use crate::app_glb_batch::{GlbBatchFileStatus, GlbBatchPreflight};
 use crate::modules::glb::{
     AnimationOutputMode, BatchNameSelector, GlbExportPreset, RootMotionRemovalMode,
 };
+use crate::modules::ui::theme;
 
 pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
     use three_d::egui::*;
@@ -15,7 +16,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
         &[("count", selected_count.to_string())],
     ));
     if selected_count == 0 {
-        ui.colored_label(Color32::YELLOW, i18n.tr("glb.batch_select_hint"));
+        ui.colored_label(theme::WARNING, i18n.tr("glb.batch_select_hint"));
         return;
     }
 
@@ -298,10 +299,10 @@ fn render_preflight(ui: &mut three_d::egui::Ui, app: &App, preflight: &GlbBatchP
                 };
                 ui.collapsing(format!("{name} — {status}"), |ui| {
                     for warning in &entry.warnings {
-                        ui.colored_label(Color32::YELLOW, warning);
+                        ui.colored_label(theme::WARNING, warning);
                     }
                     if let Some(error) = entry.error.as_ref() {
-                        ui.colored_label(Color32::RED, error);
+                        ui.colored_label(theme::ERROR, error);
                     }
                     for output in &entry.outputs {
                         ui.label(output.path.display().to_string());
@@ -315,8 +316,12 @@ fn render_preflight(ui: &mut three_d::egui::Ui, app: &App, preflight: &GlbBatchP
                     }
                     for output in &entry.completed_outputs {
                         ui.colored_label(
-                            Color32::LIGHT_GREEN,
-                            format!("{}: {}", app.i18n.tr("glb.batch_written"), output.display()),
+                            theme::SUCCESS,
+                            format!(
+                                "{}: {}",
+                                app.i18n.tr("glb.batch_written"),
+                                output.display()
+                            ),
                         );
                     }
                 });
