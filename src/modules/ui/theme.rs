@@ -9,19 +9,19 @@
 use three_d::egui::{self, Color32, Context, CornerRadius, Stroke, Vec2};
 
 /// Window background behind the 3D viewport.
-pub const BG: Color32 = Color32::from_rgb(0x0B, 0x0B, 0x0E);
+pub const BG: Color32 = Color32::from_rgb(0x14, 0x14, 0x13);
 /// Fill of side, bottom, and menu panels.
-pub const PANEL: Color32 = Color32::from_rgb(0x12, 0x12, 0x16);
+pub const PANEL: Color32 = Color32::from_rgb(0x1A, 0x19, 0x18);
 /// Fill of grouped surfaces such as tab strips and dialogs.
-pub const CARD: Color32 = Color32::from_rgb(0x17, 0x17, 0x1C);
+pub const CARD: Color32 = Color32::from_rgb(0x20, 0x1F, 0x1E);
 /// Fill of raised interactive widgets at rest.
-pub const RAISED: Color32 = Color32::from_rgb(0x1F, 0x1F, 0x26);
+pub const RAISED: Color32 = Color32::from_rgb(0x29, 0x28, 0x27);
 /// Hairline borders and separators.
-pub const BORDER: Color32 = Color32::from_rgb(0x2E, 0x2E, 0x38);
+pub const BORDER: Color32 = Color32::from_rgb(0x3B, 0x39, 0x37);
 /// Default body text.
-pub const TEXT: Color32 = Color32::from_rgb(0xEC, 0xEC, 0xEF);
+pub const TEXT: Color32 = Color32::from_rgb(0xED, 0xEC, 0xEA);
 /// Secondary text such as hints and metadata.
-pub const TEXT_MUTED: Color32 = Color32::from_rgb(0x9B, 0x9B, 0xA4);
+pub const TEXT_MUTED: Color32 = Color32::from_rgb(0x9D, 0x9B, 0x97);
 /// The single accent color: selection, active tabs, primary actions.
 pub const ACCENT: Color32 = Color32::from_rgb(0xFF, 0xB0, 0x66);
 
@@ -40,11 +40,11 @@ pub const WARNING: Color32 = Color32::from_rgb(0xE7, 0xC2, 0x4F);
 pub const ERROR: Color32 = Color32::from_rgb(0xE0, 0x6C, 0x6C);
 
 /// Deep background for text fields and slider rails.
-const FIELD: Color32 = Color32::from_rgb(0x08, 0x08, 0x0B);
+const FIELD: Color32 = Color32::from_rgb(0x0F, 0x0E, 0x0D);
 /// Subtle row hover highlight.
-const FAINT: Color32 = Color32::from_rgb(0x10, 0x10, 0x14);
+const FAINT: Color32 = Color32::from_rgb(0x17, 0x16, 0x15);
 /// Widget fill on hover.
-const RAISED_HOVER: Color32 = Color32::from_rgb(0x28, 0x28, 0x32);
+const RAISED_HOVER: Color32 = Color32::from_rgb(0x32, 0x31, 0x30);
 
 /// Warm backdrop behind the app icon in the About dialog. The icon artwork
 /// is designed for a light surface, so this stays brand-specific instead of
@@ -55,7 +55,7 @@ pub const ABOUT_ICON_BACKDROP_STROKE: Color32 =
     Color32::from_rgb(0xE0, 0xC6, 0xB0);
 
 /// Normalized RGBA for the 3D viewport clear color, matching [`BG`].
-pub const VIEWPORT_CLEAR: [f32; 4] = [0.0431, 0.0431, 0.0549, 1.0];
+pub const VIEWPORT_CLEAR: [f32; 4] = [0.0784, 0.0784, 0.0745, 1.0];
 
 /// Install the application style on the egui context.
 ///

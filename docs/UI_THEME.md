@@ -8,13 +8,13 @@ status semantics, and the viewport background stay consistent.
 
 | Token | Value | Usage |
 | --- | --- | --- |
-| `BG` | `#0B0B0E` | 3D viewport clear color (via `VIEWPORT_CLEAR`) |
-| `PANEL` | `#121216` | Side, bottom, and menu panel fills |
-| `CARD` | `#17171C` | Grouped surfaces: tab strips, dialog bodies |
-| `RAISED` | `#1F1F26` | Interactive widgets at rest (buttons) |
-| `BORDER` | `#2E2E38` | Hairline borders, separators, selected-tab stroke |
-| `TEXT` | `#ECECEF` | Default body text |
-| `TEXT_MUTED` | `#9B9BA4` | Hints, metadata, secondary labels |
+| `BG` | `#141413` | 3D viewport clear color (via `VIEWPORT_CLEAR`) |
+| `PANEL` | `#1A1918` | Side, bottom, and menu panel fills |
+| `CARD` | `#201F1E` | Grouped surfaces: tab strips, dialog bodies |
+| `RAISED` | `#292827` | Interactive widgets at rest (buttons) |
+| `BORDER` | `#3B3937` | Hairline borders, separators, selected-tab stroke |
+| `TEXT` | `#EDECEA` | Default body text |
+| `TEXT_MUTED` | `#9D9B97` | Hints, metadata, secondary labels |
 | `ACCENT` | `#FFB066` | Selection stroke, active tab tint (with `accent_dim()`) |
 | `INFO` | `#79B8E8` | Informational messages and neutral notices |
 | `SUCCESS` | `#57C97B` | Successful operations, valid states |
