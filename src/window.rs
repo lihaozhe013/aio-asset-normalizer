@@ -9,7 +9,7 @@ use winit::{
     window::{Icon, WindowBuilder},
 };
 
-const ICON_PNG: &[u8] = include_bytes!("../assets/icon/aio-asset-normalizer-transparent.png");
+const ICON_PNG: &[u8] = include_bytes!("../assets/icon/aio-asset-normalizer-512.png");
 
 pub struct Window {
     window: winit::window::Window,
@@ -22,7 +22,8 @@ impl Window {
         let icon = image::load_from_memory(ICON_PNG)
             .expect("failed to decode the application icon")
             .into_rgba8();
-        let icon = Icon::from_rgba(icon.into_raw(), 1254, 1254)
+        let (width, height) = icon.dimensions();
+        let icon = Icon::from_rgba(icon.into_raw(), width, height)
             .expect("failed to create the application icon");
 
         let mut event_loop_builder = EventLoopBuilder::new();

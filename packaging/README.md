@@ -5,6 +5,23 @@ Linux. Run them from the repository root with `uv`.
 
 All outputs default to `packaging/out`, which is ignored by Git.
 
+## Application icon
+
+Every shipped icon uses the opaque white-background artwork so the dark logo
+stays visible on dark window borders, docks, and taskbars. `assets/icon` holds:
+
+- `aio-asset-normalizer.png`: white-background master, the source for every
+  generated artifact.
+- `aio-asset-normalizer-512.png`: 512 px white-background variant used by the
+  runtime window icon and the AppImage desktop entry and `.DirIcon`.
+- `aio-asset-normalizer.ico`: Windows icon with the same white background,
+  embedded into the executable by `build.rs` and used by the Inno Setup
+  installer.
+- `aio-asset-normalizer-transparent.png`: original transparent artwork, kept
+  for reference only. Do not ship it. When the artwork changes, flatten it onto
+  the `#FAF8F4` background to refresh the master, then resize that master to
+  512 px and export the `.ico` at 16, 32, 48, 64, 128, and 256 px.
+
 ## Windows
 
 Install [Inno Setup 6](https://jrsoftware.org/isinfo.php), then run:

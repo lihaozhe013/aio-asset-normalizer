@@ -375,3 +375,5 @@ multi-window behavior, and application close handling.
   the request and saves preferences.
 - On Windows and Linux, verify the in-window menu still works, About remains in
   Help, the Page menu is absent, and tabs continue to switch workflows.
+- On every platform, verify the window icon, taskbar or dock icon, and
+  installer icon render the logo on an opaque white background.

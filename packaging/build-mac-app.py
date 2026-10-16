@@ -46,8 +46,9 @@ def run(command: list[object], **kwargs: object) -> subprocess.CompletedProcess[
 def icon_sources(explicit_source: Path | None) -> list[Path]:
     if explicit_source is not None:
         return [explicit_source]
+    # Prefer the opaque white-background artwork so the bundle icon stays
+    # readable on dark wallpapers and in the Dock.
     return [
-        ASSETS_DIR / "icon" / "aio-asset-normalizer-transparent.png",
         ASSETS_DIR / "icon" / "aio-asset-normalizer.png",
         ASSETS_DIR / "icon" / "aio-asset-normalizer.ico",
     ]

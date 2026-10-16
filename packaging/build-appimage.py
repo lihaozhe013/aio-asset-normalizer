@@ -132,7 +132,9 @@ def build_appimage(
         print(f"  [OK] {mcp_binary_source.stat().st_size / 1024 / 1024:.1f} MB MCP service")
 
         print("[2/5] Installing application icon...")
-        icon_source = ASSETS_DIR / "icon" / "aio-asset-normalizer-transparent.png"
+        # Ship the 512 px white-background icon so the hicolor directory and
+        # the desktop entry point at a correctly sized opaque asset.
+        icon_source = ASSETS_DIR / "icon" / "aio-asset-normalizer-512.png"
         if icon_source.exists():
             icon_destination = icon_directory / ICON_NAME
             shutil.copy2(icon_source, icon_destination)
