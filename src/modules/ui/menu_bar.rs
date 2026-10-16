@@ -42,7 +42,7 @@ pub fn render(
 ) -> Vec<MenuAction> {
     let mut actions = Vec::new();
     egui::Frame::NONE
-        .inner_margin(egui::Margin::symmetric(6, 2))
+        .inner_margin(egui::Margin::symmetric(0, 2))
         .show(ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button(i18n.tr("menu.file"), |ui| {

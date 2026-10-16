@@ -28,18 +28,36 @@ pub fn render_ui(
     for action in keyboard_shortcuts(ui, app.page) {
         app.dispatch_action(&action);
     }
-    let actions = menu_bar::render(
-        ui,
-        &app.i18n,
-        app.page,
-        app.canvas.show_grid,
-        app.canvas.show_axes,
-        app.canvas.show_origin,
-    );
+    // The menu bar and page tabs share one full-width top panel so the
+    // whole strip has a single background color, and its bottom border
+    // connects with the side panel strokes into a continuous frame.
+    let mut actions = Vec::new();
+    let mut tab_clicked: Option<usize> = None;
+    Panel::top("top_bar")
+        .frame(
+            egui::Frame::default()
+                .fill(theme::BG)
+                .stroke(egui::Stroke::new(1.0, theme::BORDER))
+                .inner_margin(egui::Margin::symmetric(6, 3)),
+        )
+        .show_inside(ui, |ui| {
+            actions = menu_bar::render(
+                ui,
+                &app.i18n,
+                app.page,
+                app.canvas.show_grid,
+                app.canvas.show_axes,
+                app.canvas.show_origin,
+            );
+            tab_clicked = render_page_tabs(app, ui);
+        });
     for action in actions {
         app.dispatch_action(&action);
     }
-    render_page_tabs(app, ui);
+    if let Some(index) = tab_clicked {
+        let order = [Page::GlbEditor, Page::BvhStudio, Page::FbxConverter];
+        switch_page(app, order[index]);
+    }
 
     match app.page {
         Page::GlbEditor => {
@@ -187,9 +205,10 @@ fn keyboard_shortcuts(ui: &three_d::egui::Ui, page: Page) -> Vec<MenuAction> {
     })
 }
 
-fn render_page_tabs(app: &mut App, ui: &mut three_d::egui::Ui) {
-    use three_d::egui::{Frame, Margin};
-
+fn render_page_tabs(
+    app: &mut App,
+    ui: &mut three_d::egui::Ui,
+) -> Option<usize> {
     let entries = [
         tabs::TabEntry {
             icon: CUBE,
@@ -204,19 +223,12 @@ fn render_page_tabs(app: &mut App, ui: &mut three_d::egui::Ui) {
             label: app.i18n.tr("page.fbx_converter").to_owned(),
         },
     ];
-    let order = [Page::GlbEditor, Page::BvhStudio, Page::FbxConverter];
-    let selected = order.iter().position(|page| *page == app.page).unwrap_or(0);
-    let clicked = Frame::NONE
-        .inner_margin(Margin::symmetric(8, 4))
-        .show(ui, |ui| {
-            ui.horizontal(|ui| tabs::segmented(ui, &entries, selected))
-                .inner
-        })
-        .inner;
-    if let Some(index) = clicked {
-        switch_page(app, order[index]);
-    }
-    ui.separator();
+    let selected = [Page::GlbEditor, Page::BvhStudio, Page::FbxConverter]
+        .iter()
+        .position(|page| *page == app.page)
+        .unwrap_or(0);
+    ui.horizontal(|ui| tabs::segmented(ui, &entries, selected))
+        .inner
 }
 
 /// Apply a page switch with the per-page reset and reload side effects.
