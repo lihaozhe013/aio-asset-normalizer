@@ -9,7 +9,7 @@ authors = []
 
 [features]
 default = ["desktop"]
-desktop = ["dep:three-d", "dep:three-d-asset", "dep:egui-phosphor", "dep:winit", "dep:rfd", "dep:arboard", "dep:open", "dep:sys-locale", "dep:serde_yaml", "dep:winres"]
+desktop = ["dep:three-d", "dep:three-d-asset", "dep:egui-phosphor", "dep:winit", "dep:rfd", "dep:arboard", "dep:open", "dep:sys-locale", "dep:serde_yaml", "dep:winres", "dep:muda"]
 mcp = ["dep:rmcp", "dep:tokio"]
 
 [[bin]]
@@ -55,3 +55,6 @@ fs2 = "0.4"
 
 [target.'cfg(windows)'.build-dependencies]
 winres = { version = "0.1", optional = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+muda = { version = "0.21", default-features = false, optional = true }

@@ -357,3 +357,21 @@ client with the paths described in `docs/MCP.md`.
 Automated protocol smoke coverage lives in `tests/mcp_server.rs`. These manual
 checks require a real visible desktop session for rendering, high-DPI capture,
 multi-window behavior, and application close handling.
+
+## Native macOS Menu
+
+- Launch the desktop app on macOS. Verify the system menu bar contains the
+  application menu, File, View, Language, and Help, with no Page menu.
+- Verify the window begins with the page tabs and has no duplicate menu strip.
+- Open About from the application-name menu. Verify the existing About dialog
+  appears and Help contains Connect AI without another About entry.
+- Use File commands and Cmd+O, Cmd+S, and Cmd+E. Verify each action runs once.
+  Cmd+O imports BVH on BVH Studio and GLB on the other pages.
+- Toggle grid, axes, and origin from View and from the workspace controls; verify
+  the native checkmarks reflect the current viewport state, including tab changes.
+- Change Language. Verify native labels and the selected language checkmark update.
+- Verify Hide, Hide Others, and Show All use the standard macOS behavior.
+- Quit with Cmd+Q during an active task. Verify the existing shutdown flow handles
+  the request and saves preferences.
+- On Windows and Linux, verify the in-window menu still works, About remains in
+  Help, the Page menu is absent, and tabs continue to switch workflows.

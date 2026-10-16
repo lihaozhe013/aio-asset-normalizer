@@ -1,12 +1,14 @@
 use crate::app::App;
 use crate::modules::ui::{
-    about_dialog, bottom_panel, bvh_inspector, empty_state,
-    fbx_converter_panel, fonts, glb_inspector,
-    menu_bar::{self, MenuAction, Page},
+    about_dialog, bottom_panel, bvh_inspector, empty_state, fbx_converter_panel, fonts,
+    glb_inspector,
+    menu_bar::{MenuAction, Page},
     tabs, theme,
 };
 use egui_phosphor::regular::{ARROWS_CLOCKWISE, CUBE, PERSON_SIMPLE_RUN};
-use three_d::egui::{self, Key, Panel, ScrollArea};
+#[cfg(not(target_os = "macos"))]
+use three_d::egui::Key;
+use three_d::egui::{self, Panel, ScrollArea};
 
 pub fn render_ui(
     app: &mut App,
@@ -25,12 +27,13 @@ pub fn render_ui(
         Page::FbxConverter => app.converter_file_tree.handle_dropped_files(ui.ctx()),
     }
     app.poll_tasks();
+    #[cfg(not(target_os = "macos"))]
     for action in keyboard_shortcuts(ui, app.page) {
         app.dispatch_action(&action);
     }
-    // The menu bar and page tabs share one full-width top panel so the
-    // whole strip has a single background color, and its bottom border
-    // connects with the side panel strokes into a continuous frame.
+    // macOS hosts its menu in the system bar; other platforms share this panel
+    // with the tabs to keep a continuous frame around the workspace.
+    #[cfg(not(target_os = "macos"))]
     let mut actions = Vec::new();
     let mut tab_clicked: Option<usize> = None;
     Panel::top("top_bar")
@@ -41,16 +44,19 @@ pub fn render_ui(
                 .inner_margin(egui::Margin::symmetric(6, 3)),
         )
         .show_inside(ui, |ui| {
-            actions = menu_bar::render(
-                ui,
-                &app.i18n,
-                app.page,
-                app.canvas.show_grid,
-                app.canvas.show_axes,
-                app.canvas.show_origin,
-            );
+            #[cfg(not(target_os = "macos"))]
+            {
+                actions = crate::modules::ui::menu_bar::render(
+                    ui,
+                    &app.i18n,
+                    app.canvas.show_grid,
+                    app.canvas.show_axes,
+                    app.canvas.show_origin,
+                );
+            }
             tab_clicked = render_page_tabs(app, ui);
         });
+    #[cfg(not(target_os = "macos"))]
     for action in actions {
         app.dispatch_action(&action);
     }
@@ -140,10 +146,7 @@ pub fn render_ui(
 fn page_is_empty(app: &App) -> bool {
     match app.page {
         Page::GlbEditor => app.glb.is_none() && !app.canvas.has_glb_skeleton(),
-        Page::BvhStudio => {
-            app.canvas.skeleton.is_none()
-                && app.canvas.target_skeleton.is_none()
-        }
+        Page::BvhStudio => app.canvas.skeleton.is_none() && app.canvas.target_skeleton.is_none(),
         Page::FbxConverter => false,
     }
 }
@@ -183,6 +186,7 @@ fn render_empty_state(app: &mut App, ui: &mut three_d::egui::Ui) {
 /// Global keyboard shortcuts mapped onto existing menu actions.
 ///
 /// The command modifier maps to Cmd on macOS and Ctrl elsewhere.
+#[cfg(not(target_os = "macos"))]
 fn keyboard_shortcuts(ui: &three_d::egui::Ui, page: Page) -> Vec<MenuAction> {
     ui.input(|input| {
         let mut actions = Vec::new();
@@ -205,10 +209,7 @@ fn keyboard_shortcuts(ui: &three_d::egui::Ui, page: Page) -> Vec<MenuAction> {
     })
 }
 
-fn render_page_tabs(
-    app: &mut App,
-    ui: &mut three_d::egui::Ui,
-) -> Option<usize> {
+fn render_page_tabs(app: &mut App, ui: &mut three_d::egui::Ui) -> Option<usize> {
     let entries = [
         tabs::TabEntry {
             icon: CUBE,

@@ -1,4 +1,6 @@
+#[cfg(not(target_os = "macos"))]
 use crate::modules::i18n::I18n;
+#[cfg(not(target_os = "macos"))]
 use three_d::egui;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,10 +34,10 @@ pub enum MenuAction {
     Quit,
 }
 
+#[cfg(not(target_os = "macos"))]
 pub fn render(
     ui: &mut egui::Ui,
     i18n: &I18n,
-    page: Page,
     show_grid: bool,
     show_axes: bool,
     show_origin: bool,
@@ -94,44 +96,14 @@ pub fn render(
                     }
                 });
 
-                ui.menu_button(i18n.tr("menu.page"), |ui| {
-                    if ui
-                        .selectable_label(page == Page::GlbEditor, i18n.tr("page.glb_editor"))
-                        .clicked()
-                    {
-                        actions.push(MenuAction::OpenGlbEditor);
-                        ui.close();
-                    }
-                    if ui
-                        .selectable_label(page == Page::BvhStudio, i18n.tr("page.bvh_studio"))
-                        .clicked()
-                    {
-                        actions.push(MenuAction::OpenBvhStudio);
-                        ui.close();
-                    }
-                    if ui
-                        .selectable_label(page == Page::FbxConverter, i18n.tr("page.fbx_converter"))
-                        .clicked()
-                    {
-                        actions.push(MenuAction::OpenFbxConverter);
-                        ui.close();
-                    }
-                });
-
                 ui.menu_button(i18n.tr("menu.view"), |ui| {
                     let mut grid = show_grid;
-                    if ui
-                        .checkbox(&mut grid, i18n.tr("menu.show_grid"))
-                        .changed()
-                    {
+                    if ui.checkbox(&mut grid, i18n.tr("menu.show_grid")).changed() {
                         actions.push(MenuAction::ToggleGrid);
                         ui.close();
                     }
                     let mut axes = show_axes;
-                    if ui
-                        .checkbox(&mut axes, i18n.tr("menu.show_axes"))
-                        .changed()
-                    {
+                    if ui.checkbox(&mut axes, i18n.tr("menu.show_axes")).changed() {
                         actions.push(MenuAction::ToggleAxes);
                         ui.close();
                     }
@@ -188,6 +160,7 @@ pub fn render(
 ///
 /// The command modifier is Cmd on macOS and Ctrl on other platforms, so the
 /// label mentions both.
+#[cfg(not(target_os = "macos"))]
 fn shortcut_label() -> String {
     "Ctrl/Cmd+O / S / E".to_owned()
 }

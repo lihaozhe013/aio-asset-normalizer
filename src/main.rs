@@ -12,6 +12,8 @@ mod app_preview;
 mod app_retarget;
 mod app_retarget_prompt;
 mod app_ui;
+#[cfg(target_os = "macos")]
+mod native_menu;
 mod reload;
 mod window;
 
@@ -43,7 +45,13 @@ fn main() {
     let mut app = App::new(&context, window.viewport(), &prefs, logging);
     app.attach_automation(bridge, bridge_rx);
 
+    #[cfg(target_os = "macos")]
+    let mut native_menu = native_menu::NativeMenu::new(&app)
+        .expect("failed to initialize the macOS application menu");
+
     window.render_loop(move |mut frame_input, close_requested| {
+        #[cfg(target_os = "macos")]
+        native_menu.dispatch_pending(&mut app);
         if close_requested {
             app.request_shutdown();
         }
@@ -59,6 +67,11 @@ fn main() {
                 content_rect = Some(app.render_ui(gui_ctx, frame_input.window_width));
             },
         );
+
+        #[cfg(target_os = "macos")]
+        if let Err(error) = native_menu.sync(&app) {
+            tracing::error!(target: "app", %error, "Failed to synchronize the macOS menu");
+        }
 
         let dpr = frame_input.device_pixel_ratio;
         let viewport = content_rect
@@ -86,8 +99,7 @@ fn main() {
         // Align the viewport background with the UI theme background so the
         // 3D canvas blends seamlessly with the surrounding panels.
         let [red, green, blue, _] = modules::ui::theme::VIEWPORT_CLEAR;
-        let mut clear_rt = screen
-            .clear(ClearState::color_and_depth(red, green, blue, 1.0, 1.0));
+        let mut clear_rt = screen.clear(ClearState::color_and_depth(red, green, blue, 1.0, 1.0));
 
         if show_scene && app.canvas.show_axes {
             for axis in &app.canvas.axes {

@@ -5,7 +5,7 @@ use three_d::{
 use winit::{
     dpi::LogicalSize,
     event::{Event, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
+    event_loop::{ControlFlow, EventLoop, EventLoopBuilder},
     window::{Icon, WindowBuilder},
 };
 
@@ -25,7 +25,14 @@ impl Window {
         let icon = Icon::from_rgba(icon.into_raw(), 1254, 1254)
             .expect("failed to create the application icon");
 
-        let event_loop = EventLoop::new();
+        let mut event_loop_builder = EventLoopBuilder::new();
+        #[cfg(target_os = "macos")]
+        {
+            use winit::platform::macos::EventLoopBuilderExtMacOS;
+            // winit installs its default menu at launch, after our menu is built.
+            event_loop_builder.with_default_menu(false);
+        }
+        let event_loop = event_loop_builder.build();
         let window = WindowBuilder::new()
             .with_title("AIO Asset Normalizer")
             .with_min_inner_size(LogicalSize::new(1024_u32, 600_u32))
