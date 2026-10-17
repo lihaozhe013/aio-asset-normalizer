@@ -210,10 +210,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
         ui.horizontal(|ui| {
             for unit in ["m", "cm", "mm"] {
                 if ui
-                    .button(
-                        app.i18n
-                            .text("bvh.use_unit", &[("unit", unit.to_owned())]),
-                    )
+                    .button(app.i18n.text("bvh.use_unit", &[("unit", unit.to_owned())]))
                     .clicked()
                     && unit_shortcut != unit
                 {
@@ -255,10 +252,8 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
                             .selectable_value(
                                 &mut app.retarget_target_skin_index,
                                 index,
-                                app.i18n.text(
-                                    "common.skin_n",
-                                    &[("index", index.to_string())],
-                                ),
+                                app.i18n
+                                    .text("common.skin_n", &[("index", index.to_string())]),
                             )
                             .changed();
                     }
@@ -345,10 +340,8 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
         for warning in report.warnings.iter().take(4) {
             ui.colored_label(
                 theme::WARNING,
-                app.i18n.text(
-                    "common.warning_prefix",
-                    &[("message", warning.clone())],
-                ),
+                app.i18n
+                    .text("common.warning_prefix", &[("message", warning.clone())]),
             );
         }
     }
@@ -384,10 +377,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
         if report.is_valid() {
             ui.colored_label(theme::SUCCESS, app.i18n.tr("bvh.mapping_valid"));
         } else {
-            ui.colored_label(
-                theme::WARNING,
-                app.i18n.tr("bvh.mapping_invalid"),
-            );
+            ui.colored_label(theme::WARNING, app.i18n.tr("bvh.mapping_invalid"));
         }
         for (label, values) in [
             (

@@ -64,10 +64,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
 fn render_current(app: &mut App, ui: &mut three_d::egui::Ui) {
     use three_d::egui::*;
     if app.glb_retarget_preview_active {
-        ui.colored_label(
-            theme::INFO,
-            app.i18n.tr("glb.retarget_preview_active"),
-        );
+        ui.colored_label(theme::INFO, app.i18n.tr("glb.retarget_preview_active"));
         if ui
             .button(app.i18n.tr("glb.exit_retarget_preview"))
             .clicked()
@@ -125,10 +122,10 @@ fn render_current(app: &mut App, ui: &mut three_d::egui::Ui) {
         }
     });
     if !summary.extensions.is_empty() {
-        ui.label(app.i18n.text(
-            "glb.extensions",
-            &[("list", summary.extensions.join(", "))],
-        ));
+        ui.label(
+            app.i18n
+                .text("glb.extensions", &[("list", summary.extensions.join(", "))]),
+        );
     }
     render_named_items(ui, app.i18n.tr("glb.scene_names"), document.scene_names());
     render_named_items(ui, app.i18n.tr("glb.node_names"), document.node_names());
@@ -258,11 +255,7 @@ fn render_current(app: &mut App, ui: &mut three_d::egui::Ui) {
                 if !playable {
                     ui.colored_label(
                         theme::WARNING,
-                        format!(
-                            "{}: {}",
-                            app.i18n.tr("glb.unsupported"),
-                            unsupported
-                        ),
+                        format!("{}: {}", app.i18n.tr("glb.unsupported"), unsupported),
                     );
                 }
                 ui.horizontal(|ui| {
@@ -413,10 +406,8 @@ fn render_retarget_tab(app: &mut App, ui: &mut three_d::egui::Ui) {
                                 .selectable_value(
                                     &mut app.retarget_source_skin_index,
                                     index,
-                                    app.i18n.text(
-                                        "common.skin_n",
-                                        &[("index", index.to_string())],
-                                    ),
+                                    app.i18n
+                                        .text("common.skin_n", &[("index", index.to_string())]),
                                 )
                                 .changed();
                         }
@@ -429,10 +420,8 @@ fn render_retarget_tab(app: &mut App, ui: &mut three_d::egui::Ui) {
                                 .selectable_value(
                                     &mut app.retarget_target_skin_index,
                                     index,
-                                    app.i18n.text(
-                                        "common.skin_n",
-                                        &[("index", index.to_string())],
-                                    ),
+                                    app.i18n
+                                        .text("common.skin_n", &[("index", index.to_string())]),
                                 )
                                 .changed();
                         }
@@ -489,15 +478,9 @@ fn render_retarget_tab(app: &mut App, ui: &mut three_d::egui::Ui) {
         }
         if let Some(report) = app.retarget_validation.as_ref() {
             if report.is_valid() {
-                ui.colored_label(
-                    theme::SUCCESS,
-                    app.i18n.tr("common.mapping_valid"),
-                );
+                ui.colored_label(theme::SUCCESS, app.i18n.tr("common.mapping_valid"));
             } else {
-                ui.colored_label(
-                    theme::WARNING,
-                    app.i18n.tr("common.mapping_invalid"),
-                );
+                ui.colored_label(theme::WARNING, app.i18n.tr("common.mapping_invalid"));
                 for error in report.errors.iter().take(4) {
                     ui.colored_label(theme::ERROR, error);
                 }

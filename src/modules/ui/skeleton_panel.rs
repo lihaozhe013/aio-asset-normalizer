@@ -17,9 +17,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui, context: SkeletonPanelC
     ui.collapsing(i18n.tr("skeleton.title"), |ui| {
         ComboBox::from_label(i18n.tr("skeleton.display_mode"))
             .selected_text(match config.mode {
-                SkeletonDisplayMode::Octahedral => {
-                    i18n.tr("skeleton.mode_octahedral")
-                }
+                SkeletonDisplayMode::Octahedral => i18n.tr("skeleton.mode_octahedral"),
                 SkeletonDisplayMode::Stick => i18n.tr("skeleton.mode_stick"),
                 SkeletonDisplayMode::Lines => i18n.tr("skeleton.mode_lines"),
             })
@@ -47,8 +45,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui, context: SkeletonPanelC
         );
         ui.checkbox(&mut config.in_front, i18n.tr("skeleton.in_front"));
         ui.add(
-            Slider::new(&mut config.width_scale, 0.25..=3.0)
-                .text(i18n.tr("skeleton.bone_width")),
+            Slider::new(&mut config.width_scale, 0.25..=3.0).text(i18n.tr("skeleton.bone_width")),
         );
         ui.horizontal(|ui| {
             let include_source_fit = matches!(
@@ -57,9 +54,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui, context: SkeletonPanelC
                     include_source_fit: true
                 }
             );
-            if include_source_fit
-                && ui.button(i18n.tr("skeleton.fit_source")).clicked()
-            {
+            if include_source_fit && ui.button(i18n.tr("skeleton.fit_source")).clicked() {
                 if let Some((minimum, maximum)) = app.canvas.skeleton_bounds() {
                     app.camera.focus_on_bounds(minimum, maximum);
                 }
@@ -67,18 +62,14 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui, context: SkeletonPanelC
             match context {
                 SkeletonPanelContext::Bvh { .. } => {
                     if ui.button(i18n.tr("skeleton.fit_target")).clicked() {
-                        if let Some((minimum, maximum)) =
-                            app.canvas.target_skeleton_bounds()
-                        {
+                        if let Some((minimum, maximum)) = app.canvas.target_skeleton_bounds() {
                             app.camera.focus_on_bounds(minimum, maximum);
                         }
                     }
                 }
                 SkeletonPanelContext::Glb => {
                     if ui.button(i18n.tr("skeleton.fit_skeleton")).clicked() {
-                        if let Some((minimum, maximum)) =
-                            app.canvas.glb_skeleton_bounds()
-                        {
+                        if let Some((minimum, maximum)) = app.canvas.glb_skeleton_bounds() {
                             app.camera.focus_on_bounds(minimum, maximum);
                         }
                     }

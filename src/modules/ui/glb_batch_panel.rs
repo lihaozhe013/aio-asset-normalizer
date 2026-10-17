@@ -317,11 +317,7 @@ fn render_preflight(ui: &mut three_d::egui::Ui, app: &App, preflight: &GlbBatchP
                     for output in &entry.completed_outputs {
                         ui.colored_label(
                             theme::SUCCESS,
-                            format!(
-                                "{}: {}",
-                                app.i18n.tr("glb.batch_written"),
-                                output.display()
-                            ),
+                            format!("{}: {}", app.i18n.tr("glb.batch_written"), output.display()),
                         );
                     }
                 });

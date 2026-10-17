@@ -51,8 +51,7 @@ const RAISED_HOVER: Color32 = Color32::from_rgb(0x32, 0x31, 0x30);
 /// following the dark theme.
 pub const ABOUT_ICON_BACKDROP: Color32 = Color32::from_rgb(0xF8, 0xF0, 0xE6);
 /// Hairline around the About dialog icon backdrop.
-pub const ABOUT_ICON_BACKDROP_STROKE: Color32 =
-    Color32::from_rgb(0xE0, 0xC6, 0xB0);
+pub const ABOUT_ICON_BACKDROP_STROKE: Color32 = Color32::from_rgb(0xE0, 0xC6, 0xB0);
 
 /// Normalized RGBA for the 3D viewport clear color, matching [`BG`].
 pub const VIEWPORT_CLEAR: [f32; 4] = [0.0784, 0.0784, 0.0745, 1.0];

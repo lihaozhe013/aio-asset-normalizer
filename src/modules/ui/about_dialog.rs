@@ -36,10 +36,7 @@ pub fn render(app: &mut App, ctx: &three_d::egui::Context) {
                     ui.add_space(left_pad);
                     Frame::NONE
                         .fill(theme::ABOUT_ICON_BACKDROP)
-                        .stroke(Stroke::new(
-                            1.0_f32,
-                            theme::ABOUT_ICON_BACKDROP_STROKE,
-                        ))
+                        .stroke(Stroke::new(1.0_f32, theme::ABOUT_ICON_BACKDROP_STROKE))
                         .corner_radius(CornerRadius::same(12))
                         .inner_margin(Margin::same(8))
                         .show(ui, |ui| {

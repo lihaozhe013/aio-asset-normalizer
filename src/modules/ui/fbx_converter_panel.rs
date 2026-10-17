@@ -46,10 +46,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
                 ));
             }
             None => {
-                ui.colored_label(
-                    theme::ERROR,
-                    app.i18n.tr("converter.blender_missing"),
-                );
+                ui.colored_label(theme::ERROR, app.i18n.tr("converter.blender_missing"));
             }
         }
     });

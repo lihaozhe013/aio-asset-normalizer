@@ -123,10 +123,7 @@ impl LogViewer {
             }
         });
         if !self.storage_available {
-            ui.colored_label(
-                theme::WARNING,
-                i18n.tr("log.storage_unavailable"),
-            );
+            ui.colored_label(theme::WARNING, i18n.tr("log.storage_unavailable"));
         }
 
         ui.horizontal(|ui| {

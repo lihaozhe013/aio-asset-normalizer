@@ -97,10 +97,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
                 Err(error) => {
                     ui.colored_label(
                         theme::WARNING,
-                        format!(
-                            "{}: {error}",
-                            app.i18n.tr("glb.export_estimate")
-                        ),
+                        format!("{}: {error}", app.i18n.tr("glb.export_estimate")),
                     );
                 }
             }
@@ -176,11 +173,7 @@ pub fn render_selection_controls(
                 .scene_index
                 .min(catalog.scenes.len().saturating_sub(1));
             ComboBox::from_label(i18n.tr("glb.export_scene"))
-                .selected_text(scene_label(
-                    i18n,
-                    catalog,
-                    selection.scene_index,
-                ))
+                .selected_text(scene_label(i18n, catalog, selection.scene_index))
                 .show_ui(ui, |ui| {
                     for scene in &catalog.scenes {
                         ui.selectable_value(
@@ -202,20 +195,13 @@ pub fn render_selection_controls(
 
         if show_skin {
             if catalog.skins.is_empty() {
-                ui.colored_label(
-                    theme::WARNING,
-                    i18n.tr("glb.export_no_skins"),
-                );
+                ui.colored_label(theme::WARNING, i18n.tr("glb.export_no_skins"));
             } else {
                 selection.skin_index = selection
                     .skin_index
                     .filter(|index| *index < catalog.skins.len());
                 ComboBox::from_label(i18n.tr("glb.export_skin"))
-                    .selected_text(skin_label(
-                        i18n,
-                        catalog,
-                        selection.skin_index,
-                    ))
+                    .selected_text(skin_label(i18n, catalog, selection.skin_index))
                     .show_ui(ui, |ui| {
                         ui.selectable_value(
                             &mut selection.skin_index,
@@ -320,8 +306,7 @@ fn render_node(
             node.name,
             node.index,
             node.mesh
-                .map(|mesh| i18n
-                    .text("common.mesh_suffix", &[("index", mesh.to_string())]))
+                .map(|mesh| i18n.text("common.mesh_suffix", &[("index", mesh.to_string())]))
                 .unwrap_or_default()
         );
         let changed = ui
@@ -338,14 +323,7 @@ fn render_node(
 
     if let Some(mesh_index) = node.mesh {
         if rendered_meshes.insert(mesh_index) {
-            render_mesh_primitives(
-                ui,
-                i18n,
-                catalog,
-                selection,
-                mesh_index,
-                depth + 1,
-            );
+            render_mesh_primitives(ui, i18n, catalog, selection, mesh_index, depth + 1);
         }
     }
     let child_selected = selected_ancestor || explicitly_selected;
@@ -398,10 +376,9 @@ fn render_mesh_primitives(
                 &[("index", primitive.index.to_string())],
             );
             if let Some(material) = primitive.material {
-                label.push_str(&i18n.text(
-                    "common.material_suffix",
-                    &[("index", material.to_string())],
-                ));
+                label.push_str(
+                    &i18n.text("common.material_suffix", &[("index", material.to_string())]),
+                );
             }
             let label = format!("{}{}", " ".repeat(depth), label);
             if ui.checkbox(&mut checked, label).changed() {
@@ -599,10 +576,7 @@ fn render_root_motion_controls(
                     .get(*node_index)
                     .map(node_label)
                     .unwrap_or_else(|| {
-                        i18n.text(
-                            "common.node_label",
-                            &[("index", node_index.to_string())],
-                        )
+                        i18n.text("common.node_label", &[("index", node_index.to_string())])
                     });
                 ui.selectable_value(
                     &mut selection.root_motion_node_override,
@@ -657,29 +631,19 @@ fn preset_label(i18n: &I18n, preset: GlbExportPreset) -> String {
     .to_owned()
 }
 
-fn scene_label(
-    i18n: &I18n,
-    catalog: &GlbExportCatalog,
-    index: usize,
-) -> String {
+fn scene_label(i18n: &I18n, catalog: &GlbExportCatalog, index: usize) -> String {
     catalog
         .scenes
         .get(index)
         .map(scene_label_from_scene)
-        .unwrap_or_else(|| {
-            i18n.text("common.scene_label", &[("index", index.to_string())])
-        })
+        .unwrap_or_else(|| i18n.text("common.scene_label", &[("index", index.to_string())]))
 }
 
 fn scene_label_from_scene(scene: &crate::modules::glb::GlbExportScene) -> String {
     format!("{} [{}]", scene.name, scene.index)
 }
 
-fn skin_label(
-    i18n: &I18n,
-    catalog: &GlbExportCatalog,
-    index: Option<usize>,
-) -> String {
+fn skin_label(i18n: &I18n, catalog: &GlbExportCatalog, index: Option<usize>) -> String {
     index
         .and_then(|index| catalog.skins.get(index))
         .map(|skin| format!("{} [{}]", skin.name, skin.index))

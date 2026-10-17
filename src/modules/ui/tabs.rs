@@ -18,11 +18,7 @@ pub struct TabEntry {
 /// The selected entry is accent-tinted; hover feedback comes from the
 /// theme's widget visuals. The control never fires for the entry that is
 /// already selected.
-pub fn segmented(
-    ui: &mut egui::Ui,
-    entries: &[TabEntry],
-    selected: usize,
-) -> Option<usize> {
+pub fn segmented(ui: &mut egui::Ui, entries: &[TabEntry], selected: usize) -> Option<usize> {
     let mut clicked = None;
     Frame::NONE
         .fill(theme::CARD)
@@ -34,11 +30,9 @@ pub fn segmented(
                 for (index, entry) in entries.iter().enumerate() {
                     let is_selected = index == selected;
                     let text = if is_selected {
-                        RichText::new(format!("{} {}", entry.icon, entry.label))
-                            .strong()
+                        RichText::new(format!("{} {}", entry.icon, entry.label)).strong()
                     } else {
-                        RichText::new(format!("{} {}", entry.icon, entry.label))
-                            .weak()
+                        RichText::new(format!("{} {}", entry.icon, entry.label)).weak()
                     };
                     let button = egui::Button::new(text)
                         .corner_radius(CornerRadius::same(4))

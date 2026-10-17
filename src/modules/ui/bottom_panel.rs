@@ -1,14 +1,11 @@
 use crate::app::{App, BottomPanelTab};
 use crate::modules::ui::menu_bar::Page;
 use crate::modules::ui::{tabs, theme};
-use egui_phosphor::regular::{
-    FILM_STRIP, PAUSE, PLAY, SKIP_BACK, SKIP_FORWARD, TERMINAL,
-};
+use egui_phosphor::regular::{FILM_STRIP, PAUSE, PLAY, SKIP_BACK, SKIP_FORWARD, TERMINAL};
 use three_d::egui::*;
 
 pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
-    let has_animation =
-        app.page == Page::GlbEditor && !app.glb_animation_entries().is_empty();
+    let has_animation = app.page == Page::GlbEditor && !app.glb_animation_entries().is_empty();
     if !has_animation && app.bottom_panel_tab == BottomPanelTab::Animation {
         app.bottom_panel_tab = BottomPanelTab::DebugLog;
     }
@@ -95,20 +92,13 @@ fn render_animation_timeline(app: &mut App, ui: &mut three_d::egui::Ui) {
             if !playable {
                 ui.colored_label(
                     theme::WARNING,
-                    format!(
-                        "{}: {}",
-                        app.i18n.tr("glb.unsupported"),
-                        unsupported
-                    ),
+                    format!("{}: {}", app.i18n.tr("glb.unsupported"), unsupported),
                 );
                 return;
             }
 
             ui.checkbox(&mut app.glb_animation_loop, app.i18n.tr("glb.loop"));
-            ui.monospace(format!(
-                "{:.3}s / {:.3}s",
-                app.glb_animation_time, duration
-            ));
+            ui.monospace(format!("{:.3}s / {:.3}s", app.glb_animation_time, duration));
         }
     });
 
@@ -152,9 +142,7 @@ fn render_animation_timeline(app: &mut App, ui: &mut three_d::egui::Ui) {
                 if ui
                     .add_sized(
                         button_size,
-                        Button::new(
-                            RichText::new(SKIP_FORWARD).size(icon_size),
-                        ),
+                        Button::new(RichText::new(SKIP_FORWARD).size(icon_size)),
                     )
                     .on_hover_text(app.i18n.tr("glb.step_forward"))
                     .clicked()
