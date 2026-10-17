@@ -19,6 +19,7 @@ pub(crate) struct NativeMenu {
     submenus: Vec<(Submenu, &'static str)>,
     items: Vec<(MenuItem, &'static str, MenuAction)>,
     checks: Vec<(CheckMenuItem, &'static str, MenuAction)>,
+    predefined: Vec<(PredefinedMenuItem, &'static str)>,
     language: LanguagePreference,
     page: Option<Page>,
 }
@@ -32,6 +33,7 @@ impl NativeMenu {
             submenus: Vec::new(),
             items: Vec::new(),
             checks: Vec::new(),
+            predefined: Vec::new(),
             language: app.i18n.preference(),
             page: None,
         };
@@ -80,6 +82,8 @@ impl NativeMenu {
             None,
             app,
         )?;
+        file.append(&PredefinedMenuItem::separator())?;
+        native.add_item(&file, "Connect AI", MenuAction::ConnectAi, None, app)?;
 
         let view = native.add_submenu("menu.view", app)?;
         for (key, action) in [
@@ -100,7 +104,13 @@ impl NativeMenu {
             app,
         )?;
 
-        let language = native.add_submenu("menu.language", app)?;
+        // Language selection lives inside View to keep the top-level bar compact.
+        // The submenu is registered like a root one so language switches in the
+        // UI still refresh its title and item labels.
+        view.append(&PredefinedMenuItem::separator())?;
+        let language = Submenu::new(app.i18n.tr("menu.language"), true);
+        view.append(&language)?;
+        native.submenus.push((language.clone(), "menu.language"));
         for preference in [
             LanguagePreference::Auto,
             LanguagePreference::English,
@@ -112,11 +122,31 @@ impl NativeMenu {
                 .checks
                 .push((item, "", MenuAction::SetLanguage(preference)));
         }
-        let help = native.add_submenu("menu.help", app)?;
-        native.add_item(&help, "Connect AI", MenuAction::ConnectAi, None, app)?;
+
+        // Standard macOS Window menu placed between View and Help. The
+        // predefined actions carry the system behavior and shortcuts
+        // (Minimize is Cmd+M); titles follow the app language like the
+        // remaining custom items.
+        let window = native.add_submenu("menu.window", app)?;
+        let minimize = PredefinedMenuItem::minimize(Some(app.i18n.tr("menu.minimize")));
+        window.append(&minimize)?;
+        native.predefined.push((minimize, "menu.minimize"));
+        let zoom = PredefinedMenuItem::zoom(Some(app.i18n.tr("menu.zoom")));
+        window.append(&zoom)?;
+        native.predefined.push((zoom, "menu.zoom"));
+        window.append(&PredefinedMenuItem::separator())?;
+        let bring_all_to_front =
+            PredefinedMenuItem::bring_all_to_front(Some(app.i18n.tr("menu.bring_all_to_front")));
+        window.append(&bring_all_to_front)?;
+        native
+            .predefined
+            .push((bring_all_to_front, "menu.bring_all_to_front"));
+
+        // The Help submenu is omitted: after moving Connect AI to File it has
+        // no remaining entries, and an empty macOS Help menu is not useful.
         native.sync(app)?;
         native._menu.init_for_nsapp();
-        help.set_as_help_menu_for_nsapp();
+        window.set_as_windows_menu_for_nsapp();
         Ok(native)
     }
 
@@ -184,6 +214,9 @@ impl NativeMenu {
                     MenuAction::SetLanguage(preference) => preference.label(&app.i18n),
                     _ => app.i18n.tr(key),
                 });
+            }
+            for (item, key) in &self.predefined {
+                item.set_text(app.i18n.tr(key));
             }
         }
         for (item, _, action) in &self.checks {

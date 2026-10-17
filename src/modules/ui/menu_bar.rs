@@ -90,6 +90,11 @@ pub fn render(
                         actions.push(MenuAction::ClearFileList);
                         ui.close();
                     }
+                    ui.separator();
+                    if ui.button("Connect AI").clicked() {
+                        actions.push(MenuAction::ConnectAi);
+                        ui.close();
+                    }
                     if ui.button(i18n.tr("menu.quit")).clicked() {
                         actions.push(MenuAction::Quit);
                         ui.close();
@@ -120,32 +125,28 @@ pub fn render(
                         actions.push(MenuAction::ResetCamera);
                         ui.close();
                     }
-                });
-
-                ui.menu_button(i18n.tr("menu.language"), |ui| {
-                    for preference in [
-                        crate::modules::i18n::LanguagePreference::Auto,
-                        crate::modules::i18n::LanguagePreference::English,
-                        crate::modules::i18n::LanguagePreference::Chinese,
-                    ] {
-                        if ui
-                            .selectable_label(
-                                i18n.preference() == preference,
-                                preference.label(i18n),
-                            )
-                            .clicked()
-                        {
-                            actions.push(MenuAction::SetLanguage(preference));
-                            ui.close();
+                    ui.separator();
+                    ui.menu_button(i18n.tr("menu.language"), |ui| {
+                        for preference in [
+                            crate::modules::i18n::LanguagePreference::Auto,
+                            crate::modules::i18n::LanguagePreference::English,
+                            crate::modules::i18n::LanguagePreference::Chinese,
+                        ] {
+                            if ui
+                                .selectable_label(
+                                    i18n.preference() == preference,
+                                    preference.label(i18n),
+                                )
+                                .clicked()
+                            {
+                                actions.push(MenuAction::SetLanguage(preference));
+                                ui.close();
+                            }
                         }
-                    }
+                    });
                 });
 
                 ui.menu_button(i18n.tr("menu.help"), |ui| {
-                    if ui.button("Connect AI").clicked() {
-                        actions.push(MenuAction::ConnectAi);
-                        ui.close();
-                    }
                     if ui.button(i18n.tr("menu.about")).clicked() {
                         actions.push(MenuAction::About);
                         ui.close();
