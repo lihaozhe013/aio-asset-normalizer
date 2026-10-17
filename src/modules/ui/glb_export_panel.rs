@@ -116,6 +116,9 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
     }
 }
 
+// Immediate-mode egui render helper; the flag arguments shape which control
+// groups the panel shows, and a struct would hide that per-call variation.
+#[allow(clippy::too_many_arguments)]
 pub fn render_selection_controls(
     ui: &mut three_d::egui::Ui,
     i18n: &I18n,
@@ -282,6 +285,9 @@ fn render_node_selection(
     }
 }
 
+// Recursive immediate-mode tree renderer; depth and ancestor state change per
+// recursion level, so bundling them would obscure the recursion itself.
+#[allow(clippy::too_many_arguments)]
 fn render_node(
     ui: &mut three_d::egui::Ui,
     i18n: &I18n,

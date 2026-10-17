@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
-use crate::modules::bvh::{BvhDocument, MappingFile};
+use crate::modules::bvh::{BvhDocument, JointTransform, MappingFile};
 use crate::modules::glb::{AnimationChannelData, AnimationRuntime, GlbDocument, SkinData};
 
 #[path = "retarget_prompt.rs"]
@@ -254,6 +254,9 @@ impl SkeletonDescriptor {
         NodeRef::new(node.name.clone(), node.path.clone(), node.index)
     }
 
+    // Each argument is an independently validated input of the mapping
+    // context; a parameter struct would only move the same names around.
+    #[allow(clippy::too_many_arguments)]
     pub fn from_skin(
         skin: &SkinData,
         kind: SourceKind,
@@ -327,7 +330,7 @@ impl SkeletonDescriptor {
                     true
                 })
             })
-            .or_else(|| skin.skeleton)
+            .or(skin.skeleton)
             .ok_or_else(|| RetargetError::Mapping("skeleton has no root node".to_owned()))?;
         if root >= skin.nodes.len() {
             return Err(RetargetError::Mapping(
@@ -438,9 +441,7 @@ impl SkeletonDescriptor {
         self.skeleton_sha256 = skeleton_hash(self.kind, self.skin.as_ref(), &self.nodes);
     }
 
-    pub fn rest_world_transforms(
-        &self,
-    ) -> Result<Vec<([f32; 3], [f32; 4], [f32; 3])>, RetargetError> {
+    pub fn rest_world_transforms(&self) -> Result<Vec<JointTransform>, RetargetError> {
         target_rest_world(self).map(|values| {
             values
                 .into_iter()
@@ -1153,6 +1154,9 @@ pub fn retarget_glb(
 }
 
 impl SkeletonDescriptor {
+    // Mirrors the runtime preview context; every argument is consumed
+    // directly, so grouping them would only relocate the same names.
+    #[allow(clippy::too_many_arguments)]
     pub fn from_runtime(
         runtime: &AnimationRuntime,
         document: &GlbDocument,
@@ -1184,6 +1188,9 @@ impl SkeletonDescriptor {
     }
 }
 
+// Internal pipeline step; the arguments mirror the retarget inputs consumed
+// positionally in a fixed order.
+#[allow(clippy::too_many_arguments)]
 fn retarget_frames(
     source: &SkeletonDescriptor,
     target: &SkeletonDescriptor,
@@ -1254,7 +1261,7 @@ fn retarget_frames(
     let target_order = hierarchy_order(&target.nodes)?;
     let root_motion = mapping
         .root_motion
-        .or_else(|| Some((mapping.source_root, mapping.target_root, 1.0)));
+        .or(Some((mapping.source_root, mapping.target_root, 1.0)));
     let root_start = source_frames[0]
         .get(
             root_motion

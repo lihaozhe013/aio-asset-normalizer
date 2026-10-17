@@ -105,14 +105,6 @@ impl App {
         }
     }
 
-    pub(crate) fn bvh_preview_positions(
-        &self,
-        document: &BvhDocument,
-        frame: usize,
-    ) -> Result<Vec<[f32; 3]>, String> {
-        Ok(self.bvh_preview_pose(document, frame)?.positions)
-    }
-
     pub(crate) fn bvh_preview_pose(
         &self,
         document: &BvhDocument,

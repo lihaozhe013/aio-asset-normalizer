@@ -26,7 +26,7 @@ fn meshless_hierarchy_glb(include_skin: bool, animation_interpolation: Option<&s
     if include_skin {
         json["skins"] = serde_json::json!([{"name": "Rig", "joints": [2]}]);
     }
-    if animation_interpolation.is_some() {
+    if let Some(interpolation) = animation_interpolation {
         json["buffers"] = serde_json::json!([{"byteLength": bin.len()}]);
         json["bufferViews"] = serde_json::json!([
             {"buffer": 0, "byteOffset": 0, "byteLength": 8},
@@ -41,7 +41,7 @@ fn meshless_hierarchy_glb(include_skin: bool, animation_interpolation: Option<&s
             "samplers": [{
                 "input": 0,
                 "output": 1,
-                "interpolation": animation_interpolation.unwrap()
+                "interpolation": interpolation
             }],
             "channels": [{"sampler": 0, "target": {"node": 1, "path": "rotation"}}]
         }]);

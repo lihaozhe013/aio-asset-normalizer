@@ -151,7 +151,6 @@ impl RetargetJob {
             )?,
             source_root_scale: self.source_edits.scale_roots,
             source_root_translation: self.source_edits.translate_roots,
-            ..RetargetOptions::default()
         })
     }
 }

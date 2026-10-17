@@ -94,7 +94,7 @@ fn legacy_name_lookup_rejects_names_repeated_more_than_twice() {
         animated_nodes: vec![0, 1, 2],
         mesh_nodes: Vec::new(),
     };
-    assert!(unique_name_lookup(&descriptor).get("Root").is_none());
+    assert!(!unique_name_lookup(&descriptor).contains_key("Root"));
 }
 
 #[test]
@@ -414,7 +414,7 @@ fn write_glb_fixture(
         document["extensions"] = json!({"EXT_fixture": {"keep": true}});
     }
     let mut json_bytes = serde_json::to_vec(&document).unwrap();
-    while json_bytes.len() % 4 != 0 {
+    while !json_bytes.len().is_multiple_of(4) {
         json_bytes.push(b' ');
     }
     let bytes = gltf::binary::Glb {

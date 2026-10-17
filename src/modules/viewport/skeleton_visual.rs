@@ -344,7 +344,7 @@ impl SkeletonVisual {
         for (index, point) in pose.positions.iter().enumerate() {
             expand_bounds(&mut minimum, &mut maximum, *point);
             let depth = joint_depth(index, &pose.parents);
-            let has_child = pose.parents.iter().any(|parent| *parent == Some(index));
+            let has_child = pose.parents.contains(&Some(index));
             let size_factor = if depth == 0 {
                 1.35
             } else if !has_child {

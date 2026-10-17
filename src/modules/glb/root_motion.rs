@@ -7,16 +7,11 @@ use serde_json::{json, Value};
 use super::export_selection::GlbExportSelection;
 use super::{GlbDocument, GlbError};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum RootMotionRemovalMode {
+    #[default]
     HorizontalXZ,
     AllTranslation,
-}
-
-impl Default for RootMotionRemovalMode {
-    fn default() -> Self {
-        Self::HorizontalXZ
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

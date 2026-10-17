@@ -82,11 +82,14 @@ fn lock_directory() -> Result<PathBuf, AssetTaskLockError> {
         })
 }
 
+/// Open the lock file for flock only. The content is never written or read,
+/// so an existing lock file must be preserved rather than truncated.
 #[cfg(unix)]
 fn open_lock_file(path: &std::path::Path) -> io::Result<File> {
     use std::os::unix::fs::OpenOptionsExt;
     OpenOptions::new()
         .create(true)
+        .truncate(false)
         .read(true)
         .write(true)
         .mode(0o600)
@@ -97,6 +100,7 @@ fn open_lock_file(path: &std::path::Path) -> io::Result<File> {
 fn open_lock_file(path: &std::path::Path) -> io::Result<File> {
     OpenOptions::new()
         .create(true)
+        .truncate(false)
         .read(true)
         .write(true)
         .open(path)

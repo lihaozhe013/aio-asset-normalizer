@@ -172,13 +172,13 @@ impl GlbDocument {
                 .map(|v| v[0])
                 .collect::<Vec<_>>();
             validate_times(&times)?;
-            duration = duration.max(*times.last().ok_or_else(|| invalid_output())?);
+            duration = duration.max(*times.last().ok_or_else(invalid_output)?);
             steps.extend(times.windows(2).map(|pair| pair[1] - pair[0]));
             let accessor = self.accessor(output)?.clone();
             let accessor_type = accessor
                 .get("type")
                 .and_then(Value::as_str)
-                .ok_or_else(|| invalid_output())?
+                .ok_or_else(invalid_output)?
                 .to_owned();
             let expected = match path.as_str() {
                 "translation" | "scale" => ("VEC3", 3),

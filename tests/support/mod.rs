@@ -60,7 +60,7 @@ pub fn mapping_from_context(context: &Value) -> Value {
 }
 
 pub fn align4(mut data: Vec<u8>) -> Vec<u8> {
-    while data.len() % 4 != 0 {
+    while !data.len().is_multiple_of(4) {
         data.push(0);
     }
     data
@@ -149,7 +149,7 @@ pub fn glb_bytes() -> Vec<u8> {
     });
 
     let mut json_bytes = serde_json::to_vec(&json).unwrap();
-    while json_bytes.len() % 4 != 0 {
+    while !json_bytes.len().is_multiple_of(4) {
         json_bytes.push(b' ');
     }
     let bin = align4(bin);

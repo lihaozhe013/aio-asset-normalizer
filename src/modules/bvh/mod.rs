@@ -17,6 +17,11 @@ mod pose;
 
 mod key_reduction;
 
+/// Per-joint world transform handed to the retarget pipeline as a plain
+/// `(translation, rotation, scale)` tuple, deliberately decoupled from GLB
+/// internals.
+pub type JointTransform = ([f32; 3], [f32; 4], [f32; 3]);
+
 #[derive(Debug, Clone)]
 pub struct BvhDocument {
     pub source_path: Option<PathBuf>,
@@ -170,13 +175,10 @@ impl BvhDocument {
     }
 
     /// Return world transforms for one motion frame to the shared retargeter.
-    ///
-    /// This deliberately exposes a plain tuple instead of the parser's private
-    /// transform type so BVH remains independent from GLB internals.
     pub fn frame_transforms_for_retarget(
         &self,
         frame: &[f32],
-    ) -> Result<Vec<([f32; 3], [f32; 4], [f32; 3])>, BvhError> {
+    ) -> Result<Vec<JointTransform>, BvhError> {
         Ok(self
             .frame_transforms(frame)?
             .into_iter()
@@ -188,9 +190,7 @@ impl BvhDocument {
     ///
     /// A motion file's first frame is not guaranteed to be its Rest Pose and
     /// must never be used as the reference for retargeting.
-    pub fn rest_transforms_for_retarget(
-        &self,
-    ) -> Result<Vec<([f32; 3], [f32; 4], [f32; 3])>, BvhError> {
+    pub fn rest_transforms_for_retarget(&self) -> Result<Vec<JointTransform>, BvhError> {
         let zero_frame = vec![0.0; self.channel_count()];
         self.frame_transforms_for_retarget(&zero_frame)
     }

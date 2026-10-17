@@ -80,16 +80,14 @@ impl App {
                         message: format!("Preflighted {}", entry.input.display()),
                     });
                 }
-                batch_runner::BatchProgress::ExportFinished { index, .. } => {
-                    if export {
-                        let percent =
-                            0.4 + (index + 1) as f32 / request.inputs.len().max(1) as f32 * 0.6;
-                        let _ = sender.send(JobEvent::Progress {
-                            job_id: job_id.clone(),
-                            progress: percent,
-                            message: format!("Exported batch file {}", index + 1),
-                        });
-                    }
+                batch_runner::BatchProgress::ExportFinished { index, .. } if export => {
+                    let percent =
+                        0.4 + (index + 1) as f32 / request.inputs.len().max(1) as f32 * 0.6;
+                    let _ = sender.send(JobEvent::Progress {
+                        job_id: job_id.clone(),
+                        progress: percent,
+                        message: format!("Exported batch file {}", index + 1),
+                    });
                 }
                 _ => {}
             };

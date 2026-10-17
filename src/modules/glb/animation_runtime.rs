@@ -223,7 +223,7 @@ impl AnimationRuntime {
         base_path: Option<&Path>,
         decode_primitives: bool,
     ) -> Result<Self, RuntimeError> {
-        let source = gltf::Gltf::from_slice(&bytes)?;
+        let source = gltf::Gltf::from_slice(bytes)?;
         let (document, blob) = (source.document, source.blob);
         let buffers = gltf::import_buffers(&document, base_path, blob)?;
         let get_buffer_data = |buffer: gltf::Buffer<'_>| -> Option<&[u8]> {

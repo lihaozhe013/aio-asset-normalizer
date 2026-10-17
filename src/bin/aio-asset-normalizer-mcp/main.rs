@@ -379,10 +379,7 @@ fn reachable_sessions() -> Result<Vec<automation::SessionManifest>, String> {
 }
 
 fn launch_gui() -> Result<(), String> {
-    use std::{
-        path::PathBuf,
-        process::{Command, Stdio},
-    };
+    use std::process::{Command, Stdio};
     let mcp_path = std::env::current_exe().map_err(|error| error.to_string())?;
     let executable_name = format!("aio-asset-normalizer{}", std::env::consts::EXE_SUFFIX);
     let gui_path = mcp_path
@@ -395,7 +392,7 @@ fn launch_gui() -> Result<(), String> {
             gui_path.display()
         ));
     }
-    let mut command = Command::new(PathBuf::from(gui_path));
+    let mut command = Command::new(gui_path);
     command
         .stdin(Stdio::null())
         .stdout(Stdio::null())

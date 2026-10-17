@@ -32,6 +32,12 @@ struct FlatItem {
     is_loaded: bool,
 }
 
+impl Default for BvhFileTree {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BvhFileTree {
     pub fn new() -> Self {
         Self {

@@ -29,7 +29,7 @@ fn material_fixture(path: &Path, unknown_extension: bool) {
         document["extensions"] = json!({"VENDOR_custom":{"payload":[1,2,3]}});
     }
     let mut json_bytes = serde_json::to_vec(&document).unwrap();
-    while json_bytes.len() % 4 != 0 {
+    while !json_bytes.len().is_multiple_of(4) {
         json_bytes.push(b' ');
     }
     let output = gltf::binary::Glb {
@@ -279,7 +279,7 @@ fn malformed_glb_ranges_and_non_finite_values_fail_before_writes() {
             bin[..4].copy_from_slice(&f32::NAN.to_le_bytes());
         }
         let mut encoded = serde_json::to_vec(&data).unwrap();
-        while encoded.len() % 4 != 0 {
+        while !encoded.len().is_multiple_of(4) {
             encoded.push(b' ');
         }
         let malformed = gltf::binary::Glb {

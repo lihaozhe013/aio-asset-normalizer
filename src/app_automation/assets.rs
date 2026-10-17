@@ -278,7 +278,7 @@ impl App {
                 &source_refs,
                 overwrite,
             )
-            .map_err(|error| operation_job_error(error))?;
+            .map_err(operation_job_error)?;
             let total = jobs.len().max(1);
             let mut outputs = Vec::with_capacity(jobs.len());
             for (index, job) in jobs.into_iter().enumerate() {

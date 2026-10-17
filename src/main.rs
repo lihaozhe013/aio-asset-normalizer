@@ -220,7 +220,7 @@ fn main() {
 
         clear_rt.write(|| gui.render()).unwrap();
         app.capture_after_render(
-            &clear_rt,
+            clear_rt,
             viewport,
             frame_input.viewport,
             frame_input.device_pixel_ratio,

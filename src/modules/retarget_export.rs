@@ -70,6 +70,9 @@ pub fn retarget_clip_from_bvh(
 /// `source_dir` resolves external buffers when the snapshot is not a
 /// self-contained GLB; the snapshot bytes themselves are used for the mapping
 /// file fingerprint.
+// Each argument describes one independent export knob; the caller sites read
+// clearer with explicit names than through an intermediate struct.
+#[allow(clippy::too_many_arguments)]
 pub fn retarget_clip_from_glb(
     source_document: &GlbDocument,
     source_dir: Option<&Path>,

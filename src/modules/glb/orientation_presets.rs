@@ -58,6 +58,11 @@ impl UpAxisPreset {
     }
 
     /// Authored up direction this preset stands for.
+    ///
+    /// Test-only: the shipped presets express the correction as a root Euler
+    /// triple; this mapping documents what each preset rotates onto +Y and is
+    /// verified against that triple in the tests below.
+    #[cfg(test)]
     fn authored_up(self) -> [f32; 3] {
         match self {
             Self::YUp => [0.0, 1.0, 0.0],

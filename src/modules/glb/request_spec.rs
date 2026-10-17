@@ -20,18 +20,13 @@ pub fn name_selector(value: &str) -> BatchNameSelector {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum PresetArg {
+    #[default]
     PreserveAll,
     Character,
     Skeleton,
-}
-
-impl Default for PresetArg {
-    fn default() -> Self {
-        Self::PreserveAll
-    }
 }
 
 impl From<PresetArg> for GlbExportPreset {
@@ -44,17 +39,12 @@ impl From<PresetArg> for GlbExportPreset {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum AnimationOutputArg {
+    #[default]
     Combined,
     Split,
-}
-
-impl Default for AnimationOutputArg {
-    fn default() -> Self {
-        Self::Combined
-    }
 }
 
 impl From<AnimationOutputArg> for AnimationOutputMode {
@@ -66,17 +56,12 @@ impl From<AnimationOutputArg> for AnimationOutputMode {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum RootMotionModeArg {
+    #[default]
     HorizontalXz,
     AllTranslation,
-}
-
-impl Default for RootMotionModeArg {
-    fn default() -> Self {
-        Self::HorizontalXz
-    }
 }
 
 impl From<RootMotionModeArg> for RootMotionRemovalMode {

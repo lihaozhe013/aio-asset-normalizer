@@ -208,6 +208,9 @@ impl App {
         }
     }
 
+    // The arguments mirror the automation `SetView` wire contract field for
+    // field; grouping them into a struct would desync it from that contract.
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn set_session_view(
         &mut self,
         page: Option<SessionPage>,

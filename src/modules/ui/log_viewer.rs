@@ -54,6 +54,12 @@ pub struct LogViewer {
     storage_available: bool,
 }
 
+impl Default for LogViewer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LogViewer {
     pub fn new() -> Self {
         Self {

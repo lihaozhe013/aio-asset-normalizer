@@ -156,7 +156,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
                 ("converted", format!("{converted_span:.4}")),
             ],
         ));
-        if converted_span < 0.05 || converted_span > 100.0 {
+        if !(0.05..=100.0).contains(&converted_span) {
             let hint = if converted_span < 0.05 {
                 app.i18n.tr("bvh.unit_hint_small")
             } else {

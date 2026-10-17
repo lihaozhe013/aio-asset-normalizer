@@ -11,16 +11,11 @@ use super::{
     RootMotionRemovalMode,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum BatchNameSelector {
+    #[default]
     AutomaticUnique,
     Exact(String),
-}
-
-impl Default for BatchNameSelector {
-    fn default() -> Self {
-        Self::AutomaticUnique
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -131,7 +126,7 @@ fn resolve_skin(
                     catalog.skins.len()
                 )));
             }
-            return if catalog.skins.is_empty() {
+            if catalog.skins.is_empty() {
                 if preset == GlbExportPreset::SkeletonAnimation {
                     Err(GlbError::Invalid(
                         "Skeleton Animation requires a Skin".to_owned(),
@@ -141,7 +136,7 @@ fn resolve_skin(
                 }
             } else {
                 Ok(Some(catalog.skins[0].index))
-            };
+            }
         }
         BatchNameSelector::Exact(name) => {
             let matches = authored_indices(document, "skins", name, "Skin")?;
@@ -151,7 +146,7 @@ fn resolve_skin(
                     matches.len()
                 )));
             }
-            return Ok(Some(matches[0]));
+            Ok(Some(matches[0]))
         }
     }
 }

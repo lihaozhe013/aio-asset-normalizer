@@ -49,6 +49,12 @@ struct FlatItem {
     is_loaded: bool,
 }
 
+impl Default for FileTree {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FileTree {
     pub fn new() -> Self {
         Self {
