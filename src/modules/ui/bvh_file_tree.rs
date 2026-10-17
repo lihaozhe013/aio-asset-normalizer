@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use crate::modules::i18n::I18n;
+use crate::modules::ui::file_tree::display_root_path;
 use three_d::egui;
 
 const INDENT: f32 = 16.0;
@@ -124,10 +125,7 @@ impl BvhFileTree {
             return open_path;
         };
 
-        let root_name = root
-            .file_name()
-            .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_else(|| i18n.tr("label.default_project").to_owned());
+        let root_name = display_root_path(&root);
 
         let mut load_requests = Vec::new();
         egui::ScrollArea::both()

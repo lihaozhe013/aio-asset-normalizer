@@ -339,7 +339,6 @@ label:
   open_folder_hint: "Open a folder to browse assets"
   ready: "Ready, waiting for tasks..."
   auto_scroll: "Auto Scroll"
-  default_project: "Project"
   author: "Author: Li Haozhe"
   year: "Year: 2026"
   description: "Cross-platform 3D asset batch normalization tool"

@@ -339,7 +339,6 @@ label:
   open_folder_hint: "打开文件夹以浏览资产"
   ready: "就绪，等待任务..."
   auto_scroll: "自动滚动"
-  default_project: "项目"
   author: "作者: Li Haozhe"
   year: "年份: 2026"
   description: "跨平台 3D 资产批量标准化工具"

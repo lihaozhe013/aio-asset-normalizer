@@ -7,6 +7,20 @@ use three_d::egui;
 const INDENT: f32 = 16.0;
 const ARROW_OFFSET: f32 = 16.0;
 
+/// Format a tree root for display: collapse the user's home directory to a
+/// leading `~` when the root lives under it, otherwise show the full path.
+pub fn display_root_path(path: &Path) -> String {
+    if let Some(home) = dirs::home_dir() {
+        if let Ok(rest) = path.strip_prefix(&home) {
+            if rest.as_os_str().is_empty() {
+                return "~".to_owned();
+            }
+            return format!("~{}{}", std::path::MAIN_SEPARATOR, rest.to_string_lossy());
+        }
+    }
+    path.to_string_lossy().into_owned()
+}
+
 pub struct FileTree {
     root: Option<PathBuf>,
     root_entries: Option<Vec<FileTreeEntry>>,
@@ -373,10 +387,9 @@ impl FileTree {
 
         let root_name = self
             .root
-            .as_ref()
-            .and_then(|r| r.file_name())
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| i18n.tr("label.default_project").to_owned());
+            .as_deref()
+            .map(display_root_path)
+            .unwrap_or_default();
 
         let mut load_requests: Vec<PathBuf> = Vec::new();
         let accepted = self.accepted_extensions.clone();
@@ -525,6 +538,28 @@ impl FileTree {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn display_root_path_collapses_home_prefix() {
+        let Some(home) = dirs::home_dir() else {
+            return;
+        };
+        let sep = std::path::MAIN_SEPARATOR;
+        assert_eq!(display_root_path(&home), "~");
+        let inside = home.join("assets").join("models");
+        assert_eq!(
+            display_root_path(&inside),
+            format!("~{}assets{}models", sep, sep)
+        );
+    }
+
+    #[test]
+    fn display_root_path_keeps_absolute_paths_outside_home() {
+        let outside = Path::new(std::path::MAIN_SEPARATOR_STR)
+            .join("opt")
+            .join("assets");
+        assert_eq!(display_root_path(&outside), outside.to_string_lossy());
+    }
 
     #[test]
     fn accepted_extensions_control_scanning_and_selection() {
