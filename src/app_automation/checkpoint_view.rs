@@ -271,6 +271,7 @@ impl App {
                 SessionPage::GlbEditor => Page::GlbEditor,
                 SessionPage::BvhStudio => Page::BvhStudio,
                 SessionPage::FbxConverter => Page::FbxConverter,
+                SessionPage::ConnectAi => Page::ConnectAi,
             };
         }
         if reset_camera {

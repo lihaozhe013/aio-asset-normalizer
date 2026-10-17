@@ -1,7 +1,46 @@
 use crate::app::App;
+use crate::modules::ui::menu_bar::Page;
 use crate::modules::{preferences, ui::main_panel};
+use crate::reload::GlbReloadKind;
 
 impl App {
+    /// Apply a page switch with the per-page reset and reload side effects.
+    ///
+    /// Re-selecting the active page keeps its original refresh semantics, so
+    /// there is deliberately no same-page guard here.
+    pub(crate) fn switch_page(&mut self, page: Page) {
+        self.page = page;
+        self.canvas.clear_glb_skeleton();
+        match page {
+            Page::GlbEditor => {
+                if self.glb_retarget_preview_active {
+                    self.exit_glb_retarget_preview();
+                } else {
+                    self.request_glb_reload(GlbReloadKind::OpenModel);
+                }
+            }
+            Page::BvhStudio => {
+                self.canvas.show_origin = false;
+                if self.glb_retarget_preview_active {
+                    self.exit_glb_retarget_preview();
+                }
+                self.needs_bvh_target_reload = true;
+                self.refresh_v2_retarget_mapping();
+            }
+            Page::FbxConverter => {
+                if self.glb_retarget_preview_active {
+                    self.exit_glb_retarget_preview();
+                }
+            }
+            Page::ConnectAi => {
+                if self.glb_retarget_preview_active {
+                    self.exit_glb_retarget_preview();
+                }
+                self.enter_connect_ai_page();
+            }
+        }
+    }
+
     pub fn collect_preferences(&self) -> preferences::UserPreferences {
         let converter_tree = self.converter_file_tree.to_prefs();
         preferences::UserPreferences {

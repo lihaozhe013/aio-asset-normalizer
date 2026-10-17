@@ -7,7 +7,7 @@ use std::time::Instant;
 
 use crate::app_fbx_converter::ConverterFileState;
 use crate::app_glb_batch::GlbBatchState;
-use crate::app_mcp_setup::McpSetupDialogState;
+use crate::app_mcp_setup::McpSetupState;
 use crate::modules::blender::task::ConverterMessage;
 use crate::modules::preferences::FileTreePreferences;
 use crate::modules::retarget::{MappingValidationReport, SkeletonMapping};
@@ -108,7 +108,7 @@ pub struct App {
     pub bvh_key_tolerance: f32,
     pub(crate) show_about: bool,
     pub(crate) about_icon: Option<three_d::egui::TextureHandle>,
-    pub(crate) mcp_setup: McpSetupDialogState,
+    pub(crate) mcp_setup: McpSetupState,
     pub(crate) task_busy: bool,
     pub(crate) active_task_id: Option<u64>,
     last_frame_time: Instant,
@@ -255,7 +255,7 @@ impl App {
             bvh_key_tolerance: 0.001,
             show_about: false,
             about_icon: None,
-            mcp_setup: McpSetupDialogState::default(),
+            mcp_setup: McpSetupState::default(),
             task_busy: false,
             active_task_id: None,
             last_frame_time: Instant::now(),
@@ -791,9 +791,9 @@ impl App {
             MenuAction::Export => match self.page {
                 Page::GlbEditor => self.export_glb_for_scope(),
                 Page::BvhStudio => self.export_bvh(),
-                Page::FbxConverter => tracing::info!(
-                    target: "fbx_converter",
-                    "Use Convert on the FBX Converter page; this page has no document export"
+                Page::FbxConverter | Page::ConnectAi => tracing::info!(
+                    target: "app",
+                    "The active page has no document export"
                 ),
             },
             MenuAction::ExportBvhGlb => self.export_bvh_glb(false),
@@ -848,38 +848,11 @@ impl App {
             MenuAction::ToggleGrid => self.canvas.show_grid = !self.canvas.show_grid,
             MenuAction::ToggleAxes => self.canvas.show_axes = !self.canvas.show_axes,
             MenuAction::ToggleOrigin => self.canvas.show_origin = !self.canvas.show_origin,
-            MenuAction::OpenGlbEditor => {
-                self.page = Page::GlbEditor;
-                self.canvas.clear_glb_skeleton();
-                if self.glb_retarget_preview_active {
-                    self.exit_glb_retarget_preview();
-                } else {
-                    self.request_glb_reload(GlbReloadKind::OpenModel);
-                }
-            }
-            MenuAction::OpenFbxConverter => {
-                self.page = Page::FbxConverter;
-                self.canvas.clear_glb_skeleton();
-                if self.glb_retarget_preview_active {
-                    self.exit_glb_retarget_preview();
-                }
-            }
-            MenuAction::OpenBvhStudio => {
-                self.page = Page::BvhStudio;
-                self.canvas.show_origin = false;
-                self.canvas.clear_glb_skeleton();
-                if self.glb_retarget_preview_active {
-                    self.exit_glb_retarget_preview();
-                }
-                if self.bvh.is_some() {
-                    self.needs_bvh_skeleton_reload = true;
-                    self.bvh_camera_focus_pending = true;
-                }
-                self.needs_bvh_target_reload = true;
-                self.refresh_v2_retarget_mapping();
-            }
+            MenuAction::OpenGlbEditor => self.switch_page(Page::GlbEditor),
+            MenuAction::OpenFbxConverter => self.switch_page(Page::FbxConverter),
+            MenuAction::OpenBvhStudio => self.switch_page(Page::BvhStudio),
             MenuAction::About => self.show_about = true,
-            MenuAction::ConnectAi => self.open_mcp_setup(),
+            MenuAction::ConnectAi => self.switch_page(Page::ConnectAi),
             MenuAction::SetLanguage(preference) => {
                 self.i18n.set_preference(*preference);
                 self.needs_save = true;

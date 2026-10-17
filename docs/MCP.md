@@ -56,8 +56,8 @@ installed package rather than a Cargo `target` directory for normal use.
 
 ### Configure an AI client from the GUI
 
-Open **Help → Connect AI** or use the **Connect AI** button at the right side of
-the page navigation row. The dialog detects the MCP server shipped with the
+Open the **Connect AI** tab in the page navigation row, or choose
+**File → Connect AI**. The page detects the MCP server shipped with the
 running application, shows the resolved command and arguments, and generates
 one setup prompt for the AI client currently in use. Select **Copy setup prompt**
 and paste the result into that client's agent. The agent is asked to preserve
@@ -66,11 +66,11 @@ asking, reconnect the server, verify the required tools, and call the read-only
 `session_list` tool.
 
 To inspect app-side GUI session activity or stop an active GUI task, expand
-**MCP diagnostics** in the dialog. This status only describes the application's
+**MCP diagnostics** on the page. This status only describes the application's
 GUI bridge and does not confirm that an AI client has configured or connected
 the MCP server.
 
-Switch the dialog to **One-time use** when you want an agent to use MCP for the
+Switch the page to **One-time use** when you want an agent to use MCP for the
 current task without registering a persistent server. This prompt asks the
 agent to launch the detected command directly as a temporary stdio child
 process, negotiate MCP, inspect tool schemas, perform the requested task, and
@@ -82,18 +82,18 @@ polling, then be closed. The agent must say if its execution sandbox cannot
 launch or manage a local child process and must not silently switch to
 persistent configuration.
 
-The dialog reports **Copied** only when the system clipboard accepts the full
+The page reports **Copied** only when the system clipboard accepts the full
 prompt. If clipboard access fails, select and copy the prompt from its preview.
-The dialog does not confirm that the AI client has loaded the server; the agent
+The page does not confirm that the AI client has loaded the server; the agent
 reports connection status after it verifies the tools. Some clients require a
 restart before the server appears.
 
-The launch data is resolved from the running installation each time the dialog
+The launch data is resolved from the running installation each time the page
 is opened or refreshed. Windows and macOS use the MCP executable beside the GUI;
 Linux binary installations use the sibling MCP executable. Linux AppImages use
 the outer `.AppImage` path with `--mcp`, never the temporary mount directory.
 If the matching MCP executable or a stable AppImage path cannot be found, the
-dialog explains the issue and disables copying until the path can be resolved.
+page explains the issue and disables copying until the path can be resolved.
 Development builds use the MCP binary beside the GUI in the build output; move
 or rebuild both binaries together before configuring an agent.
 

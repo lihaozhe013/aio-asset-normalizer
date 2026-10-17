@@ -83,7 +83,7 @@ impl NativeMenu {
             app,
         )?;
         file.append(&PredefinedMenuItem::separator())?;
-        native.add_item(&file, "Connect AI", MenuAction::ConnectAi, None, app)?;
+        native.add_item(&file, "menu.connect_ai", MenuAction::ConnectAi, None, app)?;
 
         let view = native.add_submenu("menu.view", app)?;
         for (key, action) in [

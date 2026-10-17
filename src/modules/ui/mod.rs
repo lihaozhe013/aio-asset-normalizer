@@ -2,6 +2,7 @@ pub mod about_dialog;
 pub mod bottom_panel;
 pub mod bvh_file_tree;
 pub mod bvh_inspector;
+pub mod connect_ai_panel;
 pub mod empty_state;
 pub mod fbx_converter_panel;
 pub mod file_tree;

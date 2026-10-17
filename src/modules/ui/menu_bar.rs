@@ -8,6 +8,15 @@ pub enum Page {
     GlbEditor,
     BvhStudio,
     FbxConverter,
+    ConnectAi,
+}
+
+impl Page {
+    /// Whether the page renders the shared 3D viewport. Non-viewport pages
+    /// skip all scene rendering and camera work entirely.
+    pub fn uses_viewport(self) -> bool {
+        matches!(self, Self::GlbEditor | Self::BvhStudio)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -91,7 +100,7 @@ pub fn render(
                         ui.close();
                     }
                     ui.separator();
-                    if ui.button("Connect AI").clicked() {
+                    if ui.button(i18n.tr("menu.connect_ai")).clicked() {
                         actions.push(MenuAction::ConnectAi);
                         ui.close();
                     }

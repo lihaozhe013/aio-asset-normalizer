@@ -83,9 +83,9 @@ fn main() {
                 height: 1,
             });
 
-        // The FBX Converter page has no 3D canvas; skip viewport work
-        // entirely while it is active.
-        let show_scene = app.page != modules::ui::menu_bar::Page::FbxConverter;
+        // The FBX Converter and Connect AI pages have no 3D canvas; skip
+        // viewport work entirely while either is active.
+        let show_scene = app.page.uses_viewport();
         if show_scene {
             app.camera.handle_events(&frame_input.events, viewport);
         }

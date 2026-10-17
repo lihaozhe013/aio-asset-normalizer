@@ -1,11 +1,11 @@
 use crate::app::App;
 use crate::modules::ui::{
-    about_dialog, bottom_panel, bvh_inspector, empty_state, fbx_converter_panel, fonts,
-    glb_inspector,
+    about_dialog, bottom_panel, bvh_inspector, connect_ai_panel, empty_state, fbx_converter_panel,
+    fonts, glb_inspector,
     menu_bar::{MenuAction, Page},
     tabs, theme,
 };
-use egui_phosphor::regular::{ARROWS_CLOCKWISE, CUBE, PERSON_SIMPLE_RUN};
+use egui_phosphor::regular::{ARROWS_CLOCKWISE, CUBE, PERSON_SIMPLE_RUN, PLUGS_CONNECTED};
 #[cfg(not(target_os = "macos"))]
 use three_d::egui::Key;
 use three_d::egui::{self, Panel, ScrollArea};
@@ -25,6 +25,8 @@ pub fn render_ui(
         Page::GlbEditor => app.file_tree.handle_dropped_files(ui.ctx()),
         Page::BvhStudio => app.bvh_file_tree.handle_dropped_files(ui.ctx()),
         Page::FbxConverter => app.converter_file_tree.handle_dropped_files(ui.ctx()),
+        // The Connect AI page has no file tree to receive drops.
+        Page::ConnectAi => {}
     }
     app.poll_tasks();
     #[cfg(not(target_os = "macos"))]
@@ -61,8 +63,13 @@ pub fn render_ui(
         app.dispatch_action(&action);
     }
     if let Some(index) = tab_clicked {
-        let order = [Page::GlbEditor, Page::BvhStudio, Page::FbxConverter];
-        switch_page(app, order[index]);
+        let order = [
+            Page::GlbEditor,
+            Page::BvhStudio,
+            Page::FbxConverter,
+            Page::ConnectAi,
+        ];
+        app.switch_page(order[index]);
     }
 
     match app.page {
@@ -106,11 +113,14 @@ pub fn render_ui(
                     }
                 });
         }
+        // The Connect AI page has neither a file tree nor an inspector; its
+        // controls fill the central area instead.
+        Page::ConnectAi => {}
     }
 
-    // The FBX Converter page has no inspector and no 3D preview; its
-    // controls live in the central area instead.
-    if app.page != Page::FbxConverter {
+    // The FBX Converter and Connect AI pages have no inspector and no 3D
+    // preview; their controls live in the central area instead.
+    if app.page.uses_viewport() {
         Panel::right("inspector")
             .resizable(true)
             .default_size(320.0)
@@ -119,7 +129,7 @@ pub fn render_ui(
                 ScrollArea::vertical().show(ui, |ui| match app.page {
                     Page::GlbEditor => glb_inspector::render(app, ui),
                     Page::BvhStudio => bvh_inspector::render(app, ui),
-                    Page::FbxConverter => {}
+                    Page::FbxConverter | Page::ConnectAi => {}
                 });
             });
     }
@@ -128,17 +138,20 @@ pub fn render_ui(
 
     let content_rect = egui::CentralPanel::no_frame()
         .show_inside(ui, |ui| {
-            if app.page == Page::FbxConverter {
-                fbx_converter_panel::render(app, ui);
-            } else if page_is_empty(app) {
-                render_empty_state(app, ui);
+            match app.page {
+                Page::FbxConverter => fbx_converter_panel::render(app, ui),
+                Page::ConnectAi => connect_ai_panel::render(app, ui),
+                _ => {
+                    if page_is_empty(app) {
+                        render_empty_state(app, ui);
+                    }
+                }
             }
             let (_, rect) = ui.allocate_space(ui.available_size());
             rect
         })
         .inner;
     about_dialog::render(app, ui.ctx());
-    crate::app_mcp_setup::render(app, ui.ctx());
     content_rect
 }
 
@@ -147,7 +160,7 @@ fn page_is_empty(app: &App) -> bool {
     match app.page {
         Page::GlbEditor => app.glb.is_none() && !app.canvas.has_glb_skeleton(),
         Page::BvhStudio => app.canvas.skeleton.is_none() && app.canvas.target_skeleton.is_none(),
-        Page::FbxConverter => false,
+        Page::FbxConverter | Page::ConnectAi => false,
     }
 }
 
@@ -165,7 +178,7 @@ fn render_empty_state(app: &mut App, ui: &mut three_d::egui::Ui) {
             "empty.bvh_hint",
             MenuAction::ImportBvh,
         ),
-        Page::FbxConverter => return,
+        Page::FbxConverter | Page::ConnectAi => return,
     };
     let action_label = match action {
         MenuAction::ImportGlb => app.i18n.tr("menu.import_glb"),
@@ -223,42 +236,20 @@ fn render_page_tabs(app: &mut App, ui: &mut three_d::egui::Ui) -> Option<usize> 
             icon: ARROWS_CLOCKWISE,
             label: app.i18n.tr("page.fbx_converter").to_owned(),
         },
+        tabs::TabEntry {
+            icon: PLUGS_CONNECTED,
+            label: app.i18n.tr("page.connect_ai").to_owned(),
+        },
     ];
-    let selected = [Page::GlbEditor, Page::BvhStudio, Page::FbxConverter]
-        .iter()
-        .position(|page| *page == app.page)
-        .unwrap_or(0);
+    let selected = [
+        Page::GlbEditor,
+        Page::BvhStudio,
+        Page::FbxConverter,
+        Page::ConnectAi,
+    ]
+    .iter()
+    .position(|page| *page == app.page)
+    .unwrap_or(0);
     ui.horizontal(|ui| tabs::segmented(ui, &entries, selected))
         .inner
-}
-
-/// Apply a page switch with the per-page reset and reload side effects.
-///
-/// Re-selecting the active page keeps its original refresh semantics, so
-/// there is deliberately no same-page guard here.
-fn switch_page(app: &mut App, page: Page) {
-    app.page = page;
-    app.canvas.clear_glb_skeleton();
-    match page {
-        Page::GlbEditor => {
-            if app.glb_retarget_preview_active {
-                app.exit_glb_retarget_preview();
-            } else {
-                app.request_glb_reload(crate::reload::GlbReloadKind::OpenModel);
-            }
-        }
-        Page::BvhStudio => {
-            app.canvas.show_origin = false;
-            if app.glb_retarget_preview_active {
-                app.exit_glb_retarget_preview();
-            }
-            app.needs_bvh_target_reload = true;
-            app.refresh_v2_retarget_mapping();
-        }
-        Page::FbxConverter => {
-            if app.glb_retarget_preview_active {
-                app.exit_glb_retarget_preview();
-            }
-        }
-    }
 }

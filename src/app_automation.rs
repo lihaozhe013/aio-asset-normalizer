@@ -202,6 +202,7 @@ impl AutomationState {
                 Page::GlbEditor => SessionPage::GlbEditor,
                 Page::BvhStudio => SessionPage::BvhStudio,
                 Page::FbxConverter => SessionPage::FbxConverter,
+                Page::ConnectAi => SessionPage::ConnectAi,
             },
             glb_path: app.glb_path.clone(),
             bvh_path: app.bvh_path.clone(),
@@ -482,10 +483,10 @@ impl App {
         }) else {
             return;
         };
-        if request.scope == CaptureScope::Viewport && self.page == Page::FbxConverter {
+        if request.scope == CaptureScope::Viewport && !self.page.uses_viewport() {
             let _ = request.reply.send(BridgeResponse::failure(
                 "viewport_unavailable",
-                "The Converter page has no 3D viewport",
+                "The active page has no 3D viewport",
             ));
             return;
         }

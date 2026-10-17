@@ -253,12 +253,13 @@ client with the paths described in `docs/MCP.md`.
 
 ### GUI setup prompt
 
-1. Open **Help → Connect AI** from each of GLB Editor, BVH Studio, and FBX
-   Converter. Confirm the dialog opens without changing the current page or
-   document. Confirm the **Connect AI** button shares the page navigation row
-   and there is no persistent MCP listening indicator below it. Expand **MCP
-   diagnostics** and confirm the status is described as app-side activity, not
-   proof that an AI client is configured.
+1. Switch to the **Connect AI** tab from each of GLB Editor, BVH Studio, and
+   FBX Converter. Confirm the page opens inside the tab row (four tabs, no
+   popup window), the previously active document is untouched, and there is no
+   persistent MCP listening indicator. Expand **MCP diagnostics** and confirm
+   the status is described as app-side activity, not proof that an AI client is
+   configured. Choose **File → Connect AI** and confirm it navigates to the
+   same tab.
 2. Confirm a packaged installation reports the MCP executable beside the GUI
    on Windows and macOS, and the sibling executable on a Linux binary install.
    In an AppImage run, confirm the command is the absolute outer `.AppImage`
@@ -277,14 +278,15 @@ client with the paths described in `docs/MCP.md`.
 5. Confirm clipboard feedback says **Copied** only after a successful system
    clipboard write. If clipboard access fails, confirm an error is shown and
    the prompt can still be selected and copied from the preview.
-6. Hide or remove the sibling MCP executable and refresh. Confirm the dialog
+6. Hide or remove the sibling MCP executable and refresh. Confirm the page
    shows an actionable error and disables copying. For Unix builds, remove its
-   execute permission and confirm the dialog reports that separately. For an
+   execute permission and confirm the page reports that separately. For an
    AppImage run, confirm incomplete runtime paths or an executable outside
    `APPDIR` do not produce a temporary mount path.
-7. Resize the application to a small window. Confirm the dialog can scroll,
-   closes without resetting the active page, and resolving its command again
-   with **Refresh** does not persist a copied absolute path in preferences.
+7. Resize the application to a small window. Confirm the page can scroll, and
+   resolving its command again with **Refresh** does not persist a copied
+   absolute path in preferences. Switch to another tab and back and confirm the
+   selected mode is preserved while the launch data is re-detected.
 8. Switch between **Configure agent** and **One-time use**. Confirm each mode
    copies its matching prompt with the same launch command and arguments. In
    one-time mode, confirm the agent prompt requires local process execution,
@@ -345,11 +347,11 @@ client with the paths described in `docs/MCP.md`.
     using `scope: "window"`. Confirm unavailable captures return an explicit
     status rather than a stale image.
 12. Start a multi-output batch or Blender conversion, query progress, and
-    request cancellation. Open **Connect AI → MCP diagnostics** and confirm
-    the Stop MCP task control has the same cooperative behavior, committed
-    atomic outputs remain intact, and the job reports completed files. Close the
-    GUI during a Blender job and confirm the child process is stopped before
-    the application exits.
+    request cancellation. Open the **Connect AI** tab, expand **MCP
+    diagnostics**, and confirm the Stop MCP task control has the same
+    cooperative behavior, committed atomic outputs remain intact, and the job
+    reports completed files. Close the GUI during a Blender job and confirm the
+    child process is stopped before the application exits.
 13. Stop the GUI and confirm its session manifest becomes unreachable. Restart
     it and confirm a new session ID is registered; the old session and running
     jobs are not claimed as restored.
@@ -361,10 +363,11 @@ multi-window behavior, and application close handling.
 ## Native macOS Menu
 
 - Launch the desktop app on macOS. Verify the system menu bar contains the
-  application menu, File, View, Language, and Help, with no Page menu.
+  application menu, File, View, and Window, with no Page or Help menu.
 - Verify the window begins with the page tabs and has no duplicate menu strip.
 - Open About from the application-name menu. Verify the existing About dialog
-  appears and Help contains Connect AI without another About entry.
+  appears. Choose File → Connect AI and confirm it navigates to the Connect AI
+  page tab.
 - Use File commands and Cmd+O, Cmd+S, and Cmd+E. Verify each action runs once.
   Cmd+O imports BVH on BVH Studio and GLB on the other pages.
 - Toggle grid, axes, and origin from View and from the workspace controls; verify

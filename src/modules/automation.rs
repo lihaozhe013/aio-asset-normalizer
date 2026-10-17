@@ -29,6 +29,7 @@ pub enum SessionPage {
     GlbEditor,
     BvhStudio,
     FbxConverter,
+    ConnectAi,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema)]
