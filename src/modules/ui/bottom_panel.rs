@@ -5,7 +5,7 @@ use egui_phosphor::regular::{FILM_STRIP, PAUSE, PLAY, SKIP_BACK, SKIP_FORWARD, T
 use three_d::egui::*;
 
 pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
-    let has_animation = app.page == Page::GlbEditor && !app.glb_animation_entries().is_empty();
+    let has_animation = page_has_animation(app);
     if !has_animation && app.bottom_panel_tab == BottomPanelTab::Animation {
         app.bottom_panel_tab = BottomPanelTab::DebugLog;
     }
@@ -47,7 +47,11 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
 
             match app.bottom_panel_tab {
                 BottomPanelTab::Animation if has_animation => {
-                    render_animation_timeline(app, ui);
+                    if app.page == Page::BvhStudio {
+                        render_bvh_timeline(app, ui);
+                    } else {
+                        render_animation_timeline(app, ui);
+                    }
                 }
                 _ => {
                     if app.log.render(ui, &app.i18n, app.log_runtime.log_dir()) {
@@ -56,6 +60,120 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
                 }
             }
         });
+}
+
+/// Whether the active page offers an animation timeline for the bottom dock.
+fn page_has_animation(app: &App) -> bool {
+    match app.page {
+        Page::GlbEditor => !app.glb_animation_entries().is_empty(),
+        Page::BvhStudio => app
+            .bvh
+            .as_ref()
+            .is_some_and(|document| !document.frames.is_empty()),
+        Page::FbxConverter | Page::ConnectAi => false,
+    }
+}
+
+/// BVH Studio timeline with the same two-row layout as the GLB Editor dock:
+/// a readout row and a transport row whose scrubber fills the remaining width.
+fn render_bvh_timeline(app: &mut App, ui: &mut three_d::egui::Ui) {
+    let Some(document) = app.bvh.as_ref() else {
+        return;
+    };
+    let frame_count = document.frames.len();
+    if frame_count == 0 {
+        ui.label(app.i18n.tr("bvh.open_hint"));
+        return;
+    }
+    let last_frame = frame_count.saturating_sub(1);
+    let current_frame = app.bvh_frame.min(last_frame);
+    let duration = document.duration();
+    let current_time = current_frame as f32 * document.frame_time;
+
+    // Row 1: title + frame/time readouts + playback speed.
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(app.i18n.tr("bvh.timeline")).strong());
+        ui.monospace(format!(
+            "{}: {} / {}",
+            app.i18n.tr("bvh.frame"),
+            current_frame,
+            last_frame
+        ));
+        ui.monospace(format!("{:.3}s / {:.3}s", current_time, duration));
+        ui.label(app.i18n.tr("bvh.speed"));
+        ui.add(
+            DragValue::new(&mut app.bvh_playback_speed)
+                .speed(0.05)
+                .range(0.05..=8.0)
+                .suffix("x"),
+        );
+    });
+
+    // Row 2: transport icons + frame scrubber (fills remaining width).
+    ui.horizontal(|ui| {
+        let icon_size = 16.0;
+        let button_size = Vec2::splat(28.0);
+
+        // Play / Pause
+        let (play_icon, play_hint) = if app.bvh_playing {
+            (PAUSE, "bvh.pause")
+        } else {
+            (PLAY, "bvh.play")
+        };
+        if ui
+            .add_sized(
+                button_size,
+                Button::new(RichText::new(play_icon).size(icon_size)),
+            )
+            .on_hover_text(app.i18n.tr(play_hint))
+            .clicked()
+        {
+            app.bvh_playing = !app.bvh_playing;
+            app.bvh_playback_accumulator = 0.0;
+        }
+
+        // Step back one frame
+        if ui
+            .add_sized(
+                button_size,
+                Button::new(RichText::new(SKIP_BACK).size(icon_size)),
+            )
+            .on_hover_text(app.i18n.tr("glb.step_back"))
+            .clicked()
+        {
+            app.step_bvh_frame(-1);
+        }
+
+        // Step forward one frame
+        if ui
+            .add_sized(
+                button_size,
+                Button::new(RichText::new(SKIP_FORWARD).size(icon_size)),
+            )
+            .on_hover_text(app.i18n.tr("glb.step_forward"))
+            .clicked()
+        {
+            app.step_bvh_frame(1);
+        }
+
+        // Frame scrubber: snaps to whole frames while dragging.
+        let slider_width = ui.available_width();
+        let mut frame = current_frame as f32;
+        if ui
+            .add_sized(
+                [slider_width, 24.0],
+                Slider::new(&mut frame, 0.0..=last_frame as f32)
+                    .step_by(1.0)
+                    .custom_formatter(|value, _| format!("{}", value.round() as i64)),
+            )
+            .on_hover_text(app.i18n.tr("bvh.frame"))
+            .changed()
+        {
+            let target = frame.round().clamp(0.0, last_frame as f32) as usize;
+            app.set_bvh_frame(target);
+            app.bvh_playback_accumulator = 0.0;
+        }
+    });
 }
 
 fn render_animation_timeline(app: &mut App, ui: &mut three_d::egui::Ui) {

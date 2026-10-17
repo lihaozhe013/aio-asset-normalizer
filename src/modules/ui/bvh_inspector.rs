@@ -45,41 +45,7 @@ pub fn render(app: &mut App, ui: &mut three_d::egui::Ui) {
             }
         });
         ui.separator();
-        let mut requested_frame = None;
-        ui.horizontal(|ui| {
-            ui.label(app.i18n.tr("bvh.frame"));
-            let mut frame = app.bvh_frame;
-            if ui
-                .add(DragValue::new(&mut frame).range(0..=document.frames.len().saturating_sub(1)))
-                .changed()
-            {
-                requested_frame = Some(frame);
-            }
-            ui.label(format!("/ {}", document.frames.len().saturating_sub(1)));
-        });
-        if let Some(frame) = requested_frame {
-            app.set_bvh_frame(frame);
-        }
-        ui.horizontal(|ui| {
-            if ui
-                .button(if app.bvh_playing {
-                    app.i18n.tr("bvh.pause")
-                } else {
-                    app.i18n.tr("bvh.play")
-                })
-                .clicked()
-            {
-                app.bvh_playing = !app.bvh_playing;
-                app.bvh_playback_accumulator = 0.0;
-            }
-            ui.label(app.i18n.tr("bvh.speed"));
-            ui.add(
-                DragValue::new(&mut app.bvh_playback_speed)
-                    .speed(0.05)
-                    .range(0.05..=8.0)
-                    .suffix("x"),
-            );
-        });
+        ui.label(app.i18n.tr("bvh.timeline_hint"));
         ui.checkbox(&mut app.bvh_reduce_keys, app.i18n.tr("bvh.reduce_keys"));
         if app.bvh_reduce_keys {
             ui.horizontal(|ui| {

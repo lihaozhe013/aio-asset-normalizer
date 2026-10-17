@@ -282,6 +282,8 @@ bvh:
   play: "播放"
   pause: "暂停"
   speed: "速度"
+  timeline: "BVH 动画"
+  timeline_hint: "播放控件位于视口下方的时间轴中。"
   reduce_keys: "导出 GLB 时减少冗余关键帧"
   key_tolerance: "关键帧容差"
   duration: "时长"

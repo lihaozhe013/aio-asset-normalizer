@@ -160,6 +160,24 @@ impl App {
         }
     }
 
+    /// Step the BVH preview by a signed frame count with wrap-around, pausing
+    /// playback so the stepped pose stays inspectable, mirroring the GLB step.
+    pub(crate) fn step_bvh_frame(&mut self, direction: i32) {
+        let frame_count = self
+            .bvh
+            .as_ref()
+            .map(|document| document.frames.len())
+            .unwrap_or_default();
+        if frame_count == 0 {
+            return;
+        }
+        let current = self.bvh_frame.min(frame_count - 1) as i64;
+        let stepped = (current + direction as i64).rem_euclid(frame_count as i64);
+        self.bvh_playing = false;
+        self.bvh_playback_accumulator = 0.0;
+        self.set_bvh_frame(stepped as usize);
+    }
+
     pub(crate) fn update_glb_animation_preview(&mut self) -> Result<(), String> {
         if self
             .canvas

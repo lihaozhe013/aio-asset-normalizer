@@ -282,6 +282,8 @@ bvh:
   play: "Play"
   pause: "Pause"
   speed: "Speed"
+  timeline: "BVH Animation"
+  timeline_hint: "Playback controls are available in the timeline below the viewport."
   reduce_keys: "Reduce redundant keys during GLB export"
   key_tolerance: "Key tolerance"
   duration: "Duration"

@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::app::App;
+use crate::app::{App, BottomPanelTab};
 use crate::modules::bvh::{self, BvhDocument};
 use crate::modules::glb::{GlbDocument, GlbExportPreset};
 use crate::modules::logging::safe_path_label;
@@ -75,6 +75,7 @@ impl App {
                     frames = document.frames.len(),
                     "Loaded BVH"
                 );
+                let has_frames = !document.frames.is_empty();
                 self.bvh = Some(document);
                 self.bvh_path = Some(path.to_path_buf());
                 self.bvh_frame = 0;
@@ -83,6 +84,9 @@ impl App {
                 self.bvh_camera_focus_pending = true;
                 self.canvas.show_origin = false;
                 self.page = Page::BvhStudio;
+                if has_frames {
+                    self.bottom_panel_tab = BottomPanelTab::Animation;
+                }
                 self.refresh_retarget_plan();
                 self.refresh_v2_retarget_mapping();
                 self.needs_bvh_target_reload = true;
